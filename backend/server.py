@@ -438,10 +438,10 @@ async def place_bid(auction_id: str, payload: BidCreate, user: dict = Depends(ge
     if seconds_left <= 300:
         # Recipients: unique previous bidders (except current) + watchers, who opted in
         recipient_ids: set = set()
-        async for b in db.bids.find({"auction_id": auction_id}, {"_id": 0, "user_id": 1}):
+        async for b in db.bids.find({"auction_id": auction_id}, {"_id": 0, "user_id": 1}).limit(500):
             if b["user_id"] != user["id"]:
                 recipient_ids.add(b["user_id"])
-        async for w in db.watches.find({"auction_id": auction_id}, {"_id": 0, "user_id": 1}):
+        async for w in db.watches.find({"auction_id": auction_id}, {"_id": 0, "user_id": 1}).limit(500):
             if w["user_id"] != user["id"]:
                 recipient_ids.add(w["user_id"])
         if recipient_ids:
