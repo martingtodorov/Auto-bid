@@ -317,7 +317,7 @@ async def place_bid(auction_id: str, payload: BidCreate, user: dict = Depends(ge
 
     now = datetime.now(timezone.utc)
     bid_id = str(uuid.uuid4())
-    preauth_amount = round(float(payload.amount_eur) * 0.05, 2)
+    preauth_amount = round(float(payload.amount_eur) * 0.03, 2)
 
     # Release current user's previous active preauth(s) on this auction
     await db.bids.update_many(
@@ -445,7 +445,7 @@ async def admin_reject(auction_id: str, payload: AdminDecision, _admin: dict = D
 
 @api.post("/admin/auctions/{auction_id}/finalize")
 async def admin_finalize(auction_id: str, _admin: dict = Depends(require_admin)):
-    """Releases winner's preauth and marks auction as sold (deal finalized)."""
+    """Releases ALL preauths (no commission captured) and marks auction as sold."""
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     if not a:
         raise HTTPException(status_code=404, detail="Обявата не е намерена")
@@ -453,7 +453,7 @@ async def admin_finalize(auction_id: str, _admin: dict = Depends(require_admin))
         {"auction_id": auction_id, "preauth_status": "authorized"},
         {"$set": {"preauth_status": "released", "preauth_released_at": datetime.now(timezone.utc).isoformat()}},
     )
-    await db.auctions.update_one({"id": auction_id}, {"$set": {"status": "sold"}})
+    await db.auctions.update_one({"id": auction_id}, {"$set": {"status": "sold", "premium_captured": False}})
     winner_id = a.get("high_bidder_id")
     if winner_id:
         u = await db.users.find_one({"id": winner_id}, {"_id": 0})
@@ -463,6 +463,75 @@ async def admin_finalize(auction_id: str, _admin: dict = Depends(require_admin))
             except Exception as e:
                 logger.error("email_won failed: %s", e)
     return {"ok": True}
+
+
+@api.post("/admin/auctions/{auction_id}/capture-premium")
+async def admin_capture_premium(auction_id: str, _admin: dict = Depends(require_admin)):
+    """Captures winner's 3% pre-authorization as buyer's premium. Releases losing bidders' preauths."""
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Обявата не е намерена")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    winner_id = a.get("high_bidder_id")
+
+    # Capture winner's authorized preauth (if any)
+    captured_amount = 0.0
+    if winner_id:
+        winner_bid = await db.bids.find_one(
+            {"auction_id": auction_id, "user_id": winner_id, "preauth_status": "authorized"},
+            {"_id": 0},
+            sort=[("amount_eur", -1)],
+        )
+        if winner_bid:
+            captured_amount = float(winner_bid.get("preauth_amount_eur", 0.0))
+            await db.bids.update_one(
+                {"id": winner_bid["id"]},
+                {"$set": {"preauth_status": "captured", "preauth_captured_at": now_iso}},
+            )
+
+    # Release all other authorized preauths
+    q = {"auction_id": auction_id, "preauth_status": "authorized"}
+    await db.bids.update_many(q, {"$set": {"preauth_status": "released", "preauth_released_at": now_iso}})
+
+    await db.auctions.update_one(
+        {"id": auction_id},
+        {"$set": {"status": "sold", "premium_captured": True, "premium_amount_eur": captured_amount, "finalized_at": now_iso}},
+    )
+
+    if winner_id:
+        u = await db.users.find_one({"id": winner_id}, {"_id": 0})
+        if u:
+            try:
+                await email_won(u["email"], u["name"], a["title"], auction_id, float(a["current_bid_eur"]))
+            except Exception as e:
+                logger.error("email_won failed: %s", e)
+
+    return {"ok": True, "captured_eur": captured_amount}
+
+
+@api.get("/admin/sold")
+async def admin_sold(_admin: dict = Depends(require_admin)):
+    items = await db.auctions.find({"status": "sold"}, {"_id": 0}).sort("finalized_at", -1).to_list(500)
+    # Enrich with winner info and current premium state
+    enriched = []
+    for a in items:
+        winner = None
+        if a.get("high_bidder_id"):
+            winner = await db.users.find_one({"id": a["high_bidder_id"]}, {"_id": 0, "password_hash": 0})
+        winning_bid = await db.bids.find_one(
+            {"auction_id": a["id"], "user_id": a.get("high_bidder_id")},
+            {"_id": 0},
+            sort=[("amount_eur", -1)],
+        )
+        enriched.append({
+            **a,
+            "winner_email": winner.get("email") if winner else None,
+            "winner_name": winner.get("name") if winner else None,
+            "winning_bid_preauth_status": winning_bid.get("preauth_status") if winning_bid else None,
+            "winning_bid_preauth_amount": winning_bid.get("preauth_amount_eur") if winning_bid else None,
+            "commission_eur": round(float(a.get("current_bid_eur", 0)) * 0.03, 2),
+        })
+    return enriched
 
 
 # ---- WebSocket ----
@@ -481,6 +550,11 @@ async def ws_auction(websocket: WebSocket, auction_id: str):
 
 
 # ---- Watchlist ----
+@api.get("/auctions/{auction_id}/watch-status")
+async def watch_status(auction_id: str, user: dict = Depends(get_current_user)):
+    existing = await db.watches.find_one({"auction_id": auction_id, "user_id": user["id"]})
+    return {"watching": bool(existing)}
+
 @api.post("/auctions/{auction_id}/watch")
 async def toggle_watch(auction_id: str, user: dict = Depends(get_current_user)):
     existing = await db.watches.find_one({"auction_id": auction_id, "user_id": user["id"]})

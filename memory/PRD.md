@@ -38,8 +38,16 @@ User choices (from ask_human):
 - **Image uploader** on `/sell`: drag-free file input, auto-compression to 1600px JPEG (quality 82) → base64, stored in MongoDB, up to 8 photos. First photo is cover.
 - Card detail on bids list shows "preauth активен" indicator.
 
-## Still MOCKED
-- **Stripe Pre-authorization is MOCK** — no real PaymentIntent is created. Card data is not sent anywhere. When a real Stripe key is added, swap `mock_pm_...` flow in `place_bid` for `stripe.PaymentIntent.create(capture_method="manual")` and confirm/cancel on outbid/finalize.
+## Iteration 3 (2026-04-16)
+- **Pre-authorization reduced to 3%** (from 5%) — matches buyer's premium.
+- **3% buyer's premium commission** captured from winner's preauth on `POST /admin/auctions/{id}/capture-premium` (new endpoint). Bid `preauth_status` transitions: `authorized → captured`. Losing bidders' preauths released in same operation. Auction marked `sold` with `premium_captured=True`, `premium_amount_eur` stored.
+- Kept `POST /admin/auctions/{id}/finalize` which releases ALL preauths (no commission captured).
+- **New `GET /admin/sold`** endpoint: returns sold auctions with winner info, commission owed, preauth capture state.
+- **Admin panel** gets Tabs (Pending | Sold). Sold tab shows table with Capture 3% / Release actions per auction and "Преведено" badge once captured.
+- **`GET /auctions/{id}/watch-status`** endpoint added. Watch button on auction detail page now reflects state + toggles.
+- **User-facing `/watchlist` page** lists followed auctions (uses existing `/me/watchlist`).
+- Nav adds "Следени" link for authenticated users.
+- How-it-works page updated to 3% buyer's premium copy.
 
 ## P1 Next
 - Replace MOCK Stripe with real Stripe PaymentIntents once keys are obtained.

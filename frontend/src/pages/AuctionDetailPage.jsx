@@ -20,6 +20,7 @@ export default function AuctionDetailPage() {
   const [placing, setPlacing] = useState(false);
   const [showPreauth, setShowPreauth] = useState(false);
   const [wsStatus, setWsStatus] = useState("connecting");
+  const [watching, setWatching] = useState(false);
   const wsRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -35,6 +36,20 @@ export default function AuctionDetailPage() {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Watch status
+  useEffect(() => {
+    if (!user || !id) { setWatching(false); return; }
+    api.get(`/auctions/${id}/watch-status`).then((r) => setWatching(!!r.data.watching)).catch(() => {});
+  }, [user, id]);
+
+  const toggleWatch = async () => {
+    if (!user) { navigate("/login?next=/auctions/" + id); return; }
+    try {
+      const { data } = await api.post(`/auctions/${id}/watch`);
+      setWatching(!!data.watching);
+    } catch (e) {}
+  };
 
   // WebSocket for real-time updates
   useEffect(() => {
@@ -129,7 +144,7 @@ export default function AuctionDetailPage() {
   ];
 
   const isLive = a.status === "live";
-  const preauthPreview = Math.round((Number(bidAmount) || 0) * 0.05);
+  const preauthPreview = Math.round((Number(bidAmount) || 0) * 0.03);
 
   return (
     <main className="rule-b" data-testid="auction-detail-page">
@@ -284,7 +299,7 @@ export default function AuctionDetailPage() {
                       <Shield size={14} className="text-[hsl(var(--accent))] shrink-0 mt-0.5" />
                       <div className="text-xs leading-relaxed">
                         <div className="font-semibold text-[hsl(var(--accent-ink))]">Pre-authorization {formatEUR(preauthPreview)}</div>
-                        <div className="text-[hsl(var(--ink-muted))] mt-0.5">5% се блокира върху картата ви и се освобождава при изпреварване или финализиране на сделката.</div>
+                        <div className="text-[hsl(var(--ink-muted))] mt-0.5">3% се блокират върху картата. При победа се прилагат като buyer's premium; иначе се освобождават изцяло.</div>
                       </div>
                     </div>
 
@@ -292,8 +307,8 @@ export default function AuctionDetailPage() {
                   </div>
                 )}
 
-                <button className="mt-5 w-full btn btn-secondary flex items-center justify-center gap-2" data-testid="watch-button">
-                  <Heart size={14} /> Следи търга
+                <button onClick={toggleWatch} className={`mt-5 w-full btn flex items-center justify-center gap-2 ${watching ? "btn-primary" : "btn-secondary"}`} data-testid="watch-button">
+                  <Heart size={14} className={watching ? "fill-current" : ""} /> {watching ? "В моя списък" : "Следи търга"}
                 </button>
               </div>
 

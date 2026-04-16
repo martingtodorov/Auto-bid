@@ -15,6 +15,7 @@ import SalesPage from "./pages/SalesPage";
 import SellPage from "./pages/SellPage";
 import DashboardPage from "./pages/DashboardPage";
 import AdminPage from "./pages/AdminPage";
+import WatchlistPage from "./pages/WatchlistPage";
 
 function App() {
   return (
@@ -35,6 +36,7 @@ function App() {
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/admin" element={<AdminPage />} />
+              <Route path="/watchlist" element={<WatchlistPage />} />
               <Route path="*" element={<LandingPage />} />
             </Routes>
           </div>

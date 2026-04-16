@@ -44,8 +44,8 @@ export default function HowItWorksPage() {
           <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-0 border border-[hsl(var(--line))]">
             <div className="p-8 border-b md:border-b-0 md:border-r border-[hsl(var(--line))]">
               <div className="overline text-[hsl(var(--ink-muted))]">Купувач</div>
-              <div className="font-serif text-5xl mt-3">5%</div>
-              <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">Такса успешна сделка — максимум €5 000.</p>
+              <div className="font-serif text-5xl mt-3">3%</div>
+              <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">Buyer's premium при спечелен търг. 3% pre-authorization се блокира при всяка наддавка и се прилага като комисионна при победа.</p>
             </div>
             <div className="p-8 border-b md:border-b-0 md:border-r border-[hsl(var(--line))]">
               <div className="overline text-[hsl(var(--ink-muted))]">Продавач</div>
