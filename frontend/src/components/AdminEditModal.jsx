@@ -103,6 +103,8 @@ export default function AdminEditModal({ auctionId, onClose, onSaved }) {
         status: form.status,
         featured: !!form.featured,
         seller_name: form.seller_name,
+        contact_email: form.contact_email,
+        contact_phone: form.contact_phone,
       };
       if (form.ends_at_local) {
         payload.ends_at = new Date(form.ends_at_local).toISOString();
@@ -208,6 +210,12 @@ export default function AdminEditModal({ auctionId, onClose, onSaved }) {
               </Field>
               <Field label="Продавач (име)">
                 <input type="text" value={form.seller_name || ""} onChange={(e) => set("seller_name", e.target.value)} className="input" data-testid="edit-seller-name" />
+              </Field>
+              <Field label="Имейл за контакт (продавач)">
+                <input type="email" value={form.contact_email || ""} onChange={(e) => set("contact_email", e.target.value)} className="input" data-testid="edit-contact-email" />
+              </Field>
+              <Field label="Телефон на продавача">
+                <input type="tel" value={form.contact_phone || ""} onChange={(e) => set("contact_phone", e.target.value)} className="input" data-testid="edit-contact-phone" />
               </Field>
               <Field label="" full>
                 <label className="flex items-center gap-3 text-sm">

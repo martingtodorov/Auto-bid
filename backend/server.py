@@ -117,6 +117,8 @@ class AuctionCreate(BaseModel):
     starting_bid_eur: float
     reserve_eur: Optional[float] = None
     duration_days: int = 7
+    contact_email: EmailStr
+    contact_phone: str = Field(min_length=5, max_length=32)
 
 class BidCreate(BaseModel):
     amount_eur: float
@@ -173,6 +175,8 @@ class AdminAuctionUpdate(BaseModel):
     status: Optional[str] = None
     featured: Optional[bool] = None
     seller_name: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
 
 class CounterOfferCreate(BaseModel):
     price_eur: float

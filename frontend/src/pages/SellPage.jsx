@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth, formatError } from "../lib/auth";
 import { api } from "../lib/apiClient";
@@ -30,6 +30,8 @@ export default function SellPage() {
     power_hp: 150, engine_cc: 2000, color: "",
     region: "София", city: "София", description: "",
     vin: "",
+    contact_email: user?.email || "",
+    contact_phone: "",
     images_exterior: [],
     images_wheels: [],
     images_bumper: [],
@@ -40,6 +42,13 @@ export default function SellPage() {
   const [err, setErr] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Prefill contact email once user loads
+  useEffect(() => {
+    if (user?.email) {
+      setForm((p) => (p.contact_email ? p : { ...p, contact_email: user.email }));
+    }
+  }, [user]);
 
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
 
@@ -52,6 +61,17 @@ export default function SellPage() {
       const wh = form.images_wheels || [];
       const bp = form.images_bumper || [];
       const intr = form.images_interior || [];
+      if (!form.contact_email || !form.contact_phone) {
+        setErr("Моля, попълнете имейл и телефон за контакт.");
+        setLoading(false);
+        return;
+      }
+      const phoneDigits = (form.contact_phone || "").replace(/[^\d]/g, "");
+      if (phoneDigits.length < 7) {
+        setErr("Моля, въведете валиден телефонен номер.");
+        setLoading(false);
+        return;
+      }
       if (ext.length < 8 || wh.length < 4 || bp.length < 1 || intr.length < 4) {
         setErr(
           `Снимките не отговарят на минимума: екстериор ${ext.length}/8, джанти ${wh.length}/4, предна броня ${bp.length}/1, интериор ${intr.length}/4.`
@@ -73,6 +93,8 @@ export default function SellPage() {
         starting_bid_eur: Number(form.starting_bid_eur),
         reserve_eur: form.reserve_eur ? Number(form.reserve_eur) : null,
         duration_days: Number(form.duration_days),
+        contact_email: form.contact_email.trim(),
+        contact_phone: form.contact_phone.trim(),
       };
       await api.post("/auctions", payload);
       setSubmitted(true);
@@ -164,6 +186,22 @@ export default function SellPage() {
             </Field>
             <Field label="VIN номер (незадължителен, видим само на наддавачи)" span={2}>
               <input value={form.vin} onChange={(e) => set("vin", e.target.value.toUpperCase())} className={inputCls} maxLength={17} placeholder="напр. WAUZZZ4H9CN045678" data-testid="sell-vin" />
+            </Field>
+            <Field label="" span={2}>
+              <div className="rounded-card border border-[hsl(var(--line))] bg-[hsl(var(--surface))] p-4">
+                <div className="overline text-[hsl(var(--accent))] mb-1">Контакт с продавача</div>
+                <p className="text-xs text-[hsl(var(--ink-muted))] mb-3">Нашият екип ще използва тези данни за потвърждение на обявата и организация на огледи. Телефонът и имейлът няма да са публични.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="overline text-[hsl(var(--ink-muted))] block mb-1.5">Имейл за контакт</label>
+                    <input type="email" required value={form.contact_email} onChange={(e) => set("contact_email", e.target.value)} className={inputCls} placeholder="name@example.com" data-testid="sell-contact-email" />
+                  </div>
+                  <div>
+                    <label className="overline text-[hsl(var(--ink-muted))] block mb-1.5">Телефонен номер</label>
+                    <input type="tel" required value={form.contact_phone} onChange={(e) => set("contact_phone", e.target.value)} className={inputCls} placeholder="+359 88 888 8888" data-testid="sell-contact-phone" />
+                  </div>
+                </div>
+              </div>
             </Field>
             <Field label="Снимки на автомобила" span={2}>
               <div className="space-y-3">

@@ -176,6 +176,16 @@ export default function AdminPage() {
                           <div className="text-xs text-[hsl(var(--ink-muted))] font-mono">От {a.seller_name}</div>
                         </div>
 
+                        {(a.contact_email || a.contact_phone) && (
+                          <div className="mt-4 p-3 rounded-md bg-[hsl(var(--surface))] border border-[hsl(var(--line))]" data-testid={`contact-info-${a.id}`}>
+                            <div className="overline text-[hsl(var(--accent))] mb-1.5">Контакт с продавача</div>
+                            <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+                              {a.contact_email && <a href={`mailto:${a.contact_email}`} className="text-[hsl(var(--ink))] hover:text-[hsl(var(--accent))]" data-testid={`contact-email-${a.id}`}>{a.contact_email}</a>}
+                              {a.contact_phone && <a href={`tel:${a.contact_phone}`} className="text-[hsl(var(--ink))] hover:text-[hsl(var(--accent))] font-mono" data-testid={`contact-phone-${a.id}`}>{a.contact_phone}</a>}
+                            </div>
+                          </div>
+                        )}
+
                         {rejectingId === a.id ? (
                           <div className="mt-5 rounded-card border border-[hsl(var(--line))] p-4 bg-[hsl(var(--surface))]">
                             <label className="overline text-[hsl(var(--ink-muted))] block mb-2">Причина за отказ</label>
