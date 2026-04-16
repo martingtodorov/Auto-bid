@@ -21,18 +21,24 @@ export default function AuctionDetailPage() {
   const [showPreauth, setShowPreauth] = useState(false);
   const [wsStatus, setWsStatus] = useState("connecting");
   const [watching, setWatching] = useState(false);
+  const [notFound, setNotFound] = useState(false);
   const wsRef = useRef(null);
 
   const load = useCallback(async () => {
-    const [ra, rb, rc] = await Promise.all([
-      api.get(`/auctions/${id}`),
-      api.get(`/auctions/${id}/bids`),
-      api.get(`/auctions/${id}/comments`),
-    ]);
-    setA(ra.data);
-    setBids(rb.data);
-    setComments(rc.data);
-    setBidAmount(String(Math.floor(ra.data.current_bid_eur) + 100));
+    try {
+      const ra = await api.get(`/auctions/${id}`);
+      const [rb, rc] = await Promise.all([
+        api.get(`/auctions/${id}/bids`).catch(() => ({ data: [] })),
+        api.get(`/auctions/${id}/comments`).catch(() => ({ data: [] })),
+      ]);
+      setA(ra.data);
+      setBids(rb.data);
+      setComments(rc.data);
+      setBidAmount(String(Math.floor(ra.data.current_bid_eur) + 100));
+    } catch (e) {
+      if (e?.response?.status === 404) setNotFound(true);
+      else console.error(e);
+    }
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
@@ -138,6 +144,13 @@ export default function AuctionDetailPage() {
     } catch (e) { setError(formatError(e)); }
   };
 
+  if (notFound) return (
+    <main className="py-24 text-center" data-testid="auction-not-found">
+      <h1 className="font-serif text-4xl">Търгът не е намерен</h1>
+      <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">Обявата може да е оттеглена или archiveирана.</p>
+      <Link to="/auctions" className="btn btn-primary mt-8 inline-flex">Към всички търгове</Link>
+    </main>
+  );
   if (!a) return <div className="py-24 text-center">Зареждане…</div>;
 
   const specs = [
