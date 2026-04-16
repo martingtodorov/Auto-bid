@@ -131,6 +131,24 @@ code { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
     box-shadow: 0 10px 30px -10px hsl(var(--accent) / 0.55);
 }
 
+.input {
+    width: 100%;
+    border: 1px solid hsl(var(--line));
+    background: white;
+    padding: 0.6rem 0.85rem;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    border-radius: 4px;
+    transition: border-color .15s ease;
+}
+.input:focus {
+    outline: none;
+    border-color: hsl(var(--accent));
+    box-shadow: 0 0 0 3px hsl(var(--accent) / 0.15);
+}
+textarea.input { resize: vertical; min-height: 80px; }
+
+
 /* Cards */
 .card-editorial {
     background: white;

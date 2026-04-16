@@ -135,6 +135,33 @@ class AuctionUpdate(BaseModel):
     city: Optional[str] = None
     vin: Optional[str] = None
 
+
+class AdminAuctionUpdate(BaseModel):
+    """Full admin edit — allows changing every field on an auction."""
+    title: Optional[str] = None
+    description: Optional[str] = None
+    make: Optional[str] = None
+    model: Optional[str] = None
+    year: Optional[int] = None
+    mileage_km: Optional[int] = None
+    fuel: Optional[str] = None
+    transmission: Optional[str] = None
+    body_type: Optional[str] = None
+    power_hp: Optional[int] = None
+    engine_cc: Optional[int] = None
+    color: Optional[str] = None
+    region: Optional[str] = None
+    city: Optional[str] = None
+    vin: Optional[str] = None
+    images: Optional[List[str]] = None
+    starting_bid_eur: Optional[float] = None
+    reserve_eur: Optional[float] = None
+    current_bid_eur: Optional[float] = None
+    ends_at: Optional[str] = None
+    status: Optional[str] = None
+    featured: Optional[bool] = None
+    seller_name: Optional[str] = None
+
 class CounterOfferCreate(BaseModel):
     price_eur: float
 
@@ -199,7 +226,7 @@ async def me(user: dict = Depends(get_current_user)):
 # ---- Auction helpers ----
 def _auction_status(a: dict) -> str:
     stored = a.get("status")
-    if stored in ("sold", "rejected", "pending", "withdrawn", "reserve_not_met", "ended"):
+    if stored in ("sold", "rejected", "pending", "withdrawn", "reserve_not_met", "ended", "removed"):
         if stored == "ended":
             return "ended"
         return stored
@@ -281,6 +308,11 @@ async def list_auctions(
     cursor = db.auctions.find(query, {"_id": 0}).limit(limit)
     items = await cursor.to_list(limit)
     items = [_public_auction(a, viewer) for a in items]
+
+    # Hide non-public statuses from public listings (pending/rejected/withdrawn/removed)
+    viewer_is_admin = viewer and viewer.get("role") == "admin"
+    if not viewer_is_admin:
+        items = [a for a in items if a["status"] in ("live", "ended", "sold", "reserve_not_met")]
 
     if status:
         items = [a for a in items if a["status"] == status]
@@ -908,6 +940,102 @@ async def admin_list_all(q: Optional[str] = None, status: Optional[str] = None, 
     for a in items:
         a["status"] = _auction_status(a)
     return items
+
+
+ADMIN_ALLOWED_STATUSES = {"pending", "live", "ended", "sold", "reserve_not_met", "withdrawn", "removed", "rejected"}
+
+
+@api.get("/admin/auctions/{auction_id}")
+async def admin_get_auction(auction_id: str, _admin: dict = Depends(require_admin)):
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Обявата не е намерена")
+    a["status"] = _auction_status(a)
+    return a
+
+
+@api.put("/admin/auctions/{auction_id}")
+async def admin_update_auction(auction_id: str, payload: AdminAuctionUpdate, _admin: dict = Depends(require_admin)):
+    """Admin full edit — may change any field including status, ends_at, current_bid_eur."""
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Обявата не е намерена")
+    update = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if v is not None}
+
+    # Validate status
+    if "status" in update:
+        if update["status"] not in ADMIN_ALLOWED_STATUSES:
+            raise HTTPException(status_code=400, detail="Невалиден статус")
+
+    # Validate ends_at
+    if "ends_at" in update:
+        try:
+            datetime.fromisoformat(update["ends_at"])
+        except Exception:
+            raise HTTPException(status_code=400, detail="Невалиден формат на дата (ISO 8601)")
+
+    if "vin" in update and update["vin"]:
+        update["vin"] = update["vin"].strip().upper()
+
+    if update:
+        await db.auctions.update_one({"id": auction_id}, {"$set": update})
+
+    # Broadcast bid-like change if current_bid_eur or ends_at changed, so open pages refresh
+    if "current_bid_eur" in update or "ends_at" in update:
+        fresh = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+        if fresh:
+            try:
+                await hub.broadcast(auction_id, {
+                    "type": "admin_update",
+                    "auction_id": auction_id,
+                    "current_bid_eur": float(fresh.get("current_bid_eur", 0)),
+                    "ends_at": fresh.get("ends_at"),
+                    "status": _auction_status(fresh),
+                })
+            except Exception as e:
+                logger.error("admin_update broadcast failed: %s", e)
+
+    fresh = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if fresh:
+        fresh["status"] = _auction_status(fresh)
+    return {"ok": True, "auction": fresh}
+
+
+@api.post("/admin/auctions/{auction_id}/remove")
+async def admin_remove_auction(auction_id: str, _admin: dict = Depends(require_admin)):
+    """Sets status to 'removed' (soft delete). Releases any active preauths."""
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Обявата не е намерена")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    await db.bids.update_many(
+        {"auction_id": auction_id, "preauth_status": "authorized"},
+        {"$set": {"preauth_status": "released", "preauth_released_at": now_iso}},
+    )
+    await db.auctions.update_one(
+        {"id": auction_id},
+        {"$set": {"status": "removed", "removed_at": now_iso}},
+    )
+    try:
+        await hub.broadcast(auction_id, {"type": "removed", "auction_id": auction_id})
+    except Exception:
+        pass
+    return {"ok": True}
+
+
+@api.post("/admin/auctions/{auction_id}/restore")
+async def admin_restore_auction(auction_id: str, _admin: dict = Depends(require_admin)):
+    """Restore a removed/withdrawn auction — sets status to 'live' if end date is in the future, otherwise 'ended'."""
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Обявата не е намерена")
+    try:
+        end = datetime.fromisoformat(a["ends_at"])
+    except Exception:
+        end = datetime.now(timezone.utc) - timedelta(days=1)
+    new_status = "live" if end > datetime.now(timezone.utc) else "ended"
+    await db.auctions.update_one({"id": auction_id}, {"$set": {"status": new_status}})
+    return {"ok": True, "status": new_status}
 
 
 # ---- Post-auction reserve-not-met flow ----
