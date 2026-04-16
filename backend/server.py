@@ -16,7 +16,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
 
-from emails import email_outbid, email_won, email_approved, email_rejected, email_seller_new_bid, email_seller_new_comment
+from emails import email_outbid, email_won, email_approved, email_rejected, email_seller_new_bid, email_seller_new_comment, email_vin_delivery
 from ws import hub
 from sms import send_sms
 
@@ -681,6 +681,37 @@ async def ws_auction(websocket: WebSocket, auction_id: str):
 async def watch_status(auction_id: str, user: dict = Depends(get_current_user)):
     existing = await db.watches.find_one({"auction_id": auction_id, "user_id": user["id"]})
     return {"watching": bool(existing)}
+
+
+@api.post("/auctions/{auction_id}/request-vin")
+async def request_vin(auction_id: str, user: dict = Depends(get_current_user)):
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Търгът не е намерен")
+    if _auction_status(a) != "live":
+        raise HTTPException(status_code=400, detail="VIN може да бъде заявен само при активен търг")
+    if not a.get("vin"):
+        raise HTTPException(status_code=400, detail="За този автомобил VIN не е наличен")
+    if a.get("seller_id") == user["id"] or user.get("role") == "admin":
+        raise HTTPException(status_code=400, detail="Вие вече имате достъп до пълния VIN")
+    already_bid = await db.bids.find_one({"auction_id": auction_id, "user_id": user["id"]}, {"_id": 0, "id": 1})
+    if already_bid:
+        raise HTTPException(status_code=400, detail="Вие вече сте наддавали — пълният VIN е видим в обявата")
+    existing = await db.vin_requests.find_one({"auction_id": auction_id, "user_id": user["id"]})
+    if existing:
+        raise HTTPException(status_code=429, detail="Вече сте заявили пълния VIN за тази обява. Проверете имейла си.")
+
+    await db.vin_requests.insert_one({
+        "id": str(uuid.uuid4()),
+        "auction_id": auction_id,
+        "user_id": user["id"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    try:
+        await email_vin_delivery(user["email"], user.get("name", ""), a["title"], auction_id, a["vin"].strip().upper())
+    except Exception as e:
+        logger.error("email_vin_delivery failed: %s", e)
+    return {"ok": True, "message": f"Изпратихме пълния VIN на {user['email']}"}
 
 @api.post("/auctions/{auction_id}/watch")
 async def toggle_watch(auction_id: str, user: dict = Depends(get_current_user)):

@@ -93,6 +93,20 @@ async def email_rejected(to: str, name: str, auction_title: str, reason: str):
     await send_email(to, f"Необходими корекции · {auction_title}", _shell("Обявата изисква корекции", body))
 
 
+async def email_vin_delivery(to: str, name: str, auction_title: str, auction_id: str, vin: str):
+    body = f"""
+      <p>Здравейте, {name},</p>
+      <p>Ето пълния VIN номер за <strong>{auction_title}</strong>:</p>
+      <div style="margin:22px 0;padding:18px;background:#fafafa;border:1px solid #e5e7eb;border-radius:10px;text-align:center;">
+        <div style="font-family:ui-monospace,'IBM Plex Mono',monospace;font-size:22px;letter-spacing:4px;font-weight:600;">{vin}</div>
+      </div>
+      <p>Можете да направите VIN проверка чрез избран от вас сервиз.</p>
+      <p><a href="{APP_URL}/auctions/{auction_id}" style="display:inline-block;background:#1B4D3E;color:#fff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:600;">Върни се в търга</a></p>
+      <p style="color:#6b7280;font-size:12px;margin-top:20px;">VIN номерът се предоставя информативно за вземане на информирано решение при наддаване.</p>
+    """
+    await send_email(to, f"VIN номер · {auction_title}", _shell("Пълен VIN номер", body))
+
+
 async def email_seller_new_bid(to: str, name: str, auction_title: str, auction_id: str, bidder_name: str, amount: float, bid_count: int):
     body = f"""
       <p>Здравейте, {name},</p>

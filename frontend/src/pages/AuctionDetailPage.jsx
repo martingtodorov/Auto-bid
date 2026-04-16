@@ -22,6 +22,9 @@ export default function AuctionDetailPage() {
   const [wsStatus, setWsStatus] = useState("connecting");
   const [watching, setWatching] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [vinRequesting, setVinRequesting] = useState(false);
+  const [vinMsg, setVinMsg] = useState("");
+  const [vinErr, setVinErr] = useState("");
   const wsRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -144,6 +147,18 @@ export default function AuctionDetailPage() {
     } catch (e) { setError(formatError(e)); }
   };
 
+  const requestVin = async () => {
+    setVinMsg(""); setVinErr(""); setVinRequesting(true);
+    try {
+      const { data } = await api.post(`/auctions/${id}/request-vin`);
+      setVinMsg(data.message || "Изпратено");
+    } catch (e) {
+      setVinErr(formatError(e));
+    } finally {
+      setVinRequesting(false);
+    }
+  };
+
   if (notFound) return (
     <main className="py-24 text-center" data-testid="auction-not-found">
       <h1 className="font-serif text-4xl">Търгът не е намерен</h1>
@@ -219,11 +234,29 @@ export default function AuctionDetailPage() {
                       <Shield size={12} /> VIN номер
                     </div>
                     <div className="font-mono text-lg mt-1 tracking-wider" data-testid="vin-value">{a.vin}</div>
+                    {vinMsg && <div className="text-xs text-[hsl(var(--accent))] mt-2" data-testid="vin-request-msg">{vinMsg}</div>}
+                    {vinErr && <div className="text-xs text-[hsl(var(--danger))] mt-2" data-testid="vin-request-err">{vinErr}</div>}
                   </div>
                   {a.vin_masked ? (
-                    <p className="text-xs text-[hsl(var(--ink-muted))] max-w-sm" data-testid="vin-masked-note">
-                      {user ? "Наддайте, за да видите пълния VIN." : <>Влезте и наддайте, за да видите пълния VIN.</>}
-                    </p>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      {user && isLive && (
+                        <button
+                          onClick={requestVin}
+                          disabled={vinRequesting || !!vinMsg}
+                          className="btn btn-secondary !py-2 !px-4 text-xs flex items-center gap-2 disabled:opacity-50"
+                          data-testid="request-vin-btn"
+                        >
+                          <Shield size={12} /> {vinRequesting ? "Изпращане…" : "Заяви пълен VIN"}
+                        </button>
+                      )}
+                      <p className="text-xs text-[hsl(var(--ink-muted))] max-w-[220px]" data-testid="vin-masked-note">
+                        {!user
+                          ? "Влезте и заявете VIN или наддайте, за да го видите тук."
+                          : isLive
+                            ? "Заявката изпраща пълния VIN на вашия имейл. Наддаването също го разкрива в обявата."
+                            : "Заявка за VIN е достъпна само при активен търг."}
+                      </p>
+                    </div>
                   ) : (
                     <span className="pill pill-live" data-testid="vin-unmasked-badge">Пълен VIN · разкрит</span>
                   )}
