@@ -1,95 +1,83 @@
-# AutoBid.bg — PRD
+# AutoBid.bg — PRD (Product Requirements Document)
 
-## Original Problem Statement
-> "create me a landing page for a car auction website similar to cars and bids and bring a trailer, but in Bulgarian"
+## Original problem statement
+Създаване на landing страница и пълно функционално приложение за автомобилни аукциони (подобно на Cars and Bids / Bring a Trailer) на български език. Включва: класически/модерен дизайн, реално наддаване с база данни (FastAPI + MongoDB), потребителски профили, админ панел, WebSocket live bidding, Stripe pre-auth (2%), email/SMS нотификации (Resend, Twilio), и маскиране на VIN номера.
 
-User choices (from ask_human):
-- Brand: **AutoBid.bg**
-- Style: Modern (upgraded from initial "classic editorial") — Manrope geometric sans, rounded cards, pill buttons, green gradient accent, live ticker
-- Sections: Landing + full browseable dashboard with filters and bidding
-- Full functional application (auth, bidding, comments, sell flow)
-- Sample listings from mobile.bg
+## User preferred language
+Български
 
-## Architecture
-- **Backend**: FastAPI + motor (Async MongoDB) + bcrypt + PyJWT. All routes under `/api`. Collections: `users`, `auctions`, `bids`, `comments`, `watches`, `login_attempts`.
-- **Frontend**: React 19 + React Router 7 + Tailwind + lucide-react icons, Manrope / IBM Plex Mono fonts.
-- **Auth**: JWT (HS256) with Bearer token in `Authorization` header, stored in `localStorage`.
+## Tech stack
+- Frontend: React (CRA) + Tailwind + Shadcn
+- Backend: FastAPI + Motor (Mongo async) + WebSockets
+- Auth: JWT
+- 3rd party: Resend (email), Twilio (SMS), Stripe (MOCKED)
 
-## User Personas
-1. **Купувач / Bidder** — brows auctions, places bids, leaves comments, watches auctions.
-2. **Продавач / Seller** — submits a car via `/sell`, awaits editorial approval.
-3. **Администратор** — seeded admin (`admin@autobid.bg`) for moderation.
+## Completed work
+### Earlier iterations
+- Класически/модерен дизайн (Manrope + зелен акцент)
+- JWT auth, register/login
+- Admin seed account (admin@autobid.bg / admin123)
+- WebSocket live bidding
+- 2% Buyer's premium с mock Stripe pre-authorization
+- Base64 качване на снимки в SellPage
+- Reserve price логика + недостигнат резерв
+- Post-auction counter-offers
+- Публични профили (buyers/sellers)
+- Resend email + Twilio SMS (FOMO в последните 5 мин)
+- Глобална търсачка + saved searches
+- VIN masking (последни 7 символа) + request-full-vin за наддавачи
+- Мобилна навигация включваща admin линк
+- Admin dashboard (Pending + Sold таб)
 
-## Implemented (2026-04-16)
-- JWT auth: register, login, /auth/me; bcrypt hashing; admin seeded on startup.
-- Auctions CRUD: list with filters, facets, featured, sold archive, detail view.
-- Bidding: min increment +€100, anti-sniping (extend 2 min), block seller self-bidding.
-- Comments per auction. Watchlist toggle. "Sell your car" submission creating pending auctions.
-- Seed: 12 live + 4 sold auctions from mobile.bg listings.
-- Landing page, Browse, Auction detail, Sales, How it works, Sell, Dashboard, Login, Register.
-- **Live ticker** marquee at top with pulsing LIVE indicator.
-- Modern Manrope UI: pill buttons, rounded cards, ambient gradient hero, glass navigation.
+### Current iteration (Feb 2026)
+- **Admin Full Edit** (NEW):
+  - `AdminAuctionUpdate` Pydantic модел с ВСИЧКИ полета (включително status, ends_at, current_bid_eur, featured)
+  - `GET /api/admin/auctions/{id}` — пълен документ за админ
+  - `PUT /api/admin/auctions/{id}` — редактира всяко поле (валидира status от enum и ISO ends_at)
+  - `POST /api/admin/auctions/{id}/remove` — soft delete (status=`removed`, освобождава preauths)
+  - `POST /api/admin/auctions/{id}/restore` — връща към live/ended според ends_at
+  - `_auction_status` поддържа `removed` статус
+  - Публичният `/api/auctions` filtrира non-public статуси (pending/rejected/withdrawn/removed) за не-админ
+  - UI: Нов таб "Всички обяви" в AdminPage.jsx със search + status филтър
+  - UI: `AdminEditModal.jsx` — пълен модал с 3 секции (Основни данни / Автомобил / Цени и търг / Снимки)
+  - UI: Quick actions: Редактирай, Свали, Възстанови, Одобри
+- **SellPage Mobile Keyboard Bug Fix** (NEW):
+  - `Field` компонент беше дефиниран INSIDE `SellPage` → recreation при всяко setState → губене на focus/клавиатура
+  - Преместен извън компонента като top-level функция. Тестван: фокусът се запазва при типиране.
 
-## Iteration 2 (2026-04-16)
-- **Real-time WebSocket** `/api/ws/auctions/{id}` — broadcasts bids + comments to all viewers; frontend subscribes in AuctionDetailPage with status indicator, 25s keepalive.
-- **5% pre-authorization flow (MOCK Stripe)**: Each bid requires `payment_method_id`. Backend stores `preauth_id`, `preauth_status` (`authorized|released`), `preauth_amount_eur` per bid. On outbid: previous user's preauth auto-released + email. On auction finalize (admin): winner's preauth released. Full PreauthModal UI with card form (mock tokenization).
-- **Resend emails** (`/app/backend/emails.py`): outbid, auction won, seller approved, seller rejected. Bulgarian HTML templates. Gracefully logs to console when `RESEND_API_KEY` not set.
-- **Admin panel** `/admin` (role=admin only): list pending submissions, approve (→ live auction), reject with reason (→ email seller), finalize live auctions (→ releases preauths, marks sold, emails winner).
-- **Image uploader** on `/sell`: drag-free file input, auto-compression to 1600px JPEG (quality 82) → base64, stored in MongoDB, up to 8 photos. First photo is cover.
-- Card detail on bids list shows "preauth активен" indicator.
+## Key API endpoints
+- `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me`
+- `GET /api/auctions` (публично — филтрира non-public за не-админ)
+- `GET /api/auctions/{id}`, `POST /api/auctions`
+- `POST /api/auctions/{id}/bids` (2% preauth)
+- `POST /api/auctions/{id}/comments`
+- `POST /api/auctions/{id}/watch`, `GET /api/me/watchlist`
+- `GET/POST /api/me/saved-searches`
+- `PATCH /api/me/profile`
+- `GET /api/admin/pending`, `POST /api/admin/auctions/{id}/approve|reject|finalize|capture-premium`
+- `GET /api/admin/auctions`, `GET /api/admin/auctions/{id}`, `PUT /api/admin/auctions/{id}` (NEW)
+- `POST /api/admin/auctions/{id}/remove|restore` (NEW)
+- `WebSocket /api/ws/auctions/{id}`
 
-## Iteration 7 (2026-04-16)
-- **Twilio SMS FOMO**: `send_sms` helper (graceful fallback to log when creds unset). When a bid is placed and `time_left ≤ 300s`, SMS blast to all prior bidders + watchers (except current bidder) who have `sms_opt_in=True` and phone set. Verified: mock SMS logged to +359888123456 when Audi A8 ended in 2min.
-- **User profile PATCH `/me/profile`**: accepts `phone` (E.164) and `sms_opt_in`.
-- **Saved searches**: new collection + endpoints `POST/GET/DELETE /me/saved-searches`. Backend `_matches_saved_search` filter logic.
-- **Admin approve hook**: after approving a pending auction, iterates all saved searches, sends email notification for each match. Verified: BMW 330i approval emailed matching search "BMW-ове под €50k".
-- **Frontend /settings page**: SMS settings with phone + opt-in checkbox + saved searches list with delete.
-- **AuctionsPage** has "Запази търсенето" button; nav has "Настройки" link.
-- Backend dep: `twilio>=9.0.0` added to `requirements.txt`; env vars `TWILIO_ACCOUNT_SID/AUTH_TOKEN/FROM_NUMBER` (empty → mock mode).
-- **Seller email notifications** on new bid and new comment: `email_seller_new_bid` + `email_seller_new_comment` fired after `place_bid` and `add_comment`. Skipped for platform seller / self-actions. HTML templates match AutoBid.bg brand.
-- **Full-text search** with `q` query param on `GET /auctions` — case-insensitive regex across title, description, make, model, color. Works with Cyrillic.
-- **AuctionsPage** refactored: new search input at top with clear button, results count shows `X резултата за „<query>"`, reads `?q=...` from URL on mount.
-- **Global nav search bar** (desktop): submits to `/auctions?q=...` for universal access from every page.
-- Backend verified: Search "BMW" → 4 (M5, M3, X5, Е36); "quattro" → Audi A8 (title); "панорамен" → 2 hits (description-only match); seller emails logged for new bid (€3,500) and new comment on Opel Astra listing.
-- **Reserve-not-met post-auction flow**: ended auctions with unmet reserve auto-transition to `reserve_not_met` status. Seller gets actions: `POST /auctions/{id}/accept-high-bid` (→ sold at current) or `POST /auctions/{id}/counter-offer` with price. High bidder sees counter-offer banner on detail page and responds via `POST /auctions/{id}/counter-offer/respond` (accept → sold at counter price; decline → ended).
-- **Seller edit/withdraw**: `PATCH /auctions/{id}` (title/description/starting/reserve/images) restricted to owner+admin; allowed while pending, rejected, or live with 0 bids. `DELETE /auctions/{id}` marks as `withdrawn`, releases any preauths.
-- **Public user profile** at `/profile/:userId`: new endpoint `GET /users/{user_id}/profile` returns user meta + stats + listings_sold + purchases + active_listings. Excludes email/password. Profile page shows avatar initial, member year, sales/purchases/active/rating stat cards, and tabs for each.
-- Auction detail links `seller_name` → `/profile/:sellerId` and each bid's/comment's `user_name` → `/profile/:userId`.
-- MyListings page gets inline edit form, Withdraw button, and reserve-not-met action card (Accept highest / Counter-offer with price input).
-- Auction detail shows counter-offer banner with Accept/Decline buttons when `counter_status=pending && counter_offer_to == current user`.
-- Backend verified: PATCH pending, DELETE→withdrawn, counter-offer flow end-to-end (€2500 sale after accepted counter on Fiat Panda reserve €50k).
-- **Reserve price logic**: AuctionCreate already had `reserve_eur`. Now:
-  - `_public_auction()` helper injects `has_reserve: bool`, `reserve_met: bool|null` on every auction response.
-  - `reserve_eur` is **hidden** from bidders — only seller (owner) and admin see the exact number.
-  - 3 seed cars now carry reserves (BMW X5, BMW M3, Porsche 911) to showcase mixed states.
-- **"Резервът е достигнат" indicator** on cards (green live pill) and on detail bid box. Non-met state shows grey dot. "Без резерв" pill shown for no-reserve auctions.
-- **Seller dashboard `/my-listings`**: `GET /me/listings` returns seller's own auctions with full detail including hidden reserve. Page shows status pills (pending/live/sold/rejected/ended), current bid/countdown, rejection reason display, CTA to view or create new. Linked in Nav as "Мои обяви".
-- **Pre-authorization reduced to 3%** (from 5%) — matches buyer's premium.
-- **3% buyer's premium commission** captured from winner's preauth on `POST /admin/auctions/{id}/capture-premium` (new endpoint). Bid `preauth_status` transitions: `authorized → captured`. Losing bidders' preauths released in same operation. Auction marked `sold` with `premium_captured=True`, `premium_amount_eur` stored.
-- Kept `POST /admin/auctions/{id}/finalize` which releases ALL preauths (no commission captured).
-- **New `GET /admin/sold`** endpoint: returns sold auctions with winner info, commission owed, preauth capture state.
-- **Admin panel** gets Tabs (Pending | Sold). Sold tab shows table with Capture 3% / Release actions per auction and "Преведено" badge once captured.
-- **`GET /auctions/{id}/watch-status`** endpoint added. Watch button on auction detail page now reflects state + toggles.
-- **User-facing `/watchlist` page** lists followed auctions (uses existing `/me/watchlist`).
-- Nav adds "Следени" link for authenticated users.
-- How-it-works page updated to 3% buyer's premium copy.
+## DB schema (key collections)
+- users: {id, email, password_hash, name, role, phone, sms_opt_in, created_at}
+- auctions: {id, seller_id, title, make, model, year, mileage_km, fuel, transmission, body_type, power_hp, engine_cc, color, region, city, description, vin, images[], starting_bid_eur, reserve_eur, current_bid_eur, bid_count, high_bidder_id, high_bidder_name, created_at, ends_at, status, featured, premium_captured, removed_at}
+- bids: {id, auction_id, user_id, user_name, amount_eur, created_at, preauth_id, preauth_status, preauth_amount_eur}
+- comments, watches, vin_requests, saved_searches
 
-## P1 Next
-- Replace MOCK Stripe with real Stripe PaymentIntents once keys are obtained.
-- Provide Resend API key to activate real emails (set `RESEND_API_KEY` in `/app/backend/.env`).
-- User-facing watchlist page + wire Watch button on detail page.
-- Admin view of sold/finalized auctions with capture actions.
+## Backlog / Future tasks
+- **P1** Real Stripe API integration (сега MOCKED — preauth/capture са симулирани)
+- **P2** Рефакторинг на `server.py` (1400+ реда) → APIRouter модули (auctions/admin/auth/users)
+- **P2** Автоматичен status transition cron job (pending → expired reminder, ended → reserve_not_met flow)
+- **P3** Email templates estetic upgrade
 
-## P2
-- Reserve / no reserve logic fully surfaced in UI.
-- Advanced search (text query).
-- Seller profile pages, ratings.
-- Vehicle history reports integration.
+## 3rd-party integrations status
+- Resend: Configured via env (RESEND_API_KEY), fallback console log
+- Twilio: Configured via env (TWILIO_*), fallback console log
+- Stripe: **MOCKED** (mock_pi_* tokens, 2% buyer premium simulation)
 
-## Test Credentials
-See `/app/memory/test_credentials.md` — admin@autobid.bg / admin123.
-
-## Next Action Items
-- Connect real-time bid updates (WebSocket) once traffic > baseline.
-- Add Stripe buyer-fee collection at auction close.
-- Wire watch button on detail page to existing `/me/watchlist` endpoints.
+## Critical notes for future agents
+- НЕ използвайте npm, само yarn
+- Всички backend routes трябва да са с `/api` префикс
+- `_auction_status()` е computed при четене — stored статуси: pending/rejected/withdrawn/removed/sold/reserve_not_met/ended/live
+- При създаване на нови компоненти с форми: НИКОГА не дефинирайте sub-компоненти ВЪТРЕ в родителския компонент (причинява loss of focus bug)

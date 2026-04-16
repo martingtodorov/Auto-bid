@@ -10,6 +10,17 @@ const TRANSMISSIONS = ["Автоматична", "Ръчна"];
 const BODY_TYPES = ["Седан", "Комби", "Хечбек", "Джип", "Купе", "Кабрио", "Ван", "Пикап"];
 const REGIONS = ["София", "Пловдив", "Варна", "Бургас", "Стара Загора", "Русе", "Плевен"];
 
+const inputCls = "w-full border border-[hsl(var(--line))] h-11 px-3 text-sm";
+
+function Field({ label, children, span = 1 }) {
+  return (
+    <div className={`col-span-1 ${span === 2 ? "md:col-span-2" : ""}`}>
+      <label className="overline text-[hsl(var(--ink-muted))] block mb-2">{label}</label>
+      {children}
+    </div>
+  );
+}
+
 export default function SellPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -66,14 +77,6 @@ export default function SellPage() {
       </main>
     );
   }
-
-  const Field = ({ label, children, span = 1 }) => (
-    <div className={`col-span-1 ${span === 2 ? "md:col-span-2" : ""}`}>
-      <label className="overline text-[hsl(var(--ink-muted))] block mb-2">{label}</label>
-      {children}
-    </div>
-  );
-  const inputCls = "w-full border border-[hsl(var(--line))] h-11 px-3 text-sm";
 
   return (
     <main data-testid="sell-page">
