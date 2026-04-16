@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { api } from "../lib/apiClient";
 import AuctionCard from "../components/AuctionCard";
-import { SlidersHorizontal, X } from "lucide-react";
+import { SlidersHorizontal, X, Search } from "lucide-react";
 
 export default function AuctionsPage() {
   const [items, setItems] = useState([]);
@@ -10,11 +10,15 @@ export default function AuctionsPage() {
   const [filters, setFilters] = useState({
     make: "", fuel: "", transmission: "", region: "", body_type: "",
     min_price: "", max_price: "", year_min: "", year_max: "", status: "live", sort: "ending_soon",
+    q: "",
   });
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
     api.get("/auctions/facets").then((r) => setFacets(r.data));
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get("q");
+    if (q) setFilters((p) => ({ ...p, q, status: "" }));
   }, []);
 
   const load = useCallback(async () => {
@@ -27,7 +31,7 @@ export default function AuctionsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const reset = () => setFilters({ make: "", fuel: "", transmission: "", region: "", body_type: "", min_price: "", max_price: "", year_min: "", year_max: "", status: "live", sort: "ending_soon" });
+  const reset = () => setFilters({ make: "", fuel: "", transmission: "", region: "", body_type: "", min_price: "", max_price: "", year_min: "", year_max: "", status: "live", sort: "ending_soon", q: "" });
   const set = (k, v) => setFilters((p) => ({ ...p, [k]: v }));
 
   const Select = ({ k, label, options }) => (
@@ -41,7 +45,7 @@ export default function AuctionsPage() {
   );
 
   const Sidebar = (
-    <aside className="bg-white border border-[hsl(var(--line))] p-6 space-y-5">
+    <aside className="bg-white border border-[hsl(var(--line))] p-6 space-y-5 rounded-card">
       <div className="flex items-center justify-between">
         <h2 className="font-serif text-xl">Филтри</h2>
         <button onClick={reset} className="text-xs underline text-[hsl(var(--ink-muted))]" data-testid="reset-filters">Изчисти</button>
@@ -76,7 +80,7 @@ export default function AuctionsPage() {
 
       <div>
         <label className="overline text-[hsl(var(--ink-muted))] block mb-2">Статус</label>
-        <div className="grid grid-cols-3 border border-[hsl(var(--line))]">
+        <div className="grid grid-cols-3 border border-[hsl(var(--line))] rounded-md overflow-hidden">
           {[
             { v: "live", l: "Активни" },
             { v: "ended", l: "Приключили" },
@@ -97,12 +101,30 @@ export default function AuctionsPage() {
   return (
     <main className="rule-b" data-testid="auctions-page">
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-12">
-        <div className="flex items-end justify-between mb-8">
-          <div>
-            <div className="overline text-[hsl(var(--accent))]">Търгове</div>
-            <h1 className="font-serif text-4xl lg:text-5xl tracking-tight mt-3">Разгледайте обявите</h1>
-            <p className="text-sm text-[hsl(var(--ink-muted))] mt-3">{items.length} резултата</p>
-          </div>
+        <div className="overline text-[hsl(var(--accent))]">Търгове</div>
+        <h1 className="font-serif text-4xl lg:text-5xl tracking-tight mt-3">Разгледайте обявите</h1>
+
+        <div className="mt-6 max-w-2xl relative">
+          <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[hsl(var(--ink-muted))]" />
+          <input
+            type="text"
+            value={filters.q}
+            onChange={(e) => set("q", e.target.value)}
+            placeholder="Търси марка, модел, цвят, описание…"
+            className="w-full border border-[hsl(var(--line))] h-12 pl-11 pr-4 text-sm bg-white"
+            data-testid="search-input"
+          />
+          {filters.q && (
+            <button onClick={() => set("q", "")} className="absolute right-3 top-1/2 -translate-y-1/2 text-[hsl(var(--ink-muted))] hover:text-[hsl(var(--ink))]" data-testid="clear-search">
+              <X size={16} />
+            </button>
+          )}
+        </div>
+
+        <div className="mt-8 flex items-end justify-between mb-8 flex-wrap gap-3">
+          <p className="text-sm text-[hsl(var(--ink-muted))]" data-testid="results-count">
+            {items.length} резултата{filters.q && <> за „<span className="text-[hsl(var(--ink))]">{filters.q}</span>"</>}
+          </p>
           <div className="flex items-center gap-3">
             <select value={filters.sort} onChange={(e) => set("sort", e.target.value)} className="border border-[hsl(var(--line))] h-10 px-3 text-sm bg-white" data-testid="sort-select">
               <option value="ending_soon">Завършващи скоро</option>
@@ -124,9 +146,9 @@ export default function AuctionsPage() {
             {loading ? (
               <div className="py-20 text-center text-[hsl(var(--ink-muted))]">Зареждане…</div>
             ) : items.length === 0 ? (
-              <div className="py-20 text-center border border-[hsl(var(--line))]">
+              <div className="py-20 text-center rounded-card border border-[hsl(var(--line))]">
                 <p className="font-serif text-2xl">Няма резултати</p>
-                <p className="text-sm text-[hsl(var(--ink-muted))] mt-2">Опитайте с други филтри.</p>
+                <p className="text-sm text-[hsl(var(--ink-muted))] mt-2">Опитайте с други думи или изчистете филтрите.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 stagger" data-testid="auctions-grid">

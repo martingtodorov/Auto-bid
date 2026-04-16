@@ -16,7 +16,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
 
-from emails import email_outbid, email_won, email_approved, email_rejected
+from emails import email_outbid, email_won, email_approved, email_rejected, email_seller_new_bid, email_seller_new_comment
 from ws import hub
 
 # ---- MongoDB ----
@@ -231,27 +231,32 @@ async def list_auctions(
     max_price: Optional[float] = None,
     year_min: Optional[int] = None,
     year_max: Optional[int] = None,
+    q: Optional[str] = Query(None, description="Пълнотекстово търсене"),
     status: Optional[str] = Query(None, description="live|ended|sold"),
     sort: Optional[str] = Query("ending_soon"),
     limit: int = 60,
 ):
     viewer = await get_optional_user(request)
-    q = {}
-    if make: q["make"] = make
-    if fuel: q["fuel"] = fuel
-    if transmission: q["transmission"] = transmission
-    if region: q["region"] = region
-    if body_type: q["body_type"] = body_type
+    query = {}
+    if make: query["make"] = make
+    if fuel: query["fuel"] = fuel
+    if transmission: query["transmission"] = transmission
+    if region: query["region"] = region
+    if body_type: query["body_type"] = body_type
     if year_min or year_max:
-        q["year"] = {}
-        if year_min: q["year"]["$gte"] = year_min
-        if year_max: q["year"]["$lte"] = year_max
+        query["year"] = {}
+        if year_min: query["year"]["$gte"] = year_min
+        if year_max: query["year"]["$lte"] = year_max
     if min_price or max_price:
-        q["current_bid_eur"] = {}
-        if min_price: q["current_bid_eur"]["$gte"] = min_price
-        if max_price: q["current_bid_eur"]["$lte"] = max_price
+        query["current_bid_eur"] = {}
+        if min_price: query["current_bid_eur"]["$gte"] = min_price
+        if max_price: query["current_bid_eur"]["$lte"] = max_price
+    if q:
+        import re
+        rx = {"$regex": re.escape(q.strip()), "$options": "i"}
+        query["$or"] = [{"title": rx}, {"description": rx}, {"make": rx}, {"model": rx}, {"color": rx}]
 
-    cursor = db.auctions.find(q, {"_id": 0}).limit(limit)
+    cursor = db.auctions.find(query, {"_id": 0}).limit(limit)
     items = await cursor.to_list(limit)
     items = [_public_auction(a, viewer) for a in items]
 
@@ -407,6 +412,17 @@ async def place_bid(auction_id: str, payload: BidCreate, user: dict = Depends(ge
         "ends_at": update.get("ends_at", a["ends_at"]),
         "bid": {k: public_bid.get(k) for k in ("id", "user_name", "amount_eur", "created_at")},
     })
+
+    # Notify seller (if real seller, not platform, and not self-bid already blocked)
+    seller_id = a.get("seller_id")
+    if seller_id and seller_id != "platform":
+        seller = await db.users.find_one({"id": seller_id}, {"_id": 0})
+        if seller and seller.get("email"):
+            try:
+                await email_seller_new_bid(seller["email"], seller.get("name", ""), a["title"], auction_id, user["name"], float(payload.amount_eur), update["bid_count"])
+            except Exception as e:
+                logger.error("email_seller_new_bid failed: %s", e)
+
     return {"ok": True, "bid": public_bid, "preauth_amount_eur": preauth_amount}
 
 
@@ -432,6 +448,18 @@ async def add_comment(auction_id: str, payload: CommentCreate, user: dict = Depe
     await db.comments.insert_one(doc)
     public = {k: v for k, v in doc.items() if k != "_id"}
     await hub.broadcast(auction_id, {"type": "comment", "comment": public})
+
+    # Notify seller (unless seller is commenting on own auction or is platform)
+    seller_id = a.get("seller_id")
+    if seller_id and seller_id != "platform" and seller_id != user["id"]:
+        seller = await db.users.find_one({"id": seller_id}, {"_id": 0})
+        if seller and seller.get("email"):
+            try:
+                snippet = (payload.text.strip()[:200] + "…") if len(payload.text.strip()) > 200 else payload.text.strip()
+                await email_seller_new_comment(seller["email"], seller.get("name", ""), a["title"], auction_id, user["name"], snippet)
+            except Exception as e:
+                logger.error("email_seller_new_comment failed: %s", e)
+
     return public
 
 

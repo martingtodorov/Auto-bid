@@ -38,7 +38,12 @@ User choices (from ask_human):
 - **Image uploader** on `/sell`: drag-free file input, auto-compression to 1600px JPEG (quality 82) → base64, stored in MongoDB, up to 8 photos. First photo is cover.
 - Card detail on bids list shows "preauth активен" indicator.
 
-## Iteration 5 (2026-04-16)
+## Iteration 6 (2026-04-16)
+- **Seller email notifications** on new bid and new comment: `email_seller_new_bid` + `email_seller_new_comment` fired after `place_bid` and `add_comment`. Skipped for platform seller / self-actions. HTML templates match AutoBid.bg brand.
+- **Full-text search** with `q` query param on `GET /auctions` — case-insensitive regex across title, description, make, model, color. Works with Cyrillic.
+- **AuctionsPage** refactored: new search input at top with clear button, results count shows `X резултата за „<query>"`, reads `?q=...` from URL on mount.
+- **Global nav search bar** (desktop): submits to `/auctions?q=...` for universal access from every page.
+- Backend verified: Search "BMW" → 4 (M5, M3, X5, Е36); "quattro" → Audi A8 (title); "панорамен" → 2 hits (description-only match); seller emails logged for new bid (€3,500) and new comment on Opel Astra listing.
 - **Reserve-not-met post-auction flow**: ended auctions with unmet reserve auto-transition to `reserve_not_met` status. Seller gets actions: `POST /auctions/{id}/accept-high-bid` (→ sold at current) or `POST /auctions/{id}/counter-offer` with price. High bidder sees counter-offer banner on detail page and responds via `POST /auctions/{id}/counter-offer/respond` (accept → sold at counter price; decline → ended).
 - **Seller edit/withdraw**: `PATCH /auctions/{id}` (title/description/starting/reserve/images) restricted to owner+admin; allowed while pending, rejected, or live with 0 bids. `DELETE /auctions/{id}` marks as `withdrawn`, releases any preauths.
 - **Public user profile** at `/profile/:userId`: new endpoint `GET /users/{user_id}/profile` returns user meta + stats + listings_sold + purchases + active_listings. Excludes email/password. Profile page shows avatar initial, member year, sales/purchases/active/rating stat cards, and tabs for each.

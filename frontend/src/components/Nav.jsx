@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Menu, X, User } from "lucide-react";
+import { Menu, X, User, Search } from "lucide-react";
 import { useAuth } from "../lib/auth";
 
 const links = [
@@ -13,7 +13,15 @@ const links = [
 export default function Nav() {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
   const navigate = useNavigate();
+
+  const doSearch = (e) => {
+    e.preventDefault();
+    if (!q.trim()) return;
+    navigate(`/auctions?q=${encodeURIComponent(q.trim())}`);
+    setQ("");
+  };
 
   return (
     <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md rule-b" data-testid="main-navigation">
@@ -37,6 +45,18 @@ export default function Nav() {
               </NavLink>
             ))}
           </nav>
+
+          <form onSubmit={doSearch} className="hidden lg:flex items-center flex-1 max-w-xs mx-6 relative">
+            <Search size={14} className="absolute left-3 text-[hsl(var(--ink-muted))]" />
+            <input
+              type="text"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Търси автомобил…"
+              className="w-full border border-[hsl(var(--line))] h-9 pl-9 pr-3 text-sm bg-[hsl(var(--surface))]"
+              data-testid="nav-search-input"
+            />
+          </form>
 
           <div className="hidden md:flex items-center gap-3">
             {user ? (

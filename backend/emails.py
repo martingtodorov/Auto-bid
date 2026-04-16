@@ -91,3 +91,27 @@ async def email_rejected(to: str, name: str, auction_title: str, reason: str):
       <p>Може да редактирате и подадете отново.</p>
     """
     await send_email(to, f"Необходими корекции · {auction_title}", _shell("Обявата изисква корекции", body))
+
+
+async def email_seller_new_bid(to: str, name: str, auction_title: str, auction_id: str, bidder_name: str, amount: float, bid_count: int):
+    body = f"""
+      <p>Здравейте, {name},</p>
+      <p>Нова наддавка за <strong>{auction_title}</strong>.</p>
+      <div style="margin:20px 0;padding:16px;background:#fafafa;border:1px solid #e5e7eb;border-radius:10px;">
+        <div style="font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.1em;">Нова текуща</div>
+        <div style="font-size:26px;font-weight:700;margin-top:4px;">€{int(amount):,}</div>
+        <div style="font-size:13px;color:#6b7280;margin-top:6px;">от {bidder_name} · общо {bid_count} наддавания</div>
+      </div>
+      <p><a href="{APP_URL}/auctions/{auction_id}" style="display:inline-block;background:#1B4D3E;color:#fff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:600;">Следи търга</a></p>
+    """
+    await send_email(to, f"Нова наддавка €{int(amount):,} · {auction_title}", _shell("Нова наддавка в търга ви", body))
+
+
+async def email_seller_new_comment(to: str, name: str, auction_title: str, auction_id: str, commenter_name: str, snippet: str):
+    body = f"""
+      <p>Здравейте, {name},</p>
+      <p><strong>{commenter_name}</strong> остави коментар в обявата <strong>{auction_title}</strong>.</p>
+      <blockquote style="margin:20px 0;padding:14px 18px;background:#fafafa;border-left:3px solid #1B4D3E;color:#111827;font-style:italic;">{snippet}</blockquote>
+      <p><a href="{APP_URL}/auctions/{auction_id}" style="display:inline-block;background:#111827;color:#fff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:600;">Отговори</a></p>
+    """
+    await send_email(to, f"Нов коментар · {auction_title}", _shell("Нов коментар в обявата ви", body))
