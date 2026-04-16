@@ -387,7 +387,7 @@ async def place_bid(auction_id: str, payload: BidCreate, user: dict = Depends(ge
 
     now = datetime.now(timezone.utc)
     bid_id = str(uuid.uuid4())
-    preauth_amount = round(float(payload.amount_eur) * 0.03, 2)
+    preauth_amount = round(float(payload.amount_eur) * 0.02, 2)
 
     # Release current user's previous active preauth(s) on this auction
     await db.bids.update_many(
@@ -656,7 +656,7 @@ async def admin_sold(_admin: dict = Depends(require_admin)):
             "winner_name": winner.get("name") if winner else None,
             "winning_bid_preauth_status": winning_bid.get("preauth_status") if winning_bid else None,
             "winning_bid_preauth_amount": winning_bid.get("preauth_amount_eur") if winning_bid else None,
-            "commission_eur": round(float(a.get("current_bid_eur", 0)) * 0.03, 2),
+            "commission_eur": round(float(a.get("current_bid_eur", 0)) * 0.02, 2),
         })
     return enriched
 

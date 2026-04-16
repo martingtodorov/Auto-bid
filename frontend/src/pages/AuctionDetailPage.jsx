@@ -165,7 +165,7 @@ export default function AuctionDetailPage() {
   ];
 
   const isLive = a.status === "live";
-  const preauthPreview = Math.round((Number(bidAmount) || 0) * 0.03);
+  const preauthPreview = Math.round((Number(bidAmount) || 0) * 0.02);
   const hasPendingCounterForMe = a.counter_status === "pending" && a.counter_offer_to === user?.id;
 
   return (
@@ -376,7 +376,7 @@ export default function AuctionDetailPage() {
                       <Shield size={14} className="text-[hsl(var(--accent))] shrink-0 mt-0.5" />
                       <div className="text-xs leading-relaxed">
                         <div className="font-semibold text-[hsl(var(--accent-ink))]">Pre-authorization {formatEUR(preauthPreview)}</div>
-                        <div className="text-[hsl(var(--ink-muted))] mt-0.5">3% се блокират върху картата. При победа се прилагат като buyer's premium; иначе се освобождават изцяло.</div>
+                        <div className="text-[hsl(var(--ink-muted))] mt-0.5">2% се блокират върху картата. При победа се прилагат като buyer's premium; иначе се освобождават изцяло.</div>
                       </div>
                     </div>
 

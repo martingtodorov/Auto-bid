@@ -16,7 +16,7 @@ export default function PreauthModal({ open, onClose, onConfirm, bidAmount }) {
   const [err, setErr] = useState("");
 
   if (!open) return null;
-  const preauth = Math.round((Number(bidAmount) || 0) * 0.03);
+  const preauth = Math.round((Number(bidAmount) || 0) * 0.02);
 
   const formatCard = (v) => v.replace(/\D/g, "").slice(0, 16).replace(/(\d{4})(?=\d)/g, "$1 ");
   const formatExp = (v) => {
@@ -54,9 +54,9 @@ export default function PreauthModal({ open, onClose, onConfirm, bidAmount }) {
         <div className="p-6">
           <div className="rounded-card border border-[hsl(var(--line))] bg-[hsl(var(--surface))] p-4 flex items-center justify-between">
             <div>
-              <div className="overline text-[hsl(var(--ink-muted))]">Блокиране (3%)</div>
+              <div className="overline text-[hsl(var(--ink-muted))]">Блокиране (2%)</div>
               <div className="font-serif text-2xl mt-1">{formatEUR(preauth)}</div>
-              <div className="text-xs text-[hsl(var(--ink-muted))] mt-1">Задържа се до финализиране на сделката. При победа се ползва за 3% buyer's premium, иначе се освобождава изцяло.</div>
+              <div className="text-xs text-[hsl(var(--ink-muted))] mt-1">Задържа се до финализиране на сделката. При победа се ползва за 2% buyer's premium, иначе се освобождава изцяло.</div>
             </div>
             <CreditCard size={40} className="text-[hsl(var(--ink-muted))]" />
           </div>

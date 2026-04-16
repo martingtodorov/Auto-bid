@@ -161,7 +161,7 @@ export default function AdminPage() {
                   <span>Обява</span>
                   <span>Купувач</span>
                   <span>Финална цена</span>
-                  <span>Комисионна 3%</span>
+                  <span>Комисионна 2%</span>
                   <span>Действие</span>
                 </div>
                 {sold.map((a) => {
