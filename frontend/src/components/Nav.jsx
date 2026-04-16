@@ -41,6 +41,9 @@ export default function Nav() {
           <div className="hidden md:flex items-center gap-3">
             {user ? (
               <>
+                {user.role === "admin" && (
+                  <Link to="/admin" className="text-sm text-[hsl(var(--accent))]" data-testid="nav-admin">Админ</Link>
+                )}
                 <Link to="/dashboard" className="flex items-center gap-2 text-sm" data-testid="nav-dashboard">
                   <User size={16} />
                   {user.name}

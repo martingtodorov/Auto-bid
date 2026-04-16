@@ -1,0 +1,93 @@
+"""Resend-based email helper with graceful fallback when API key is missing."""
+import os
+import asyncio
+import logging
+import resend
+
+logger = logging.getLogger(__name__)
+
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "").strip()
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "AutoBid.bg <onboarding@resend.dev>")
+APP_URL = os.environ.get("APP_URL", "https://auction-drive-bg.preview.emergentagent.com")
+
+if RESEND_API_KEY:
+    resend.api_key = RESEND_API_KEY
+
+
+async def send_email(to: str, subject: str, html: str) -> bool:
+    """Send an email via Resend. Returns True on success, False on failure or missing key."""
+    if not RESEND_API_KEY:
+        logger.info("[EMAIL:mock] to=%s subject=%s", to, subject)
+        return False
+    try:
+        params = {"from": SENDER_EMAIL, "to": [to], "subject": subject, "html": html}
+        result = await asyncio.to_thread(resend.Emails.send, params)
+        logger.info("[EMAIL:sent] id=%s to=%s", result.get("id"), to)
+        return True
+    except Exception as e:
+        logger.error("[EMAIL:error] to=%s err=%s", to, e)
+        return False
+
+
+def _shell(title: str, body_html: str) -> str:
+    return f"""
+<!doctype html>
+<html><body style="margin:0;background:#f6f7f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Manrope,Roboto,sans-serif;color:#111827;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f6f7f8;padding:32px 0;">
+  <tr><td align="center">
+    <table role="presentation" width="560" cellspacing="0" cellpadding="0" style="background:#ffffff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;">
+      <tr><td style="padding:28px 32px;border-bottom:1px solid #e5e7eb;">
+        <div style="font-weight:700;font-size:22px;letter-spacing:-0.03em;">AutoBid<span style="color:#1B4D3E">.bg</span></div>
+      </td></tr>
+      <tr><td style="padding:32px;">
+        <h1 style="margin:0 0 16px 0;font-size:24px;letter-spacing:-0.02em;">{title}</h1>
+        {body_html}
+      </td></tr>
+      <tr><td style="padding:20px 32px;background:#fafafa;border-top:1px solid #e5e7eb;color:#6b7280;font-size:12px;">
+        AutoBid.bg · Редакционна платформа за автомобилни търгове · София
+      </td></tr>
+    </table>
+  </td></tr>
+</table></body></html>
+"""
+
+
+async def email_outbid(to: str, name: str, auction_title: str, auction_id: str, new_bid: float):
+    body = f"""
+      <p>Здравейте, {name},</p>
+      <p>Някой направи по-висока наддавка за <strong>{auction_title}</strong>.</p>
+      <p style="font-size:20px;margin:20px 0;">Нова текуща наддавка: <strong>€{int(new_bid):,}</strong></p>
+      <p>Вашата pre-authorization е автоматично освободена.</p>
+      <p><a href="{APP_URL}/auctions/{auction_id}" style="display:inline-block;background:#111827;color:#fff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:600;">Върни се в търга</a></p>
+    """
+    await send_email(to, f"Изпреварени сте · {auction_title}", _shell("Имате нова оферта срещу вас", body))
+
+
+async def email_won(to: str, name: str, auction_title: str, auction_id: str, price: float):
+    body = f"""
+      <p>Поздравления, {name}!</p>
+      <p>Спечелихте търга за <strong>{auction_title}</strong>.</p>
+      <p style="font-size:20px;margin:20px 0;">Крайна цена: <strong>€{int(price):,}</strong></p>
+      <p>Нашият екип ще се свърже с вас за финализирането в рамките на 24 часа. Вашата pre-authorization остава задържана до приключване на сделката.</p>
+      <p><a href="{APP_URL}/auctions/{auction_id}" style="display:inline-block;background:#1B4D3E;color:#fff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:600;">Виж търга</a></p>
+    """
+    await send_email(to, f"🏁 Спечелихте · {auction_title}", _shell("Вашата наддавка беше печелившата", body))
+
+
+async def email_approved(to: str, name: str, auction_title: str, auction_id: str):
+    body = f"""
+      <p>Здравейте, {name},</p>
+      <p>Вашата обява за <strong>{auction_title}</strong> е одобрена и вече е активна.</p>
+      <p><a href="{APP_URL}/auctions/{auction_id}" style="display:inline-block;background:#111827;color:#fff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:600;">Виж обявата</a></p>
+    """
+    await send_email(to, f"Одобрена обява · {auction_title}", _shell("Обявата ви е одобрена", body))
+
+
+async def email_rejected(to: str, name: str, auction_title: str, reason: str):
+    body = f"""
+      <p>Здравейте, {name},</p>
+      <p>След преглед вашата обява за <strong>{auction_title}</strong> не беше одобрена.</p>
+      <p style="background:#fafafa;border:1px solid #e5e7eb;padding:14px;border-radius:8px;"><strong>Забележка от екипа:</strong><br/>{reason or '—'}</p>
+      <p>Може да редактирате и подадете отново.</p>
+    """
+    await send_email(to, f"Необходими корекции · {auction_title}", _shell("Обявата изисква корекции", body))

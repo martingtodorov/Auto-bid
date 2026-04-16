@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth, formatError } from "../lib/auth";
 import { api } from "../lib/apiClient";
+import ImageUploader from "../components/ImageUploader";
 
 const FUELS = ["Бензин", "Дизел", "Хибриден", "Електрически", "Газ/Бензин"];
 const TRANSMISSIONS = ["Автоматична", "Ръчна"];
@@ -16,7 +17,7 @@ export default function SellPage() {
     fuel: "Бензин", transmission: "Автоматична", body_type: "Седан",
     power_hp: 150, engine_cc: 2000, color: "",
     region: "София", city: "София", description: "",
-    images: "",
+    images_list: [],
     starting_bid_eur: 5000, reserve_eur: "",
     duration_days: 7,
   });
@@ -31,7 +32,7 @@ export default function SellPage() {
     if (!user) return navigate("/login?next=/sell");
     setErr(""); setLoading(true);
     try {
-      const images = form.images.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
+      const images = form.images_list || [];
       const payload = {
         ...form,
         images,
@@ -136,8 +137,8 @@ export default function SellPage() {
             <Field label="Резервна цена (EUR, незадължителна)">
               <input type="number" value={form.reserve_eur} onChange={(e) => set("reserve_eur", e.target.value)} className={inputCls} />
             </Field>
-            <Field label="URL-и към снимки (по един на ред)" span={2}>
-              <textarea value={form.images} onChange={(e) => set("images", e.target.value)} rows={3} className="w-full border border-[hsl(var(--line))] p-3 text-sm" placeholder="https://..." data-testid="sell-images" />
+            <Field label="Снимки на автомобила (до 8)" span={2}>
+              <ImageUploader images={form.images_list} onChange={(list) => set("images_list", list)} />
             </Field>
             <Field label="Описание" span={2}>
               <textarea required value={form.description} onChange={(e) => set("description", e.target.value)} rows={6} className="w-full border border-[hsl(var(--line))] p-3 text-sm" placeholder="Разкажете историята на автомобила, оборудването и състоянието." data-testid="sell-description" />

@@ -11,10 +11,13 @@ import bcrypt
 import jwt
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Query, WebSocket, WebSocketDisconnect
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
+
+from emails import email_outbid, email_won, email_approved, email_rejected
+from ws import hub
 
 # ---- MongoDB ----
 mongo_url = os.environ['MONGO_URL']
@@ -112,6 +115,10 @@ class AuctionCreate(BaseModel):
 
 class BidCreate(BaseModel):
     amount_eur: float
+    payment_method_id: Optional[str] = None  # mock Stripe payment method token
+
+class AdminDecision(BaseModel):
+    reason: Optional[str] = None
 
 class CommentCreate(BaseModel):
     text: str = Field(min_length=1, max_length=1200)
@@ -305,20 +312,48 @@ async def place_bid(auction_id: str, payload: BidCreate, user: dict = Depends(ge
     min_next = float(a["current_bid_eur"]) + 100
     if payload.amount_eur < min_next:
         raise HTTPException(status_code=400, detail=f"Минималната следваща наддавка е €{int(min_next)}")
+    if not payload.payment_method_id:
+        raise HTTPException(status_code=402, detail="Необходима е валидна карта за наддаване")
 
+    now = datetime.now(timezone.utc)
     bid_id = str(uuid.uuid4())
+    preauth_amount = round(float(payload.amount_eur) * 0.05, 2)
+
+    # Release current user's previous active preauth(s) on this auction
+    await db.bids.update_many(
+        {"auction_id": auction_id, "user_id": user["id"], "preauth_status": "authorized"},
+        {"$set": {"preauth_status": "released", "preauth_released_at": now.isoformat()}},
+    )
+
+    # Release previous high bidder (different user) preauth + email
+    prev_high_bidder_id = a.get("high_bidder_id")
+    if prev_high_bidder_id and prev_high_bidder_id != user["id"]:
+        await db.bids.update_many(
+            {"auction_id": auction_id, "user_id": prev_high_bidder_id, "preauth_status": "authorized"},
+            {"$set": {"preauth_status": "released", "preauth_released_at": now.isoformat()}},
+        )
+        prev_user = await db.users.find_one({"id": prev_high_bidder_id}, {"_id": 0})
+        if prev_user:
+            try:
+                await email_outbid(prev_user["email"], prev_user["name"], a["title"], auction_id, float(payload.amount_eur))
+            except Exception as e:
+                logger.error("email_outbid failed: %s", e)
+
     bid_doc = {
         "id": bid_id,
         "auction_id": auction_id,
         "user_id": user["id"],
         "user_name": user["name"],
         "amount_eur": float(payload.amount_eur),
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": now.isoformat(),
+        "preauth_id": f"mock_pi_{uuid.uuid4().hex[:16]}",
+        "preauth_status": "authorized",
+        "preauth_amount_eur": preauth_amount,
+        "card_last4": payload.payment_method_id[-4:] if payload.payment_method_id else None,
     }
     await db.bids.insert_one(bid_doc)
-    # Extend auction if under 2 min left (anti-sniping)
+
     ends_at = datetime.fromisoformat(a["ends_at"])
-    now = datetime.now(timezone.utc)
     update = {
         "current_bid_eur": float(payload.amount_eur),
         "bid_count": int(a.get("bid_count", 0)) + 1,
@@ -328,7 +363,18 @@ async def place_bid(auction_id: str, payload: BidCreate, user: dict = Depends(ge
     if (ends_at - now).total_seconds() < 120:
         update["ends_at"] = (now + timedelta(minutes=2)).isoformat()
     await db.auctions.update_one({"id": auction_id}, {"$set": update})
-    return {"ok": True, "bid": {k: v for k, v in bid_doc.items() if k != "_id"}}
+
+    public_bid = {k: v for k, v in bid_doc.items() if k != "_id"}
+    await hub.broadcast(auction_id, {
+        "type": "bid",
+        "auction_id": auction_id,
+        "current_bid_eur": float(payload.amount_eur),
+        "high_bidder_name": user["name"],
+        "bid_count": update["bid_count"],
+        "ends_at": update.get("ends_at", a["ends_at"]),
+        "bid": {k: public_bid.get(k) for k in ("id", "user_name", "amount_eur", "created_at")},
+    })
+    return {"ok": True, "bid": public_bid, "preauth_amount_eur": preauth_amount}
 
 
 # ---- Comments ----
@@ -351,7 +397,87 @@ async def add_comment(auction_id: str, payload: CommentCreate, user: dict = Depe
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.comments.insert_one(doc)
-    return {k: v for k, v in doc.items() if k != "_id"}
+    public = {k: v for k, v in doc.items() if k != "_id"}
+    await hub.broadcast(auction_id, {"type": "comment", "comment": public})
+    return public
+
+
+# ---- Admin ----
+async def require_admin(user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Само администратори")
+    return user
+
+@api.get("/admin/pending")
+async def admin_pending(_admin: dict = Depends(require_admin)):
+    items = await db.auctions.find({"status": "pending"}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return items
+
+@api.post("/admin/auctions/{auction_id}/approve")
+async def admin_approve(auction_id: str, _admin: dict = Depends(require_admin)):
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Обявата не е намерена")
+    now = datetime.now(timezone.utc)
+    ends_at = now + timedelta(days=int(a.get("duration_days", 7)))
+    await db.auctions.update_one({"id": auction_id}, {"$set": {"status": "live", "ends_at": ends_at.isoformat(), "approved_at": now.isoformat()}})
+    seller = await db.users.find_one({"id": a.get("seller_id")}, {"_id": 0})
+    if seller and seller.get("email"):
+        try:
+            await email_approved(seller["email"], seller.get("name", ""), a["title"], auction_id)
+        except Exception as e:
+            logger.error("email_approved failed: %s", e)
+    return {"ok": True}
+
+@api.post("/admin/auctions/{auction_id}/reject")
+async def admin_reject(auction_id: str, payload: AdminDecision, _admin: dict = Depends(require_admin)):
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Обявата не е намерена")
+    await db.auctions.update_one({"id": auction_id}, {"$set": {"status": "rejected", "rejected_reason": payload.reason or ""}})
+    seller = await db.users.find_one({"id": a.get("seller_id")}, {"_id": 0})
+    if seller and seller.get("email"):
+        try:
+            await email_rejected(seller["email"], seller.get("name", ""), a["title"], payload.reason or "")
+        except Exception as e:
+            logger.error("email_rejected failed: %s", e)
+    return {"ok": True}
+
+@api.post("/admin/auctions/{auction_id}/finalize")
+async def admin_finalize(auction_id: str, _admin: dict = Depends(require_admin)):
+    """Releases winner's preauth and marks auction as sold (deal finalized)."""
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Обявата не е намерена")
+    await db.bids.update_many(
+        {"auction_id": auction_id, "preauth_status": "authorized"},
+        {"$set": {"preauth_status": "released", "preauth_released_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    await db.auctions.update_one({"id": auction_id}, {"$set": {"status": "sold"}})
+    winner_id = a.get("high_bidder_id")
+    if winner_id:
+        u = await db.users.find_one({"id": winner_id}, {"_id": 0})
+        if u:
+            try:
+                await email_won(u["email"], u["name"], a["title"], auction_id, float(a["current_bid_eur"]))
+            except Exception as e:
+                logger.error("email_won failed: %s", e)
+    return {"ok": True}
+
+
+# ---- WebSocket ----
+@app.websocket("/api/ws/auctions/{auction_id}")
+async def ws_auction(websocket: WebSocket, auction_id: str):
+    await websocket.accept()
+    await hub.join(auction_id, websocket)
+    try:
+        while True:
+            # Keepalive: we don't process client messages, just hold the connection
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        await hub.leave(auction_id, websocket)
+    except Exception:
+        await hub.leave(auction_id, websocket)
 
 
 # ---- Watchlist ----
