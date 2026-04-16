@@ -66,6 +66,7 @@ export default function Nav() {
                 )}
                 <Link to="/my-listings" className="text-sm" data-testid="nav-my-listings">Мои обяви</Link>
                 <Link to="/watchlist" className="text-sm" data-testid="nav-watchlist">Следени</Link>
+                <Link to="/settings" className="text-sm" data-testid="nav-settings">Настройки</Link>
                 <Link to="/dashboard" className="flex items-center gap-2 text-sm" data-testid="nav-dashboard">
                   <User size={16} />
                   {user.name}

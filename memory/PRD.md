@@ -38,7 +38,14 @@ User choices (from ask_human):
 - **Image uploader** on `/sell`: drag-free file input, auto-compression to 1600px JPEG (quality 82) → base64, stored in MongoDB, up to 8 photos. First photo is cover.
 - Card detail on bids list shows "preauth активен" indicator.
 
-## Iteration 6 (2026-04-16)
+## Iteration 7 (2026-04-16)
+- **Twilio SMS FOMO**: `send_sms` helper (graceful fallback to log when creds unset). When a bid is placed and `time_left ≤ 300s`, SMS blast to all prior bidders + watchers (except current bidder) who have `sms_opt_in=True` and phone set. Verified: mock SMS logged to +359888123456 when Audi A8 ended in 2min.
+- **User profile PATCH `/me/profile`**: accepts `phone` (E.164) and `sms_opt_in`.
+- **Saved searches**: new collection + endpoints `POST/GET/DELETE /me/saved-searches`. Backend `_matches_saved_search` filter logic.
+- **Admin approve hook**: after approving a pending auction, iterates all saved searches, sends email notification for each match. Verified: BMW 330i approval emailed matching search "BMW-ове под €50k".
+- **Frontend /settings page**: SMS settings with phone + opt-in checkbox + saved searches list with delete.
+- **AuctionsPage** has "Запази търсенето" button; nav has "Настройки" link.
+- Backend dep: `twilio>=9.0.0` added to `requirements.txt`; env vars `TWILIO_ACCOUNT_SID/AUTH_TOKEN/FROM_NUMBER` (empty → mock mode).
 - **Seller email notifications** on new bid and new comment: `email_seller_new_bid` + `email_seller_new_comment` fired after `place_bid` and `add_comment`. Skipped for platform seller / self-actions. HTML templates match AutoBid.bg brand.
 - **Full-text search** with `q` query param on `GET /auctions` — case-insensitive regex across title, description, make, model, color. Works with Cyrillic.
 - **AuctionsPage** refactored: new search input at top with clear button, results count shows `X резултата за „<query>"`, reads `?q=...` from URL on mount.

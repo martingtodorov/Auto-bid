@@ -1,12 +1,16 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { api } from "../lib/apiClient";
+import { useAuth, formatError } from "../lib/auth";
 import AuctionCard from "../components/AuctionCard";
-import { SlidersHorizontal, X, Search } from "lucide-react";
+import { SlidersHorizontal, X, Search, BookmarkPlus, Check } from "lucide-react";
 
 export default function AuctionsPage() {
+  const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [facets, setFacets] = useState({ makes: [], fuels: [], transmissions: [], regions: [], body_types: [] });
+  const [saveMsg, setSaveMsg] = useState("");
+  const [saveErr, setSaveErr] = useState("");
   const [filters, setFilters] = useState({
     make: "", fuel: "", transmission: "", region: "", body_type: "",
     min_price: "", max_price: "", year_min: "", year_max: "", status: "live", sort: "ending_soon",
@@ -33,6 +37,19 @@ export default function AuctionsPage() {
 
   const reset = () => setFilters({ make: "", fuel: "", transmission: "", region: "", body_type: "", min_price: "", max_price: "", year_min: "", year_max: "", status: "live", sort: "ending_soon", q: "" });
   const set = (k, v) => setFilters((p) => ({ ...p, [k]: v }));
+
+  const saveSearch = async () => {
+    if (!user) { window.location.href = "/login?next=/auctions"; return; }
+    setSaveMsg(""); setSaveErr("");
+    const f = Object.fromEntries(Object.entries(filters).filter(([k, v]) => v !== "" && v != null && k !== "sort" && k !== "status"));
+    const name = window.prompt("Име на търсенето:", filters.q || filters.make || "Ново търсене");
+    if (!name) return;
+    try {
+      await api.post("/me/saved-searches", { name: name.trim(), filters: f });
+      setSaveMsg("Записано. Ще получите имейл при нова съвпадаща обява.");
+      setTimeout(() => setSaveMsg(""), 4000);
+    } catch (e) { setSaveErr(formatError(e)); }
+  };
 
   const Select = ({ k, label, options }) => (
     <div>
@@ -124,8 +141,13 @@ export default function AuctionsPage() {
         <div className="mt-8 flex items-end justify-between mb-8 flex-wrap gap-3">
           <p className="text-sm text-[hsl(var(--ink-muted))]" data-testid="results-count">
             {items.length} резултата{filters.q && <> за „<span className="text-[hsl(var(--ink))]">{filters.q}</span>"</>}
+            {saveMsg && <span className="ml-3 text-[hsl(var(--accent))] inline-flex items-center gap-1"><Check size={13} /> {saveMsg}</span>}
+            {saveErr && <span className="ml-3 text-[hsl(var(--danger))]">{saveErr}</span>}
           </p>
           <div className="flex items-center gap-3">
+            <button onClick={saveSearch} className="btn btn-secondary !py-2 !px-4 flex items-center gap-2" data-testid="save-search-btn">
+              <BookmarkPlus size={14} /> Запази търсенето
+            </button>
             <select value={filters.sort} onChange={(e) => set("sort", e.target.value)} className="border border-[hsl(var(--line))] h-10 px-3 text-sm bg-white" data-testid="sort-select">
               <option value="ending_soon">Завършващи скоро</option>
               <option value="newest">Най-нови</option>
