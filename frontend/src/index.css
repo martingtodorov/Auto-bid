@@ -250,6 +250,17 @@ input:focus, select:focus, textarea:focus {
     border-radius: 18px;
 }
 
+@keyframes marquee {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+}
+.animate-marquee {
+    animation: marquee 60s linear infinite;
+}
+.animate-marquee:hover {
+    animation-play-state: paused;
+}
+
 .dot-grid {
     background-image: radial-gradient(hsl(var(--line)) 1px, transparent 1px);
     background-size: 22px 22px;

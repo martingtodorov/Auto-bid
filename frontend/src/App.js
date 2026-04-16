@@ -3,6 +3,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./lib/auth";
 import Nav from "./components/Nav";
+import LiveTicker from "./components/LiveTicker";
 import Footer from "./components/Footer";
 import LandingPage from "./pages/LandingPage";
 import AuctionsPage from "./pages/AuctionsPage";
@@ -19,6 +20,7 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <div className="min-h-screen flex flex-col bg-white">
+          <LiveTicker />
           <Nav />
           <div className="flex-1">
             <Routes>
