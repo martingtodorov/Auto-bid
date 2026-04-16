@@ -92,14 +92,43 @@ export default function Nav() {
       {open && (
         <div className="md:hidden rule-t">
           <div className="max-w-[1440px] mx-auto px-4 py-4 space-y-3">
+            <form onSubmit={(e) => { doSearch(e); setOpen(false); }} className="relative" data-testid="mobile-search-form">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[hsl(var(--ink-muted))]" />
+              <input
+                type="text"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Търси автомобил…"
+                className="w-full border border-[hsl(var(--line))] h-10 pl-9 pr-3 text-sm bg-[hsl(var(--surface))]"
+                data-testid="mobile-search-input"
+              />
+            </form>
+
             {links.map((l) => (
               <Link key={l.to} to={l.to} onClick={() => setOpen(false)} className="block py-2 text-sm" data-testid={`mobile-nav-${l.to.slice(1)}`}>
                 {l.label}
               </Link>
             ))}
+
+            {user && (
+              <div className="rule-t pt-3 space-y-2" data-testid="mobile-account-links">
+                {user.role === "admin" && (
+                  <Link to="/admin" onClick={() => setOpen(false)} className="block py-2 text-sm text-[hsl(var(--accent))] font-semibold" data-testid="mobile-nav-admin">
+                    Админ панел
+                  </Link>
+                )}
+                <Link to="/dashboard" onClick={() => setOpen(false)} className="block py-2 text-sm" data-testid="mobile-nav-dashboard">
+                  {user.name}
+                </Link>
+                <Link to="/my-listings" onClick={() => setOpen(false)} className="block py-2 text-sm" data-testid="mobile-nav-my-listings">Мои обяви</Link>
+                <Link to="/watchlist" onClick={() => setOpen(false)} className="block py-2 text-sm" data-testid="mobile-nav-watchlist">Следени</Link>
+                <Link to="/settings" onClick={() => setOpen(false)} className="block py-2 text-sm" data-testid="mobile-nav-settings">Настройки</Link>
+              </div>
+            )}
+
             <div className="rule-t pt-3 flex gap-3">
               {user ? (
-                <button onClick={() => { logout(); setOpen(false); navigate("/"); }} className="btn btn-secondary flex-1">Изход</button>
+                <button onClick={() => { logout(); setOpen(false); navigate("/"); }} className="btn btn-secondary flex-1" data-testid="mobile-logout">Изход</button>
               ) : (
                 <>
                   <Link to="/login" onClick={() => setOpen(false)} className="btn btn-secondary flex-1" data-testid="mobile-login">Вход</Link>
