@@ -845,20 +845,27 @@ async def update_listing(auction_id: str, payload: AuctionUpdate, user: dict = D
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     if not a:
         raise HTTPException(status_code=404, detail="Обявата не е намерена")
-    if a.get("seller_id") != user["id"] and user.get("role") != "admin":
+    is_admin = user.get("role") == "admin"
+    if a.get("seller_id") != user["id"] and not is_admin:
         raise HTTPException(status_code=403, detail="Няма права за редактиране")
+
     status = _auction_status(a)
-    if status not in ("pending", "rejected"):
-        if not (status == "live" and int(a.get("bid_count", 0)) == 0):
-            raise HTTPException(status_code=400, detail="Обявата може да се редактира само преди първата наддавка")
+    if not is_admin:
+        if status not in ("pending", "rejected"):
+            if not (status == "live" and int(a.get("bid_count", 0)) == 0):
+                raise HTTPException(status_code=400, detail="Обявата може да се редактира само преди първата наддавка")
 
     update = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if v is not None}
+    # Non-admins cannot change status/featured/ends_at
+    if not is_admin:
+        for forbidden in ("status", "featured", "ends_at"):
+            update.pop(forbidden, None)
+
     if update:
-        if "starting_bid_eur" in update and status in ("pending", "rejected"):
+        if "starting_bid_eur" in update and status in ("pending", "rejected") and not is_admin:
             update["current_bid_eur"] = float(update["starting_bid_eur"])
-        if status == "rejected":
+        if status == "rejected" and not is_admin and "status" not in update:
             update["status"] = "pending"
-            update.pop("rejected_reason", None)
             await db.auctions.update_one({"id": auction_id}, {"$unset": {"rejected_reason": ""}})
         await db.auctions.update_one({"id": auction_id}, {"$set": update})
     return {"ok": True}
@@ -869,20 +876,38 @@ async def withdraw_listing(auction_id: str, user: dict = Depends(get_current_use
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     if not a:
         raise HTTPException(status_code=404, detail="Обявата не е намерена")
-    if a.get("seller_id") != user["id"] and user.get("role") != "admin":
+    is_admin = user.get("role") == "admin"
+    if a.get("seller_id") != user["id"] and not is_admin:
         raise HTTPException(status_code=403, detail="Няма права")
+
     status = _auction_status(a)
-    if status in ("sold",):
-        raise HTTPException(status_code=400, detail="Продадена обява не може да бъде оттеглена")
-    if status == "live" and int(a.get("bid_count", 0)) > 0:
-        raise HTTPException(status_code=400, detail="Обявата не може да бъде оттеглена с активни наддавания. Свържете се с екипа.")
-    # Release any authorized preauths
+    if not is_admin:
+        if status in ("sold",):
+            raise HTTPException(status_code=400, detail="Продадена обява не може да бъде оттеглена")
+        if status == "live" and int(a.get("bid_count", 0)) > 0:
+            raise HTTPException(status_code=400, detail="Обявата не може да бъде оттеглена с активни наддавания. Свържете се с екипа.")
+
     await db.bids.update_many(
         {"auction_id": auction_id, "preauth_status": "authorized"},
         {"$set": {"preauth_status": "released", "preauth_released_at": datetime.now(timezone.utc).isoformat()}},
     )
     await db.auctions.update_one({"id": auction_id}, {"$set": {"status": "withdrawn"}})
     return {"ok": True}
+
+
+@api.get("/admin/auctions")
+async def admin_list_all(q: Optional[str] = None, status: Optional[str] = None, _admin: dict = Depends(require_admin)):
+    query = {}
+    if status:
+        query["status"] = status
+    if q:
+        import re
+        rx = {"$regex": re.escape(q.strip()), "$options": "i"}
+        query["$or"] = [{"title": rx}, {"make": rx}, {"model": rx}, {"seller_name": rx}, {"id": rx}]
+    items = await db.auctions.find(query, {"_id": 0}).sort("created_at", -1).limit(300).to_list(300)
+    for a in items:
+        a["status"] = _auction_status(a)
+    return items
 
 
 # ---- Post-auction reserve-not-met flow ----
