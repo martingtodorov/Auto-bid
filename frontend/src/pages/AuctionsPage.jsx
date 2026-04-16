@@ -3,6 +3,7 @@ import { api } from "../lib/apiClient";
 import { useAuth, formatError } from "../lib/auth";
 import AuctionCard from "../components/AuctionCard";
 import { SlidersHorizontal, X, Search, BookmarkPlus, Check } from "lucide-react";
+import { mergeMakes } from "../lib/makes";
 
 export default function AuctionsPage() {
   const { user } = useAuth();
@@ -68,7 +69,7 @@ export default function AuctionsPage() {
         <button onClick={reset} className="text-xs underline text-[hsl(var(--ink-muted))]" data-testid="reset-filters">Изчисти</button>
       </div>
 
-      <Select k="make" label="Марка" options={facets.makes} />
+      <Select k="make" label="Марка" options={mergeMakes(facets.makes)} />
       <Select k="body_type" label="Тип купе" options={facets.body_types} />
       <Select k="fuel" label="Гориво" options={facets.fuels} />
       <Select k="transmission" label="Скоростна кутия" options={facets.transmissions} />

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth, formatError } from "../lib/auth";
 import { api } from "../lib/apiClient";
 import ImageUploader from "../components/ImageUploader";
+import { CAR_MAKES } from "../lib/makes";
 
 const FUELS = ["Бензин", "Дизел", "Хибриден", "Електрически", "Газ/Бензин"];
 const TRANSMISSIONS = ["Автоматична", "Ръчна"];
@@ -88,7 +89,10 @@ export default function SellPage() {
               <input required value={form.title} onChange={(e) => set("title", e.target.value)} className={inputCls} placeholder="Напр. Audi RS6 Avant Performance — Nardo Grey" data-testid="sell-title" />
             </Field>
             <Field label="Марка">
-              <input required value={form.make} onChange={(e) => set("make", e.target.value)} className={inputCls} data-testid="sell-make" />
+              <input required list="car-makes" value={form.make} onChange={(e) => set("make", e.target.value)} className={inputCls} placeholder="напр. BMW" data-testid="sell-make" />
+              <datalist id="car-makes">
+                {CAR_MAKES.map((m) => <option key={m} value={m} />)}
+              </datalist>
             </Field>
             <Field label="Модел">
               <input required value={form.model} onChange={(e) => set("model", e.target.value)} className={inputCls} data-testid="sell-model" />
