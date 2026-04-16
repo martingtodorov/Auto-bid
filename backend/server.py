@@ -123,6 +123,22 @@ class AdminDecision(BaseModel):
 class CommentCreate(BaseModel):
     text: str = Field(min_length=1, max_length=1200)
 
+class AuctionUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    starting_bid_eur: Optional[float] = None
+    reserve_eur: Optional[float] = None
+    images: Optional[List[str]] = None
+    color: Optional[str] = None
+    region: Optional[str] = None
+    city: Optional[str] = None
+
+class CounterOfferCreate(BaseModel):
+    price_eur: float
+
+class NegotiationRespond(BaseModel):
+    accept: bool
+
 
 # ---- Auth routes ----
 @api.post("/auth/register")
@@ -172,12 +188,16 @@ async def me(user: dict = Depends(get_current_user)):
 
 # ---- Auction helpers ----
 def _auction_status(a: dict) -> str:
-    if a.get("status") == "sold":
-        return "sold"
-    if a.get("status") == "ended":
-        return "ended"
+    stored = a.get("status")
+    if stored in ("sold", "rejected", "pending", "withdrawn", "reserve_not_met", "ended"):
+        if stored == "ended":
+            return "ended"
+        return stored
     end = datetime.fromisoformat(a["ends_at"])
     if datetime.now(timezone.utc) >= end:
+        reserve = a.get("reserve_eur")
+        if reserve and float(a.get("current_bid_eur", 0)) < float(reserve):
+            return "reserve_not_met"
         return "ended"
     return "live"
 
@@ -601,6 +621,163 @@ async def my_bids(user: dict = Depends(get_current_user)):
 async def my_listings(user: dict = Depends(get_current_user)):
     items = await db.auctions.find({"seller_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
     return [_public_auction(a, user) for a in items]
+
+
+# ---- Seller listing management ----
+@api.patch("/auctions/{auction_id}")
+async def update_listing(auction_id: str, payload: AuctionUpdate, user: dict = Depends(get_current_user)):
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Обявата не е намерена")
+    if a.get("seller_id") != user["id"] and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Няма права за редактиране")
+    status = _auction_status(a)
+    if status not in ("pending", "rejected"):
+        if not (status == "live" and int(a.get("bid_count", 0)) == 0):
+            raise HTTPException(status_code=400, detail="Обявата може да се редактира само преди първата наддавка")
+
+    update = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if v is not None}
+    if update:
+        if "starting_bid_eur" in update and status in ("pending", "rejected"):
+            update["current_bid_eur"] = float(update["starting_bid_eur"])
+        if status == "rejected":
+            update["status"] = "pending"
+            update.pop("rejected_reason", None)
+            await db.auctions.update_one({"id": auction_id}, {"$unset": {"rejected_reason": ""}})
+        await db.auctions.update_one({"id": auction_id}, {"$set": update})
+    return {"ok": True}
+
+
+@api.delete("/auctions/{auction_id}")
+async def withdraw_listing(auction_id: str, user: dict = Depends(get_current_user)):
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Обявата не е намерена")
+    if a.get("seller_id") != user["id"] and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Няма права")
+    status = _auction_status(a)
+    if status in ("sold",):
+        raise HTTPException(status_code=400, detail="Продадена обява не може да бъде оттеглена")
+    if status == "live" and int(a.get("bid_count", 0)) > 0:
+        raise HTTPException(status_code=400, detail="Обявата не може да бъде оттеглена с активни наддавания. Свържете се с екипа.")
+    # Release any authorized preauths
+    await db.bids.update_many(
+        {"auction_id": auction_id, "preauth_status": "authorized"},
+        {"$set": {"preauth_status": "released", "preauth_released_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    await db.auctions.update_one({"id": auction_id}, {"$set": {"status": "withdrawn"}})
+    return {"ok": True}
+
+
+# ---- Post-auction reserve-not-met flow ----
+@api.post("/auctions/{auction_id}/accept-high-bid")
+async def seller_accept_high_bid(auction_id: str, user: dict = Depends(get_current_user)):
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Обявата не е намерена")
+    if a.get("seller_id") != user["id"] and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Няма права")
+    if _auction_status(a) != "reserve_not_met":
+        raise HTTPException(status_code=400, detail="Действието е достъпно само при недостигнат резерв")
+    if not a.get("high_bidder_id"):
+        raise HTTPException(status_code=400, detail="Няма водещ наддавач")
+    await db.auctions.update_one({"id": auction_id}, {"$set": {"status": "sold", "finalized_at": datetime.now(timezone.utc).isoformat()}})
+    winner = await db.users.find_one({"id": a["high_bidder_id"]}, {"_id": 0})
+    if winner:
+        try:
+            await email_won(winner["email"], winner["name"], a["title"], auction_id, float(a["current_bid_eur"]))
+        except Exception as e:
+            logger.error("email_won failed: %s", e)
+    return {"ok": True}
+
+
+@api.post("/auctions/{auction_id}/counter-offer")
+async def seller_counter_offer(auction_id: str, payload: CounterOfferCreate, user: dict = Depends(get_current_user)):
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Обявата не е намерена")
+    if a.get("seller_id") != user["id"] and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Няма права")
+    if _auction_status(a) != "reserve_not_met":
+        raise HTTPException(status_code=400, detail="Действието е достъпно само при недостигнат резерв")
+    if not a.get("high_bidder_id"):
+        raise HTTPException(status_code=400, detail="Няма водещ наддавач")
+    if payload.price_eur <= 0:
+        raise HTTPException(status_code=400, detail="Невалидна цена")
+
+    await db.auctions.update_one({"id": auction_id}, {"$set": {
+        "counter_offer_eur": float(payload.price_eur),
+        "counter_offer_to": a["high_bidder_id"],
+        "counter_status": "pending",
+        "counter_offer_at": datetime.now(timezone.utc).isoformat(),
+    }})
+    return {"ok": True}
+
+
+@api.post("/auctions/{auction_id}/counter-offer/respond")
+async def respond_counter_offer(auction_id: str, payload: NegotiationRespond, user: dict = Depends(get_current_user)):
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Обявата не е намерена")
+    if a.get("counter_offer_to") != user["id"]:
+        raise HTTPException(status_code=403, detail="Няма права")
+    if a.get("counter_status") != "pending":
+        raise HTTPException(status_code=400, detail="Офертата не е активна")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    if payload.accept:
+        new_price = float(a["counter_offer_eur"])
+        await db.auctions.update_one({"id": auction_id}, {"$set": {
+            "current_bid_eur": new_price,
+            "counter_status": "accepted",
+            "status": "sold",
+            "finalized_at": now_iso,
+        }})
+        return {"ok": True, "status": "sold"}
+    else:
+        await db.auctions.update_one({"id": auction_id}, {"$set": {
+            "counter_status": "declined",
+            "status": "ended",
+        }})
+        return {"ok": True, "status": "ended"}
+
+
+# ---- Public profile ----
+@api.get("/users/{user_id}/profile")
+async def public_profile(user_id: str):
+    u = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0, "email": 0})
+    if not u:
+        raise HTTPException(status_code=404, detail="Потребителят не е намерен")
+    sold_listings = await db.auctions.find(
+        {"seller_id": user_id, "status": "sold"},
+        {"_id": 0},
+    ).sort("finalized_at", -1).limit(60).to_list(60)
+    purchases = await db.auctions.find(
+        {"high_bidder_id": user_id, "status": "sold"},
+        {"_id": 0},
+    ).sort("finalized_at", -1).limit(60).to_list(60)
+    active = await db.auctions.find(
+        {"seller_id": user_id, "status": "live"},
+        {"_id": 0},
+    ).limit(12).to_list(12)
+    listings_sold = [_public_auction(a) for a in sold_listings]
+    bought = [_public_auction(a) for a in purchases]
+    active_pub = [_public_auction(a) for a in active]
+    total_sales = sum(float(a.get("current_bid_eur", 0)) for a in listings_sold)
+    total_bought = sum(float(a.get("current_bid_eur", 0)) for a in bought)
+    return {
+        "user": {"id": u["id"], "name": u["name"], "role": u.get("role", "user"), "member_since": u["created_at"]},
+        "stats": {
+            "sales_count": len(listings_sold),
+            "sales_total_eur": total_sales,
+            "purchases_count": len(bought),
+            "purchases_total_eur": total_bought,
+            "active_count": len(active_pub),
+        },
+        "listings_sold": listings_sold,
+        "purchases": bought,
+        "active_listings": active_pub,
+    }
 
 
 # ---- Seed ----

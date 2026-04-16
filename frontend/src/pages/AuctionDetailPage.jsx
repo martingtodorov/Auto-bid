@@ -130,6 +130,14 @@ export default function AuctionDetailPage() {
     } catch (e) { setError(formatError(e)); }
   };
 
+  const respondCounter = async (accept) => {
+    setError("");
+    try {
+      await api.post(`/auctions/${id}/counter-offer/respond`, { accept });
+      await load();
+    } catch (e) { setError(formatError(e)); }
+  };
+
   if (!a) return <div className="py-24 text-center">Зареждане…</div>;
 
   const specs = [
@@ -145,6 +153,7 @@ export default function AuctionDetailPage() {
 
   const isLive = a.status === "live";
   const preauthPreview = Math.round((Number(bidAmount) || 0) * 0.03);
+  const hasPendingCounterForMe = a.counter_status === "pending" && a.counter_offer_to === user?.id;
 
   return (
     <main className="rule-b" data-testid="auction-detail-page">
@@ -207,7 +216,11 @@ export default function AuctionDetailPage() {
                   bids.map((b) => (
                     <div key={b.id} className="flex items-center justify-between p-4 border-b border-[hsl(var(--line))] last:border-b-0" data-testid={`bid-row-${b.id}`}>
                       <div>
-                        <div className="text-sm font-semibold">{b.user_name}</div>
+                        {b.user_id ? (
+                          <Link to={`/profile/${b.user_id}`} className="text-sm font-semibold hover:text-[hsl(var(--accent))]" data-testid={`bidder-link-${b.id}`}>{b.user_name}</Link>
+                        ) : (
+                          <div className="text-sm font-semibold">{b.user_name}</div>
+                        )}
                         <div className="text-xs text-[hsl(var(--ink-muted))] font-mono">
                           {new Date(b.created_at).toLocaleString("bg-BG")}
                           {b.preauth_status === "authorized" && <span className="ml-2 text-[hsl(var(--accent))]">· preauth активен</span>}
@@ -247,7 +260,11 @@ export default function AuctionDetailPage() {
                 {comments.map((c) => (
                   <div key={c.id} className="rounded-card border border-[hsl(var(--line))] p-5" data-testid={`comment-${c.id}`}>
                     <div className="flex items-center justify-between">
-                      <div className="text-sm font-semibold">{c.user_name}</div>
+                      {c.user_id ? (
+                        <Link to={`/profile/${c.user_id}`} className="text-sm font-semibold hover:text-[hsl(var(--accent))]">{c.user_name}</Link>
+                      ) : (
+                        <div className="text-sm font-semibold">{c.user_name}</div>
+                      )}
                       <div className="text-xs text-[hsl(var(--ink-muted))] font-mono">{new Date(c.created_at).toLocaleString("bg-BG")}</div>
                     </div>
                     <p className="mt-3 text-sm leading-relaxed">{c.text}</p>
@@ -260,6 +277,18 @@ export default function AuctionDetailPage() {
           <aside className="lg:col-span-4">
             <div className="lg:sticky lg:top-28 space-y-5">
               <div className="rounded-card border border-[hsl(var(--line))] p-6 bg-white" data-testid="bid-section">
+                {hasPendingCounterForMe && (
+                  <div className="mb-5 rounded-card bg-[hsl(var(--accent-soft))] border border-[hsl(var(--accent))]/30 p-4" data-testid="counter-banner">
+                    <div className="overline text-[hsl(var(--accent))]">Контраоферта от продавача</div>
+                    <div className="font-serif text-3xl mt-2">{formatEUR(a.counter_offer_eur)}</div>
+                    <p className="mt-2 text-xs text-[hsl(var(--ink-muted))]">Резервът не бе достигнат. Продавачът предлага тази цена директно на вас.</p>
+                    <div className="mt-3 flex gap-2">
+                      <button onClick={() => respondCounter(true)} className="btn btn-accent !py-2 !px-4 text-xs flex-1" data-testid="counter-accept">Приеми</button>
+                      <button onClick={() => respondCounter(false)} className="btn btn-secondary !py-2 !px-4 text-xs flex-1" data-testid="counter-decline">Откажи</button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   {a.status === "sold" ? <span className="pill pill-sold">Продаден</span>
                     : a.status === "ended" ? <span className="pill pill-sold">Приключил</span>
@@ -332,7 +361,11 @@ export default function AuctionDetailPage() {
 
               <div className="rounded-card border border-[hsl(var(--line))] p-6 bg-[hsl(var(--surface))]">
                 <div className="overline text-[hsl(var(--ink-muted))]">Продавач</div>
-                <div className="font-serif text-xl mt-2">{a.seller_name}</div>
+                {a.seller_id && a.seller_id !== "platform" ? (
+                  <Link to={`/profile/${a.seller_id}`} className="font-serif text-xl mt-2 block hover:text-[hsl(var(--accent))]" data-testid="seller-link">{a.seller_name}</Link>
+                ) : (
+                  <div className="font-serif text-xl mt-2">{a.seller_name}</div>
+                )}
                 <p className="text-xs text-[hsl(var(--ink-muted))] mt-2">Проверен дилър · {a.region}</p>
               </div>
             </div>

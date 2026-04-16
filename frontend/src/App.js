@@ -17,6 +17,7 @@ import DashboardPage from "./pages/DashboardPage";
 import AdminPage from "./pages/AdminPage";
 import WatchlistPage from "./pages/WatchlistPage";
 import MyListingsPage from "./pages/MyListingsPage";
+import ProfilePage from "./pages/ProfilePage";
 
 function App() {
   return (
@@ -39,6 +40,7 @@ function App() {
               <Route path="/admin" element={<AdminPage />} />
               <Route path="/watchlist" element={<WatchlistPage />} />
               <Route path="/my-listings" element={<MyListingsPage />} />
+              <Route path="/profile/:userId" element={<ProfilePage />} />
               <Route path="*" element={<LandingPage />} />
             </Routes>
           </div>

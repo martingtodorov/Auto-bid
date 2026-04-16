@@ -38,7 +38,14 @@ User choices (from ask_human):
 - **Image uploader** on `/sell`: drag-free file input, auto-compression to 1600px JPEG (quality 82) → base64, stored in MongoDB, up to 8 photos. First photo is cover.
 - Card detail on bids list shows "preauth активен" indicator.
 
-## Iteration 4 (2026-04-16)
+## Iteration 5 (2026-04-16)
+- **Reserve-not-met post-auction flow**: ended auctions with unmet reserve auto-transition to `reserve_not_met` status. Seller gets actions: `POST /auctions/{id}/accept-high-bid` (→ sold at current) or `POST /auctions/{id}/counter-offer` with price. High bidder sees counter-offer banner on detail page and responds via `POST /auctions/{id}/counter-offer/respond` (accept → sold at counter price; decline → ended).
+- **Seller edit/withdraw**: `PATCH /auctions/{id}` (title/description/starting/reserve/images) restricted to owner+admin; allowed while pending, rejected, or live with 0 bids. `DELETE /auctions/{id}` marks as `withdrawn`, releases any preauths.
+- **Public user profile** at `/profile/:userId`: new endpoint `GET /users/{user_id}/profile` returns user meta + stats + listings_sold + purchases + active_listings. Excludes email/password. Profile page shows avatar initial, member year, sales/purchases/active/rating stat cards, and tabs for each.
+- Auction detail links `seller_name` → `/profile/:sellerId` and each bid's/comment's `user_name` → `/profile/:userId`.
+- MyListings page gets inline edit form, Withdraw button, and reserve-not-met action card (Accept highest / Counter-offer with price input).
+- Auction detail shows counter-offer banner with Accept/Decline buttons when `counter_status=pending && counter_offer_to == current user`.
+- Backend verified: PATCH pending, DELETE→withdrawn, counter-offer flow end-to-end (€2500 sale after accepted counter on Fiat Panda reserve €50k).
 - **Reserve price logic**: AuctionCreate already had `reserve_eur`. Now:
   - `_public_auction()` helper injects `has_reserve: bool`, `reserve_met: bool|null` on every auction response.
   - `reserve_eur` is **hidden** from bidders — only seller (owner) and admin see the exact number.
