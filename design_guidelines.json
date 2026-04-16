@@ -1,0 +1,108 @@
+{
+  "theme": "light",
+  "archetype": "4",
+  "design_philosophy": "Classic editorial style inspired by Bring a Trailer. Focus on high-quality photography, generous white space, and typographic hierarchy. Clean, trustworthy, and premium.",
+  "colors": {
+    "primary": "#1A1A1A",
+    "primary_foreground": "#FFFFFF",
+    "secondary": "#F3F4F6",
+    "secondary_foreground": "#111827",
+    "accent": "#1B4D3E", 
+    "accent_foreground": "#FFFFFF",
+    "background": "#FFFFFF",
+    "surface": "#FAFAFA",
+    "border": "#E5E7EB",
+    "text_main": "#111827",
+    "text_muted": "#6B7280",
+    "success": "#16A34A",
+    "danger": "#DC2626"
+  },
+  "typography": {
+    "font_family": {
+      "heading": "'Playfair Display', serif",
+      "body": "'IBM Plex Sans', sans-serif",
+      "mono": "'IBM Plex Mono', monospace"
+    },
+    "scale": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl tracking-tight leading-none",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl tracking-tight",
+      "h3": "text-xl sm:text-2xl",
+      "body": "text-base leading-relaxed",
+      "small": "text-sm tracking-wide",
+      "overline": "text-xs uppercase tracking-[0.2em]"
+    }
+  },
+  "spacing_and_layout": {
+    "container": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+    "section_padding": "py-16 sm:py-24 lg:py-32",
+    "grid_bento": "grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-8",
+    "card_padding": "p-6",
+    "border_radius": "rounded-none",
+    "surface_strategy": "Grid Borders: Expose the skeleton with 1px borders (border-zinc-200) for a technical, editorial look. No soft shadows. Cards are flat."
+  },
+  "components": {
+    "navigation": {
+      "style": "Solid white background, sticky top, z-50, border-b border-border. Clean typographic links.",
+      "testid": "main-navigation"
+    },
+    "hero": {
+      "style": "Editorial split layout or large featured image with a clean, semi-transparent text box. H1 in Playfair Display.",
+      "testid": "hero-section"
+    },
+    "car_card": {
+      "style": "Flat, 1px border border-border, large 16:9 image on top, p-4 or p-6 for content. Playfair Display for Car Title. Grid of specs below title.",
+      "testid": "car-card"
+    },
+    "buttons": {
+      "primary": "bg-primary text-white px-6 py-3 rounded-none hover:bg-zinc-800 transition-colors",
+      "secondary": "bg-transparent border border-primary text-primary px-6 py-3 rounded-none hover:bg-zinc-100 transition-colors"
+    },
+    "bid_section": {
+      "style": "High contrast box (bg-zinc-50 border border-zinc-200 p-6), prominent current bid in Euro with Leva conversion, large input and Place Bid button.",
+      "testid": "bid-section"
+    }
+  },
+  "motion": {
+    "hover": "Subtle image scale up (transform scale-105) on car cards. Transition transform 0.4s ease.",
+    "page_load": "Fade in content sequentially. Staggered entrance for car grids."
+  },
+  "images": {
+    "hero": {
+      "url": "https://images.unsplash.com/photo-1698995339730-86b3dd454001?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzB8MHwxfHNlYXJjaHwyfHxBdWRpJTIwQTglMjBkcml2aW5nfGVufDB8fHx8MTc3NjM2MjMyMXww&ixlib=rb-4.1.0&q=85",
+      "description": "Blue Audi A8 on dirt road, suitable for hero or featured car"
+    },
+    "featured_auctions": [
+      {
+        "url": "https://images.pexels.com/photos/35070143/pexels-photo-35070143.jpeg",
+        "description": "Vintage classic car close up"
+      },
+      {
+        "url": "https://images.pexels.com/photos/34214702/pexels-photo-34214702.jpeg",
+        "description": "Yellow sports car close up"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1676886417721-2e180ff9adee?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzB8MHwxfHNlYXJjaHwxfHxBdWRpJTIwQTglMjBkcml2aW5nfGVufDB8fHx8MTc3NjM2MjMyMXww&ixlib=rb-4.1.0&q=85",
+        "description": "Car interior dashboard"
+      }
+    ],
+    "how_it_works": {
+       "url": "https://images.unsplash.com/photo-1754983780904-c9dad94536be?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzB8MHwxfHNlYXJjaHw0fHxBdWRpJTIwQTglMjBkcml2aW5nfGVufDB8fHx8MTc3NjM2MjMyMXww&ixlib=rb-4.1.0&q=85",
+       "description": "Silver car driving on city street"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Build a React frontend with Tailwind CSS and Shadcn UI primitives. DO NOT USE NEXT.JS APP ROUTER IF ENVIRONMENT IS REACT SPA. Check environment first.",
+    "The style must be 'Classic Editorial' (Archetype 4) - similar to Bring a Trailer.",
+    "The application content and UI must be entirely in Bulgarian.",
+    "Ensure global layout has a sticky navigation bar with 'AutoBid.bg' text logo, and links: Търгове, Как работи, Продай автомобил, Вход.",
+    "Hero Section: Split layout or large cover image, large 'Playfair Display' heading ('Открийте и наддавайте за изключителни автомобили').",
+    "Use grid-cols-1 md:grid-cols-2 lg:grid-cols-3 or bento box grid for the live active auctions.",
+    "For the car cards, include specs: година (year), модел (model), пробег (mileage), двигател (engine), локация (location: София, Пловдив, Варна, etc.), and show current bid in both Euros (€) and Leva (лв.).",
+    "Create a detailed Auction Page: Photo gallery (large main image, thumbnails below), Specs table, Bid History, Comment Section, and a sticky Bid Box on the right.",
+    "Create an interactive browse/filters page with filters on the left and car grid on the right.",
+    "Implement 'data-testid' attributes on all key interactive elements.",
+    "Do NOT use soft shadows (shadow-lg, etc.). Use sharp 1px borders (border-zinc-200) to separate components, keeping it flat and editorial.",
+    "Ensure 'Playfair Display' and 'IBM Plex Sans' are used from Google Fonts.",
+    "Use 'lucide-react' for all icons."
+  ]
+}
