@@ -47,6 +47,20 @@ export default function AdminEditModal({ auctionId, onClose, onSaved }) {
 
   const removeImage = (idx) => set("images", (form.images || []).filter((_, i) => i !== idx));
 
+  const removeCatImage = (cat, idx) => set(cat, (form[cat] || []).filter((_, i) => i !== idx));
+
+  const addCatImageFile = (cat) => async (e) => {
+    const files = Array.from(e.target.files || []);
+    const readers = files.map((f) => new Promise((resolve) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.readAsDataURL(f);
+    }));
+    const dataUrls = await Promise.all(readers);
+    set(cat, [...(form[cat] || []), ...dataUrls]);
+    e.target.value = "";
+  };
+
   const handleFile = async (e) => {
     const files = Array.from(e.target.files || []);
     const readers = files.map((f) => new Promise((resolve) => {
@@ -79,6 +93,10 @@ export default function AdminEditModal({ auctionId, onClose, onSaved }) {
         city: form.city,
         vin: form.vin || null,
         images: form.images || [],
+        images_exterior: form.images_exterior || [],
+        images_wheels: form.images_wheels || [],
+        images_bumper: form.images_bumper || [],
+        images_interior: form.images_interior || [],
         starting_bid_eur: form.starting_bid_eur !== "" && form.starting_bid_eur != null ? parseFloat(form.starting_bid_eur) : null,
         reserve_eur: form.reserve_eur !== "" && form.reserve_eur != null ? parseFloat(form.reserve_eur) : null,
         current_bid_eur: form.current_bid_eur !== "" && form.current_bid_eur != null ? parseFloat(form.current_bid_eur) : null,
@@ -199,7 +217,7 @@ export default function AdminEditModal({ auctionId, onClose, onSaved }) {
               </Field>
             </Section>
 
-            <Section title="Снимки">
+            <Section title="Снимки (общ списък — показва се на галерията)">
               <div className="col-span-full">
                 {(form.images || []).length > 0 && (
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 mb-4" data-testid="edit-images-grid">
@@ -233,6 +251,13 @@ export default function AdminEditModal({ auctionId, onClose, onSaved }) {
               </div>
             </Section>
 
+            <Section title="Категоризирани снимки (за страницата с детайли)">
+              <CategoryImages cat="images_exterior" label="Екстериор" images={form.images_exterior} onFile={addCatImageFile("images_exterior")} onRemove={(i) => removeCatImage("images_exterior", i)} />
+              <CategoryImages cat="images_bumper" label="Предна броня" images={form.images_bumper} onFile={addCatImageFile("images_bumper")} onRemove={(i) => removeCatImage("images_bumper", i)} />
+              <CategoryImages cat="images_wheels" label="Джанти" images={form.images_wheels} onFile={addCatImageFile("images_wheels")} onRemove={(i) => removeCatImage("images_wheels", i)} />
+              <CategoryImages cat="images_interior" label="Интериор (показват се в описанието)" images={form.images_interior} onFile={addCatImageFile("images_interior")} onRemove={(i) => removeCatImage("images_interior", i)} />
+            </Section>
+
             <div className="flex justify-end gap-2 pt-4 border-t border-[hsl(var(--line))]">
               <button onClick={onClose} className="btn btn-secondary" disabled={saving}>Отказ</button>
               <button onClick={save} disabled={saving} className="btn btn-primary flex items-center gap-2" data-testid="edit-save">
@@ -262,6 +287,34 @@ function Field({ label, children, full = false }) {
     <div className={full ? "sm:col-span-2" : ""}>
       {label && <label className="overline text-[hsl(var(--ink-muted))] block mb-1.5">{label}</label>}
       {children}
+    </div>
+  );
+}
+
+
+function CategoryImages({ cat, label, images = [], onFile, onRemove }) {
+  return (
+    <div className="sm:col-span-2">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-sm font-semibold">{label}</div>
+        <span className="text-xs text-[hsl(var(--ink-muted))] font-mono">{(images || []).length}</span>
+      </div>
+      {(images || []).length > 0 && (
+        <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mb-2" data-testid={`edit-${cat}-grid`}>
+          {(images || []).map((src, i) => (
+            <div key={i} className="relative aspect-square bg-[hsl(var(--surface))] rounded-md overflow-hidden">
+              <img src={src} alt="" className="w-full h-full object-cover" />
+              <button type="button" onClick={() => onRemove(i)} className="absolute top-0.5 right-0.5 bg-black/70 text-white p-1 rounded-full" data-testid={`remove-${cat}-${i}`}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <label className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1 cursor-pointer w-fit">
+        + Качи снимки
+        <input type="file" accept="image/*" multiple onChange={onFile} className="hidden" data-testid={`edit-${cat}-file`} />
+      </label>
     </div>
   );
 }

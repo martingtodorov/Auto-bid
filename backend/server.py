@@ -110,6 +110,10 @@ class AuctionCreate(BaseModel):
     city: str
     description: str
     images: List[str] = []
+    images_exterior: List[str] = []
+    images_wheels: List[str] = []
+    images_bumper: List[str] = []
+    images_interior: List[str] = []
     starting_bid_eur: float
     reserve_eur: Optional[float] = None
     duration_days: int = 7
@@ -130,6 +134,10 @@ class AuctionUpdate(BaseModel):
     starting_bid_eur: Optional[float] = None
     reserve_eur: Optional[float] = None
     images: Optional[List[str]] = None
+    images_exterior: Optional[List[str]] = None
+    images_wheels: Optional[List[str]] = None
+    images_bumper: Optional[List[str]] = None
+    images_interior: Optional[List[str]] = None
     color: Optional[str] = None
     region: Optional[str] = None
     city: Optional[str] = None
@@ -154,6 +162,10 @@ class AdminAuctionUpdate(BaseModel):
     city: Optional[str] = None
     vin: Optional[str] = None
     images: Optional[List[str]] = None
+    images_exterior: Optional[List[str]] = None
+    images_wheels: Optional[List[str]] = None
+    images_bumper: Optional[List[str]] = None
+    images_interior: Optional[List[str]] = None
     starting_bid_eur: Optional[float] = None
     reserve_eur: Optional[float] = None
     current_bid_eur: Optional[float] = None
@@ -377,10 +389,33 @@ async def get_auction(auction_id: str, request: Request):
 
 @api.post("/auctions")
 async def create_auction(payload: AuctionCreate, user: dict = Depends(get_current_user)):
+    # Validate per-category image minimums (when using categorized uploader)
+    exterior = payload.images_exterior or []
+    wheels = payload.images_wheels or []
+    bumper = payload.images_bumper or []
+    interior = payload.images_interior or []
+    has_categorized = bool(exterior or wheels or bumper or interior)
+    if has_categorized:
+        errors = []
+        if len(exterior) < 8: errors.append(f"минимум 8 екстериорни снимки (имате {len(exterior)})")
+        if len(wheels) < 4: errors.append(f"минимум 4 снимки на джанти (имате {len(wheels)})")
+        if len(bumper) < 1: errors.append(f"минимум 1 снимка на предната броня (имате {len(bumper)})")
+        if len(interior) < 4: errors.append(f"минимум 4 интериорни снимки (имате {len(interior)})")
+        if errors:
+            raise HTTPException(status_code=400, detail="Снимките са непълни: " + "; ".join(errors))
+
+    # Build merged images list in natural viewing order: exterior first, then bumper, wheels, interior
+    merged = []
+    if has_categorized:
+        merged = [*exterior, *bumper, *wheels, *interior]
+    else:
+        merged = list(payload.images or [])
+
     auction_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
     ends_at = now + timedelta(days=payload.duration_days)
     doc = payload.model_dump()
+    doc["images"] = merged
     doc.update({
         "id": auction_id,
         "seller_id": user["id"],

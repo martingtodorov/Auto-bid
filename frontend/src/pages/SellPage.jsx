@@ -30,7 +30,10 @@ export default function SellPage() {
     power_hp: 150, engine_cc: 2000, color: "",
     region: "София", city: "София", description: "",
     vin: "",
-    images_list: [],
+    images_exterior: [],
+    images_wheels: [],
+    images_bumper: [],
+    images_interior: [],
     starting_bid_eur: 5000, reserve_eur: "",
     duration_days: 7,
   });
@@ -45,10 +48,24 @@ export default function SellPage() {
     if (!user) return navigate("/login?next=/sell");
     setErr(""); setLoading(true);
     try {
-      const images = form.images_list || [];
+      const ext = form.images_exterior || [];
+      const wh = form.images_wheels || [];
+      const bp = form.images_bumper || [];
+      const intr = form.images_interior || [];
+      if (ext.length < 8 || wh.length < 4 || bp.length < 1 || intr.length < 4) {
+        setErr(
+          `Снимките не отговарят на минимума: екстериор ${ext.length}/8, джанти ${wh.length}/4, предна броня ${bp.length}/1, интериор ${intr.length}/4.`
+        );
+        setLoading(false);
+        return;
+      }
       const payload = {
         ...form,
-        images,
+        images: [...ext, ...bp, ...wh, ...intr],
+        images_exterior: ext,
+        images_wheels: wh,
+        images_bumper: bp,
+        images_interior: intr,
         year: Number(form.year),
         mileage_km: Number(form.mileage_km),
         power_hp: Number(form.power_hp),
@@ -148,8 +165,48 @@ export default function SellPage() {
             <Field label="VIN номер (незадължителен, видим само на наддавачи)" span={2}>
               <input value={form.vin} onChange={(e) => set("vin", e.target.value.toUpperCase())} className={inputCls} maxLength={17} placeholder="напр. WAUZZZ4H9CN045678" data-testid="sell-vin" />
             </Field>
-            <Field label="Снимки на автомобила (до 8)" span={2}>
-              <ImageUploader images={form.images_list} onChange={(list) => set("images_list", list)} />
+            <Field label="Снимки на автомобила" span={2}>
+              <div className="space-y-3">
+                <div className="text-xs text-[hsl(var(--ink-muted))] leading-relaxed">
+                  Моля качете всички необходими снимки: <strong>минимум 8 екстериорни</strong>, <strong>4 на джанти</strong> (по една от всяка), <strong>1 на предната броня</strong>, <strong>4 интериорни</strong>. Първата екстериорна снимка се ползва като корица.
+                </div>
+                <ImageUploader
+                  label="Екстериор"
+                  helper="Снимки от всички страни на автомобила"
+                  min={8}
+                  max={20}
+                  images={form.images_exterior}
+                  onChange={(list) => set("images_exterior", list)}
+                  testId="uploader-exterior"
+                />
+                <ImageUploader
+                  label="Предна броня"
+                  helper="Фронтално, за да се виждат евентуални забележки"
+                  min={1}
+                  max={4}
+                  images={form.images_bumper}
+                  onChange={(list) => set("images_bumper", list)}
+                  testId="uploader-bumper"
+                />
+                <ImageUploader
+                  label="Джанти"
+                  helper="По една снимка на всяка джанта (общо 4)"
+                  min={4}
+                  max={8}
+                  images={form.images_wheels}
+                  onChange={(list) => set("images_wheels", list)}
+                  testId="uploader-wheels"
+                />
+                <ImageUploader
+                  label="Интериор"
+                  helper="Волан, табло, седалки, заден ред"
+                  min={4}
+                  max={12}
+                  images={form.images_interior}
+                  onChange={(list) => set("images_interior", list)}
+                  testId="uploader-interior"
+                />
+              </div>
             </Field>
             <Field label="Описание" span={2}>
               <textarea required value={form.description} onChange={(e) => set("description", e.target.value)} rows={6} className="w-full border border-[hsl(var(--line))] p-3 text-sm" placeholder="Разкажете историята на автомобила, оборудването и състоянието." data-testid="sell-description" />

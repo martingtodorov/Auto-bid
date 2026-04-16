@@ -266,7 +266,7 @@ export default function AuctionDetailPage() {
 
             <div className="mt-10">
               <div className="overline text-[hsl(var(--ink-muted))]">Описание от редакцията</div>
-              <p className="mt-4 font-serif text-xl leading-[1.6] whitespace-pre-wrap max-w-3xl">{a.description}</p>
+              <DescriptionWithInteriorShots description={a.description} interiorImages={a.images_interior || []} />
             </div>
 
             <div className="mt-14">
@@ -438,3 +438,66 @@ export default function AuctionDetailPage() {
     </main>
   );
 }
+
+function DescriptionWithInteriorShots({ description, interiorImages }) {
+  const text = (description || "").trim();
+  const shots = (interiorImages || []).slice(0, 3);
+
+  // Split description into paragraphs on empty lines or fallback to sentence groups
+  let paragraphs = text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  if (paragraphs.length < 2) {
+    // Break by sentences into ~2 balanced chunks
+    const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean);
+    if (sentences.length >= 2) {
+      const mid = Math.ceil(sentences.length / 2);
+      paragraphs = [sentences.slice(0, mid).join(" "), sentences.slice(mid).join(" ")].filter(Boolean);
+    } else {
+      paragraphs = [text];
+    }
+  }
+
+  if (shots.length === 0) {
+    return (
+      <div className="mt-4 max-w-3xl space-y-4" data-testid="auction-description">
+        {paragraphs.map((p, i) => (
+          <p key={i} className="text-[15px] leading-[1.7] whitespace-pre-wrap text-[hsl(var(--ink))]/90">{p}</p>
+        ))}
+      </div>
+    );
+  }
+
+  // Intersperse shots between paragraphs. We place one shot after each paragraph until we run out.
+  const blocks = [];
+  paragraphs.forEach((p, i) => {
+    blocks.push(
+      <p key={`p-${i}`} className="text-[15px] leading-[1.7] whitespace-pre-wrap text-[hsl(var(--ink))]/90">{p}</p>
+    );
+    if (i < shots.length) {
+      blocks.push(
+        <figure key={`s-${i}`} className="my-2 rounded-card overflow-hidden border border-[hsl(var(--line))] bg-[hsl(var(--surface))]">
+          <img src={shots[i]} alt="Интериор" loading="lazy" className="w-full h-auto object-cover max-h-[480px]" data-testid={`interior-shot-${i}`} />
+          <figcaption className="px-3 py-2 text-xs text-[hsl(var(--ink-muted))] font-mono tracking-wide">Интериор · {i + 1}/{shots.length}</figcaption>
+        </figure>
+      );
+    }
+  });
+
+  // If there are leftover shots (more shots than paragraph gaps), append them at the end
+  if (shots.length > paragraphs.length) {
+    for (let i = paragraphs.length; i < shots.length; i++) {
+      blocks.push(
+        <figure key={`s-tail-${i}`} className="my-2 rounded-card overflow-hidden border border-[hsl(var(--line))] bg-[hsl(var(--surface))]">
+          <img src={shots[i]} alt="Интериор" loading="lazy" className="w-full h-auto object-cover max-h-[480px]" data-testid={`interior-shot-${i}`} />
+          <figcaption className="px-3 py-2 text-xs text-[hsl(var(--ink-muted))] font-mono tracking-wide">Интериор · {i + 1}/{shots.length}</figcaption>
+        </figure>
+      );
+    }
+  }
+
+  return (
+    <div className="mt-4 max-w-3xl space-y-4" data-testid="auction-description">
+      {blocks}
+    </div>
+  );
+}
+
