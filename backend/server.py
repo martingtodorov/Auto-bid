@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field, EmailStr, ConfigDict
 
 from emails import email_outbid, email_won, email_approved, email_rejected, email_seller_new_bid, email_seller_new_comment
 from ws import hub
+from sms import send_sms
 
 # ---- MongoDB ----
 mongo_url = os.environ['MONGO_URL']
@@ -138,6 +139,14 @@ class CounterOfferCreate(BaseModel):
 
 class NegotiationRespond(BaseModel):
     accept: bool
+
+class ProfileUpdate(BaseModel):
+    phone: Optional[str] = None
+    sms_opt_in: Optional[bool] = None
+
+class SavedSearchCreate(BaseModel):
+    name: str
+    filters: dict
 
 
 # ---- Auth routes ----
@@ -423,6 +432,33 @@ async def place_bid(auction_id: str, payload: BidCreate, user: dict = Depends(ge
             except Exception as e:
                 logger.error("email_seller_new_bid failed: %s", e)
 
+    # FOMO SMS blast when auction enters final 5 minutes
+    new_ends_at = datetime.fromisoformat(update.get("ends_at", a["ends_at"]))
+    seconds_left = (new_ends_at - now).total_seconds()
+    if seconds_left <= 300:
+        # Recipients: unique previous bidders (except current) + watchers, who opted in
+        recipient_ids: set = set()
+        async for b in db.bids.find({"auction_id": auction_id}, {"_id": 0, "user_id": 1}):
+            if b["user_id"] != user["id"]:
+                recipient_ids.add(b["user_id"])
+        async for w in db.watches.find({"auction_id": auction_id}, {"_id": 0, "user_id": 1}):
+            if w["user_id"] != user["id"]:
+                recipient_ids.add(w["user_id"])
+        if recipient_ids:
+            recipients = await db.users.find(
+                {"id": {"$in": list(recipient_ids)}, "sms_opt_in": True, "phone": {"$ne": None, "$ne": ""}},
+                {"_id": 0, "phone": 1, "name": 1},
+            ).to_list(500)
+            mins = max(1, int(seconds_left // 60))
+            app_url = os.environ.get("APP_URL", "")
+            body = f"AutoBid.bg: Нова наддавка €{int(payload.amount_eur):,} за {a['title'][:50]}. Остават {mins}м. {app_url}/auctions/{auction_id}"
+            for r in recipients:
+                if r.get("phone"):
+                    try:
+                        await send_sms(r["phone"], body)
+                    except Exception as e:
+                        logger.error("send_sms failed: %s", e)
+
     return {"ok": True, "bid": public_bid, "preauth_amount_eur": preauth_amount}
 
 
@@ -488,6 +524,13 @@ async def admin_approve(auction_id: str, _admin: dict = Depends(require_admin)):
             await email_approved(seller["email"], seller.get("name", ""), a["title"], auction_id)
         except Exception as e:
             logger.error("email_approved failed: %s", e)
+    # Notify users with matching saved searches
+    try:
+        fresh = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+        if fresh:
+            await notify_matching_saved_searches(fresh)
+    except Exception as e:
+        logger.error("saved search notification failed: %s", e)
     return {"ok": True}
 
 @api.post("/admin/auctions/{auction_id}/reject")
@@ -649,6 +692,97 @@ async def my_bids(user: dict = Depends(get_current_user)):
 async def my_listings(user: dict = Depends(get_current_user)):
     items = await db.auctions.find({"seller_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
     return [_public_auction(a, user) for a in items]
+
+
+# ---- Profile ----
+@api.patch("/me/profile")
+async def update_my_profile(payload: ProfileUpdate, user: dict = Depends(get_current_user)):
+    update = {}
+    if payload.phone is not None:
+        phone = payload.phone.strip()
+        if phone and not phone.startswith("+"):
+            raise HTTPException(status_code=400, detail="Телефонът трябва да е в международен формат (+359...)")
+        update["phone"] = phone
+    if payload.sms_opt_in is not None:
+        update["sms_opt_in"] = bool(payload.sms_opt_in)
+    if update:
+        await db.users.update_one({"id": user["id"]}, {"$set": update})
+    u = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0})
+    return u
+
+
+# ---- Saved searches ----
+def _matches_saved_search(auction: dict, f: dict) -> bool:
+    try:
+        if f.get("make") and auction.get("make") != f["make"]: return False
+        if f.get("fuel") and auction.get("fuel") != f["fuel"]: return False
+        if f.get("transmission") and auction.get("transmission") != f["transmission"]: return False
+        if f.get("region") and auction.get("region") != f["region"]: return False
+        if f.get("body_type") and auction.get("body_type") != f["body_type"]: return False
+        year = int(auction.get("year", 0))
+        if f.get("year_min") and year < int(f["year_min"]): return False
+        if f.get("year_max") and year > int(f["year_max"]): return False
+        price = float(auction.get("current_bid_eur", 0))
+        if f.get("min_price") and price < float(f["min_price"]): return False
+        if f.get("max_price") and price > float(f["max_price"]): return False
+        q = (f.get("q") or "").strip().lower()
+        if q:
+            hay = " ".join([str(auction.get(k, "")) for k in ("title", "description", "make", "model", "color")]).lower()
+            if q not in hay: return False
+        return True
+    except Exception:
+        return False
+
+
+@api.post("/me/saved-searches")
+async def create_saved_search(payload: SavedSearchCreate, user: dict = Depends(get_current_user)):
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "name": payload.name.strip() or "Нова записана търсачка",
+        "filters": {k: v for k, v in payload.filters.items() if v not in (None, "", [])},
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.saved_searches.insert_one(doc)
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+
+@api.get("/me/saved-searches")
+async def list_saved_searches(user: dict = Depends(get_current_user)):
+    items = await db.saved_searches.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return items
+
+
+@api.delete("/me/saved-searches/{search_id}")
+async def delete_saved_search(search_id: str, user: dict = Depends(get_current_user)):
+    res = await db.saved_searches.delete_one({"id": search_id, "user_id": user["id"]})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Не е намерена")
+    return {"ok": True}
+
+
+async def notify_matching_saved_searches(auction: dict):
+    """Called when an auction becomes live (admin approves). Emails users with matching saved searches."""
+    try:
+        searches = await db.saved_searches.find({}, {"_id": 0}).to_list(2000)
+    except Exception:
+        return
+    for s in searches:
+        if _matches_saved_search(auction, s.get("filters", {})):
+            u = await db.users.find_one({"id": s["user_id"]}, {"_id": 0})
+            if u and u.get("email"):
+                try:
+                    from emails import send_email, _shell, APP_URL
+                    html = _shell("Нова обява по ваш критерий", f"""
+                      <p>Здравейте, {u.get("name","")},</p>
+                      <p>Нова обява отговаря на вашата търсачка <strong>{s['name']}</strong>:</p>
+                      <p style="font-size:18px;margin:16px 0;"><strong>{auction['title']}</strong></p>
+                      <p>{auction.get("year","")} г. · {auction.get("city","")} · начална цена €{int(auction.get("starting_bid_eur",0)):,}</p>
+                      <p><a href="{APP_URL}/auctions/{auction['id']}" style="display:inline-block;background:#1B4D3E;color:#fff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:600;">Виж обявата</a></p>
+                    """)
+                    await send_email(u["email"], f"Нова обява · {auction['title']}", html)
+                except Exception as e:
+                    logger.error("saved search email failed: %s", e)
 
 
 # ---- Seller listing management ----
