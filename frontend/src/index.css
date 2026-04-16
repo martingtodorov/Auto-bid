@@ -131,6 +131,18 @@ code { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
     box-shadow: 0 10px 30px -10px hsl(var(--accent) / 0.55);
 }
 
+.btn-sell-gradient {
+    background: linear-gradient(135deg, hsl(var(--accent)) 0%, hsl(var(--accent-ink)) 50%, hsl(156 72% 22%) 100%);
+    color: white;
+    border-color: transparent;
+    box-shadow: 0 6px 20px -6px hsl(var(--accent) / 0.5);
+}
+.btn-sell-gradient:hover {
+    background: linear-gradient(135deg, hsl(var(--accent-ink)) 0%, hsl(var(--accent)) 100%);
+    box-shadow: 0 12px 32px -8px hsl(var(--accent) / 0.7);
+    transform: translateY(-1px);
+}
+
 .input {
     width: 100%;
     border: 1px solid hsl(var(--line));

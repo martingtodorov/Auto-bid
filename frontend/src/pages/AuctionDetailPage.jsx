@@ -4,6 +4,7 @@ import { Calendar, Gauge, Fuel, Settings, MapPin, Palette, Zap, Cog, MessageCirc
 import { api, API_BASE, formatEUR, formatBGN, formatKM, timeLeft } from "../lib/apiClient";
 import { useAuth, formatError } from "../lib/auth";
 import PreauthModal from "../components/PreauthModal";
+import AuctionCard from "../components/AuctionCard";
 
 export default function AuctionDetailPage() {
   const { id } = useParams();
@@ -25,6 +26,7 @@ export default function AuctionDetailPage() {
   const [vinRequesting, setVinRequesting] = useState(false);
   const [vinMsg, setVinMsg] = useState("");
   const [vinErr, setVinErr] = useState("");
+  const [related, setRelated] = useState([]);
   const wsRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -45,6 +47,30 @@ export default function AuctionDetailPage() {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Fetch related auctions (same make preferred, fallback to same body_type; excluding self)
+  useEffect(() => {
+    if (!a) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const byMake = await api.get("/auctions", { params: { make: a.make, status: "live", limit: 12 } }).catch(() => ({ data: [] }));
+        let items = (byMake.data || []).filter((x) => x.id !== a.id);
+        if (items.length < 4) {
+          const byBody = await api.get("/auctions", { params: { body_type: a.body_type, status: "live", limit: 12 } }).catch(() => ({ data: [] }));
+          const extra = (byBody.data || []).filter((x) => x.id !== a.id && !items.find((y) => y.id === x.id));
+          items = [...items, ...extra];
+        }
+        if (items.length < 4) {
+          const any = await api.get("/auctions", { params: { status: "live", limit: 12 } }).catch(() => ({ data: [] }));
+          const extra = (any.data || []).filter((x) => x.id !== a.id && !items.find((y) => y.id === x.id));
+          items = [...items, ...extra];
+        }
+        if (!cancelled) setRelated(items.slice(0, 4));
+      } catch (e) { /* skip */ }
+    })();
+    return () => { cancelled = true; };
+  }, [a]);
 
   // Watch status
   useEffect(() => {
@@ -435,6 +461,27 @@ export default function AuctionDetailPage() {
           </aside>
         </div>
       </div>
+
+      {related.length > 0 && (
+        <section className="rule-t bg-[hsl(var(--surface))]" data-testid="related-section">
+          <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-16">
+            <div className="flex items-end justify-between gap-6 flex-wrap">
+              <div>
+                <div className="overline text-[hsl(var(--accent))]">Също виж</div>
+                <h2 className="font-serif text-3xl lg:text-4xl mt-2 tracking-tight">Подобни обяви</h2>
+              </div>
+              <Link to="/auctions" className="text-sm font-semibold text-[hsl(var(--accent))] hover:underline">
+                Виж всички търгове →
+              </Link>
+            </div>
+            <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {related.map((r) => (
+                <AuctionCard key={r.id} auction={r} />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
     </main>
   );
 }

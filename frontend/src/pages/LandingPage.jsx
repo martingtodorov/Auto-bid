@@ -37,18 +37,18 @@ export default function LandingPage() {
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-10 lg:py-16">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-14 items-center">
             <div className="lg:col-span-6 fade-up">
-              <div className="overline text-[hsl(var(--accent))]">Автомобилни търгове · България</div>
+              <div className="overline text-[hsl(var(--accent))]">Автомобилни търгове</div>
               <h1 className="hero-headline text-5xl sm:text-6xl lg:text-7xl mt-6">
-                Открийте и<br />наддавайте за <em>изключителни</em><br />автомобили.
+                Открийте <em>изключителни</em><br />автомобили.
               </h1>
               <p className="mt-6 text-lg text-[hsl(var(--ink-muted))] leading-relaxed max-w-xl">
-                AutoBid.bg е редакционна платформа за онлайн търгове — всеки автомобил е внимателно подбран, документиран и представен от нашия екип.
+                AutoBid.bg е платформа за онлайн търгове — всеки автомобил е внимателно подбран, документиран и представен от нашия екип.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
-                <Link to="/auctions" className="btn btn-primary" data-testid="hero-cta-browse">
+                <Link to="/auctions" className="btn btn-primary !px-10" data-testid="hero-cta-browse">
                   Разгледай търгове <ArrowRight size={16} className="ml-2" />
                 </Link>
-                <Link to="/sell" className="btn btn-secondary" data-testid="hero-cta-sell">
+                <Link to="/sell" className="btn btn-sell-gradient !px-10" data-testid="hero-cta-sell">
                   Продай своя автомобил
                 </Link>
               </div>
