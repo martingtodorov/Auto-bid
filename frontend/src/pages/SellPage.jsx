@@ -18,6 +18,7 @@ export default function SellPage() {
     fuel: "Бензин", transmission: "Автоматична", body_type: "Седан",
     power_hp: 150, engine_cc: 2000, color: "",
     region: "София", city: "София", description: "",
+    vin: "",
     images_list: [],
     starting_bid_eur: 5000, reserve_eur: "",
     duration_days: 7,
@@ -140,6 +141,9 @@ export default function SellPage() {
             </Field>
             <Field label="Резервна цена (EUR, незадължителна)">
               <input type="number" value={form.reserve_eur} onChange={(e) => set("reserve_eur", e.target.value)} className={inputCls} />
+            </Field>
+            <Field label="VIN номер (незадължителен, видим само на наддавачи)" span={2}>
+              <input value={form.vin} onChange={(e) => set("vin", e.target.value.toUpperCase())} className={inputCls} maxLength={17} placeholder="напр. WAUZZZ4H9CN045678" data-testid="sell-vin" />
             </Field>
             <Field label="Снимки на автомобила (до 8)" span={2}>
               <ImageUploader images={form.images_list} onChange={(list) => set("images_list", list)} />

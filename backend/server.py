@@ -133,6 +133,7 @@ class AuctionUpdate(BaseModel):
     color: Optional[str] = None
     region: Optional[str] = None
     city: Optional[str] = None
+    vin: Optional[str] = None
 
 class CounterOfferCreate(BaseModel):
     price_eur: float
@@ -210,6 +211,15 @@ def _auction_status(a: dict) -> str:
         return "ended"
     return "live"
 
+def _mask_vin(vin: str) -> str:
+    if not vin:
+        return vin
+    v = vin.strip().upper()
+    if len(v) <= 7:
+        return "*" * len(v)
+    return v[:-7] + ("*" * 7)
+
+
 def _public_auction(a: dict, viewer: Optional[dict] = None) -> dict:
     a = {k: v for k, v in a.items() if k != "_id"}
     a["status"] = _auction_status(a)
@@ -224,6 +234,9 @@ def _public_auction(a: dict, viewer: Optional[dict] = None) -> dict:
         a["has_reserve"] = False
         a["reserve_met"] = None
         a.pop("reserve_eur", None)
+    if a.get("vin"):
+        a["vin_masked"] = True
+        a["vin"] = _mask_vin(a["vin"])
     return a
 
 
@@ -318,7 +331,17 @@ async def get_auction(auction_id: str, request: Request):
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     if not a:
         raise HTTPException(status_code=404, detail="Търгът не е намерен")
-    return _public_auction(a, viewer)
+    public = _public_auction(a, viewer)
+    # Reveal full VIN to: seller, admin, or anyone who placed a bid on this auction
+    if a.get("vin") and viewer:
+        is_privileged = viewer.get("role") == "admin" or viewer.get("id") == a.get("seller_id")
+        if not is_privileged:
+            has_bid = await db.bids.find_one({"auction_id": auction_id, "user_id": viewer["id"]}, {"_id": 0, "id": 1})
+            is_privileged = bool(has_bid)
+        if is_privileged:
+            public["vin"] = a["vin"].strip().upper()
+            public["vin_masked"] = False
+    return public
 
 @api.post("/auctions")
 async def create_auction(payload: AuctionCreate, user: dict = Depends(get_current_user)):
@@ -957,6 +980,7 @@ SEED_AUCTIONS = [
         ],
         "description": "Пълен сервиз, реални километри. LED матрични фарове, адаптивно въздушно окачване, Bang & Olufsen аудио, CarPlay/Android Auto. Идеален за дълги пътувания.",
         "starting_bid_eur": 9000, "current_bid": 13299, "featured": True, "days_left": 4, "extra_bids": 22,
+        "vin": "WAUZZZ4H9CN045678",
     },
     {
         "title": "BMW X5 30d xDrive M Sport — 2025, 37 000 км",
@@ -971,6 +995,7 @@ SEED_AUCTIONS = [
         ],
         "description": "Гаранция от БМВ България. M-пакет с 22\" M джанти, Shadow Line, панорамен таван, Harman Kardon, Distronic, Laserlight, безжичен CarPlay.",
         "starting_bid_eur": 55000, "current_bid": 65900, "featured": True, "days_left": 6, "extra_bids": 41,
+        "vin": "WBACW81030L123456",
     },
     {
         "title": "Porsche 911 Carrera 4S — колекционерско състояние",
@@ -985,6 +1010,7 @@ SEED_AUCTIONS = [
         ],
         "description": "992 поколение, Sport Chrono, керамични спирачки, Bose озвучаване. Един собственик, пълна сервизна история в Porsche Център София.",
         "starting_bid_eur": 95000, "reserve_eur": 140000, "current_bid": 128500, "featured": True, "days_left": 2, "extra_bids": 67,
+        "vin": "WP0ZZZ99ZKS789012",
     },
     {
         "title": "Alfa Romeo Giulia 2.2D Veloce — 2019, FULL",

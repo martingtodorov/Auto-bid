@@ -212,6 +212,23 @@ export default function AuctionDetailPage() {
                   </div>
                 ))}
               </div>
+              {a.vin && (
+                <div className="mt-4 rounded-card border border-[hsl(var(--line))] p-5 flex items-center justify-between gap-3 flex-wrap" data-testid="vin-block">
+                  <div>
+                    <div className="overline text-[hsl(var(--ink-muted))] flex items-center gap-1.5">
+                      <Shield size={12} /> VIN номер
+                    </div>
+                    <div className="font-mono text-lg mt-1 tracking-wider" data-testid="vin-value">{a.vin}</div>
+                  </div>
+                  {a.vin_masked ? (
+                    <p className="text-xs text-[hsl(var(--ink-muted))] max-w-sm" data-testid="vin-masked-note">
+                      {user ? "Наддайте, за да видите пълния VIN." : <>Влезте и наддайте, за да видите пълния VIN.</>}
+                    </p>
+                  ) : (
+                    <span className="pill pill-live" data-testid="vin-unmasked-badge">Пълен VIN · разкрит</span>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="mt-10">
