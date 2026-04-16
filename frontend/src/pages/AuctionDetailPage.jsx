@@ -260,12 +260,18 @@ export default function AuctionDetailPage() {
           <aside className="lg:col-span-4">
             <div className="lg:sticky lg:top-28 space-y-5">
               <div className="rounded-card border border-[hsl(var(--line))] p-6 bg-white" data-testid="bid-section">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   {a.status === "sold" ? <span className="pill pill-sold">Продаден</span>
                     : a.status === "ended" ? <span className="pill pill-sold">Приключил</span>
                     : t.urgent ? <span className="pill pill-ending">{t.label}</span>
                     : <span className="pill pill-live">{t.label}</span>}
-                  <span className="overline text-[hsl(var(--ink-muted))]">{a.bid_count || 0} наддавания</span>
+                  {a.has_reserve && (
+                    a.reserve_met
+                      ? <span className="pill pill-live" data-testid="reserve-met">Резервът е достигнат</span>
+                      : <span className="pill" data-testid="with-reserve">С резерв</span>
+                  )}
+                  {a.has_reserve === false && <span className="pill" data-testid="no-reserve">Без резерв</span>}
+                  <span className="overline text-[hsl(var(--ink-muted))] ml-auto">{a.bid_count || 0} наддавания</span>
                 </div>
 
                 <div className="mt-6">
@@ -274,6 +280,18 @@ export default function AuctionDetailPage() {
                   <div className="text-sm text-[hsl(var(--ink-muted))] font-mono mt-1">{formatBGN(a.current_bid_eur)}</div>
                   {a.high_bidder_name && (
                     <div className="mt-2 text-xs text-[hsl(var(--ink-muted))]">Водещ: <span className="text-[hsl(var(--ink))]">{a.high_bidder_name}</span></div>
+                  )}
+                  {a.has_reserve && !a.reserve_met && isLive && (
+                    <div className="mt-3 text-xs text-[hsl(var(--ink-muted))] flex items-center gap-1.5" data-testid="reserve-not-met">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--ink-muted))]"></span>
+                      Резервната цена все още не е достигната
+                    </div>
+                  )}
+                  {a.has_reserve && a.reserve_met && (
+                    <div className="mt-3 text-xs text-[hsl(var(--accent))] flex items-center gap-1.5" data-testid="reserve-reached">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--accent))]"></span>
+                      Резервната цена е достигната
+                    </div>
                   )}
                 </div>
 

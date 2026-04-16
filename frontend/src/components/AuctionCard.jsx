@@ -23,7 +23,7 @@ export default function AuctionCard({ auction, compact = false }) {
     >
       <div className="card-img aspect-[4/3] bg-[hsl(var(--surface))]">
         <img src={auction.images?.[0]} alt={auction.title} loading="lazy" />
-        <div className="absolute top-3 left-3 flex gap-2">
+        <div className="absolute top-3 left-3 flex gap-2 flex-wrap max-w-[calc(100%-1.5rem)]">
           {isSold ? (
             <span className="pill pill-sold">Продаден</span>
           ) : isEnded ? (
@@ -33,6 +33,12 @@ export default function AuctionCard({ auction, compact = false }) {
           ) : (
             <span className="pill pill-live">{t.label}</span>
           )}
+          {auction.has_reserve && (
+            auction.reserve_met
+              ? <span className="pill pill-live" data-testid={`reserve-met-${auction.id}`}>Резервът е достигнат</span>
+              : <span className="pill" data-testid={`with-reserve-${auction.id}`}>С резерв</span>
+          )}
+          {auction.has_reserve === false && !isSold && <span className="pill" data-testid={`no-reserve-${auction.id}`}>Без резерв</span>}
           {auction.featured && !isSold && <span className="pill">Избрана</span>}
         </div>
       </div>

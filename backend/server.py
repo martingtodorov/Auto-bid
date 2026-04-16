@@ -181,15 +181,27 @@ def _auction_status(a: dict) -> str:
         return "ended"
     return "live"
 
-def _public_auction(a: dict) -> dict:
+def _public_auction(a: dict, viewer: Optional[dict] = None) -> dict:
     a = {k: v for k, v in a.items() if k != "_id"}
     a["status"] = _auction_status(a)
+    reserve = a.get("reserve_eur")
+    is_owner_or_admin = viewer and (viewer.get("id") == a.get("seller_id") or viewer.get("role") == "admin")
+    if reserve is not None and reserve > 0:
+        a["has_reserve"] = True
+        a["reserve_met"] = float(a.get("current_bid_eur", 0)) >= float(reserve)
+        if not is_owner_or_admin:
+            a.pop("reserve_eur", None)
+    else:
+        a["has_reserve"] = False
+        a["reserve_met"] = None
+        a.pop("reserve_eur", None)
     return a
 
 
 # ---- Auctions ----
 @api.get("/auctions")
 async def list_auctions(
+    request: Request,
     make: Optional[str] = None,
     fuel: Optional[str] = None,
     transmission: Optional[str] = None,
@@ -203,6 +215,7 @@ async def list_auctions(
     sort: Optional[str] = Query("ending_soon"),
     limit: int = 60,
 ):
+    viewer = await get_optional_user(request)
     q = {}
     if make: q["make"] = make
     if fuel: q["fuel"] = fuel
@@ -220,8 +233,7 @@ async def list_auctions(
 
     cursor = db.auctions.find(q, {"_id": 0}).limit(limit)
     items = await cursor.to_list(limit)
-    for a in items:
-        a["status"] = _auction_status(a)
+    items = [_public_auction(a, viewer) for a in items]
 
     if status:
         items = [a for a in items if a["status"] == status]
@@ -240,15 +252,16 @@ async def list_auctions(
     return items
 
 @api.get("/auctions/featured")
-async def featured():
+async def featured(request: Request):
+    viewer = await get_optional_user(request)
     items = await db.auctions.find({"featured": True}, {"_id": 0}).limit(6).to_list(6)
-    for a in items: a["status"] = _auction_status(a)
-    return items
+    return [_public_auction(a, viewer) for a in items]
 
 @api.get("/auctions/sold")
-async def sold():
+async def sold(request: Request):
+    viewer = await get_optional_user(request)
     items = await db.auctions.find({"status": "sold"}, {"_id": 0}).limit(12).to_list(12)
-    return items
+    return [_public_auction(a, viewer) for a in items]
 
 @api.get("/auctions/facets")
 async def facets():
@@ -266,12 +279,12 @@ async def facets():
     }
 
 @api.get("/auctions/{auction_id}")
-async def get_auction(auction_id: str):
+async def get_auction(auction_id: str, request: Request):
+    viewer = await get_optional_user(request)
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     if not a:
         raise HTTPException(status_code=404, detail="Търгът не е намерен")
-    a["status"] = _auction_status(a)
-    return a
+    return _public_auction(a, viewer)
 
 @api.post("/auctions")
 async def create_auction(payload: AuctionCreate, user: dict = Depends(get_current_user)):
@@ -584,6 +597,11 @@ async def my_bids(user: dict = Depends(get_current_user)):
     bids = await db.bids.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(200).to_list(200)
     return bids
 
+@api.get("/me/listings")
+async def my_listings(user: dict = Depends(get_current_user)):
+    items = await db.auctions.find({"seller_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return [_public_auction(a, user) for a in items]
+
 
 # ---- Seed ----
 SEED_AUCTIONS = [
@@ -627,7 +645,7 @@ SEED_AUCTIONS = [
             "https://images.unsplash.com/photo-1614162692292-7ac56d7f7f1e?crop=entropy&cs=srgb&fm=jpg&q=85&w=1600",
         ],
         "description": "992 поколение, Sport Chrono, керамични спирачки, Bose озвучаване. Един собственик, пълна сервизна история в Porsche Център София.",
-        "starting_bid_eur": 95000, "current_bid": 128500, "featured": True, "days_left": 2, "extra_bids": 67,
+        "starting_bid_eur": 95000, "reserve_eur": 140000, "current_bid": 128500, "featured": True, "days_left": 2, "extra_bids": 67,
     },
     {
         "title": "Alfa Romeo Giulia 2.2D Veloce — 2019, FULL",
@@ -705,7 +723,7 @@ SEED_AUCTIONS = [
             "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?crop=entropy&cs=srgb&fm=jpg&q=85&w=1600",
         ],
         "description": "Individual San Marino Blue, Merino карбонови седалки, M Driver's Package, карбонова керамика, Track Pack. Един собственик.",
-        "starting_bid_eur": 80000, "current_bid": 109500, "featured": True, "days_left": 1, "extra_bids": 54,
+        "starting_bid_eur": 80000, "reserve_eur": 100000, "current_bid": 109500, "featured": True, "days_left": 1, "extra_bids": 54,
     },
     {
         "title": "Kia Niro Hybrid — икономичен SUV",

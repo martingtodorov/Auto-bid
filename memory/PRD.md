@@ -38,7 +38,13 @@ User choices (from ask_human):
 - **Image uploader** on `/sell`: drag-free file input, auto-compression to 1600px JPEG (quality 82) → base64, stored in MongoDB, up to 8 photos. First photo is cover.
 - Card detail on bids list shows "preauth активен" indicator.
 
-## Iteration 3 (2026-04-16)
+## Iteration 4 (2026-04-16)
+- **Reserve price logic**: AuctionCreate already had `reserve_eur`. Now:
+  - `_public_auction()` helper injects `has_reserve: bool`, `reserve_met: bool|null` on every auction response.
+  - `reserve_eur` is **hidden** from bidders — only seller (owner) and admin see the exact number.
+  - 3 seed cars now carry reserves (BMW X5, BMW M3, Porsche 911) to showcase mixed states.
+- **"Резервът е достигнат" indicator** on cards (green live pill) and on detail bid box. Non-met state shows grey dot. "Без резерв" pill shown for no-reserve auctions.
+- **Seller dashboard `/my-listings`**: `GET /me/listings` returns seller's own auctions with full detail including hidden reserve. Page shows status pills (pending/live/sold/rejected/ended), current bid/countdown, rejection reason display, CTA to view or create new. Linked in Nav as "Мои обяви".
 - **Pre-authorization reduced to 3%** (from 5%) — matches buyer's premium.
 - **3% buyer's premium commission** captured from winner's preauth on `POST /admin/auctions/{id}/capture-premium` (new endpoint). Bid `preauth_status` transitions: `authorized → captured`. Losing bidders' preauths released in same operation. Auction marked `sold` with `premium_captured=True`, `premium_amount_eur` stored.
 - Kept `POST /admin/auctions/{id}/finalize` which releases ALL preauths (no commission captured).

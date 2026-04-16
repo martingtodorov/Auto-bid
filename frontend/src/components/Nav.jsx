@@ -44,6 +44,7 @@ export default function Nav() {
                 {user.role === "admin" && (
                   <Link to="/admin" className="text-sm text-[hsl(var(--accent))]" data-testid="nav-admin">Админ</Link>
                 )}
+                <Link to="/my-listings" className="text-sm" data-testid="nav-my-listings">Мои обяви</Link>
                 <Link to="/watchlist" className="text-sm" data-testid="nav-watchlist">Следени</Link>
                 <Link to="/dashboard" className="flex items-center gap-2 text-sm" data-testid="nav-dashboard">
                   <User size={16} />
