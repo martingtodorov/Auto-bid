@@ -345,8 +345,11 @@ async def list_auctions(
 @api.get("/auctions/featured")
 async def featured(request: Request):
     viewer = await get_optional_user(request)
-    items = await db.auctions.find({"featured": True}, {"_id": 0}).limit(6).to_list(6)
-    return [_public_auction(a, viewer) for a in items]
+    # Fetch more than needed then filter in Python for computed "live" status
+    raw = await db.auctions.find({"featured": True}, {"_id": 0}).limit(30).to_list(30)
+    items = [_public_auction(a, viewer) for a in raw]
+    live = [a for a in items if a["status"] == "live"]
+    return live[:6]
 
 @api.get("/auctions/sold")
 async def sold(request: Request):
