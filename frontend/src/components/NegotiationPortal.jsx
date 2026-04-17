@@ -153,26 +153,29 @@ export default function NegotiationPortal({ auctionId, auction }) {
         </div>
       )}
 
-      {/* Action panels */}
-      {isSeller && status === "awaiting_seller_opening" && (
-        <div className="mt-5 rule-t pt-5" data-testid="seller-opening-panel">
-          <label className="overline text-[hsl(var(--ink-muted))] block mb-2">Вашата начална оферта (EUR)</label>
-          <div className="flex flex-wrap gap-2">
-            <input type="number" min={1} value={priceInput} onChange={(e) => setPriceInput(e.target.value)} placeholder="напр. 18000" className="flex-1 min-w-[150px] border border-[hsl(var(--line))] h-11 px-3 text-sm" data-testid="seller-opening-price" />
-            <button onClick={() => submitOpening(false)} disabled={submitting || !priceInput} className="btn btn-accent !px-5" data-testid="seller-opening-submit">Изпрати оферта</button>
-            <button onClick={() => submitOpening(true)} disabled={submitting} className="btn btn-secondary !px-5" data-testid="seller-opening-decline">Откажи</button>
+      {isBuyer && status === "awaiting_buyer_response" && (
+        <div className="mt-5 rule-t pt-5" data-testid="buyer-response-panel">
+          <p className="text-sm mb-3">Оферта: <strong>{formatEUR(neg.seller_offer_eur)}</strong></p>
+          <div className="space-y-2">
+            <button onClick={() => submitResponse("accept")} disabled={submitting} className="btn btn-accent w-full sm:w-auto !px-5" data-testid="buyer-accept">Приеми</button>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input type="number" min={1} value={priceInput} onChange={(e) => setPriceInput(e.target.value)} placeholder="Контра (EUR)" className="w-full sm:w-40 border border-[hsl(var(--line))] h-11 px-3 text-sm" data-testid="buyer-counter-price" />
+              <button onClick={() => submitResponse("counter")} disabled={submitting || !priceInput} className="btn btn-primary w-full sm:w-auto !px-5" data-testid="buyer-counter">Контраоферта</button>
+            </div>
+            <button onClick={() => submitResponse("decline")} disabled={submitting} className="btn btn-secondary w-full sm:w-auto !px-5" data-testid="buyer-decline">Откажи</button>
           </div>
         </div>
       )}
 
-      {isBuyer && status === "awaiting_buyer_response" && (
-        <div className="mt-5 rule-t pt-5" data-testid="buyer-response-panel">
-          <p className="text-sm mb-3">Оферта: <strong>{formatEUR(neg.seller_offer_eur)}</strong></p>
-          <div className="flex flex-wrap gap-2">
-            <button onClick={() => submitResponse("accept")} disabled={submitting} className="btn btn-accent !px-5" data-testid="buyer-accept">Приеми</button>
-            <input type="number" min={1} value={priceInput} onChange={(e) => setPriceInput(e.target.value)} placeholder="Контра (EUR)" className="w-40 border border-[hsl(var(--line))] h-11 px-3 text-sm" data-testid="buyer-counter-price" />
-            <button onClick={() => submitResponse("counter")} disabled={submitting || !priceInput} className="btn btn-primary !px-5" data-testid="buyer-counter">Контраоферта</button>
-            <button onClick={() => submitResponse("decline")} disabled={submitting} className="btn btn-secondary !px-5" data-testid="buyer-decline">Откажи</button>
+      {isSeller && status === "awaiting_seller_opening" && (
+        <div className="mt-5 rule-t pt-5" data-testid="seller-opening-panel">
+          <label className="overline text-[hsl(var(--ink-muted))] block mb-2">Вашата начална оферта (EUR)</label>
+          <div className="space-y-2">
+            <input type="number" min={1} value={priceInput} onChange={(e) => setPriceInput(e.target.value)} placeholder="напр. 18000" className="w-full border border-[hsl(var(--line))] h-11 px-3 text-sm" data-testid="seller-opening-price" />
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button onClick={() => submitOpening(false)} disabled={submitting || !priceInput} className="btn btn-accent w-full sm:w-auto !px-5" data-testid="seller-opening-submit">Изпрати оферта</button>
+              <button onClick={() => submitOpening(true)} disabled={submitting} className="btn btn-secondary w-full sm:w-auto !px-5" data-testid="seller-opening-decline">Откажи</button>
+            </div>
           </div>
         </div>
       )}
@@ -180,9 +183,9 @@ export default function NegotiationPortal({ auctionId, auction }) {
       {isSeller && status === "awaiting_seller_final" && (
         <div className="mt-5 rule-t pt-5" data-testid="seller-final-panel">
           <p className="text-sm mb-3">Контраоферта от купувача: <strong>{formatEUR(neg.buyer_counter_eur)}</strong></p>
-          <div className="flex flex-wrap gap-2">
-            <button onClick={() => submitFinal("accept")} disabled={submitting} className="btn btn-accent !px-5" data-testid="seller-final-accept">Приеми</button>
-            <button onClick={() => submitFinal("decline")} disabled={submitting} className="btn btn-secondary !px-5" data-testid="seller-final-decline">Откажи</button>
+          <div className="flex flex-col sm:flex-row flex-wrap gap-2">
+            <button onClick={() => submitFinal("accept")} disabled={submitting} className="btn btn-accent w-full sm:w-auto !px-5" data-testid="seller-final-accept">Приеми</button>
+            <button onClick={() => submitFinal("decline")} disabled={submitting} className="btn btn-secondary w-full sm:w-auto !px-5" data-testid="seller-final-decline">Откажи</button>
           </div>
         </div>
       )}

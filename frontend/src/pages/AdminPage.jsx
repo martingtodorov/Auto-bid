@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Navigate, Link } from "react-router-dom";
-import { Check, X, Clock, AlertCircle, DollarSign, Archive, Ban, Edit3, Trash2, RotateCcw, Search, List, Users, BarChart3, Trash } from "lucide-react";
+import { Check, X, Clock, AlertCircle, DollarSign, Archive, Ban, Edit3, Trash2, RotateCcw, Search, List, Users, BarChart3, Trash, RefreshCw } from "lucide-react";
 import { useAuth, formatError } from "../lib/auth";
 import { api, formatEUR, formatKM } from "../lib/apiClient";
 import AdminEditModal from "../components/AdminEditModal";
@@ -122,6 +122,23 @@ export default function AdminPage() {
       const { data } = await api.delete(`/admin/auctions/${id}`);
       alert(`Изтрити: ${data.deleted.auction} обява, ${data.deleted.bids} наддавания, ${data.deleted.comments} коментари, ${data.deleted.watches} watchers.`);
       await Promise.all([loadAll(), loadPending(), loadSold()]);
+    } catch (e) { setErr(formatError(e)); }
+    finally { setBusy(null); }
+  };
+
+  const extendListing = async (id, title) => {
+    const daysStr = window.prompt(`Подновяване на обявата "${title || id}".\n\nВъведете брой дни (1-60):`, "10");
+    if (!daysStr) return;
+    const days = parseInt(daysStr, 10);
+    if (!Number.isInteger(days) || days < 1 || days > 60) {
+      alert("Невалиден брой дни (1-60).");
+      return;
+    }
+    setErr(""); setBusy(id);
+    try {
+      const { data } = await api.post(`/admin/auctions/${id}/extend`, null, { params: { days } });
+      alert(`Обявата е подновена. Нов край: ${new Date(data.ends_at).toLocaleString("bg-BG")}`);
+      await Promise.all([loadAll(), loadSold()]);
     } catch (e) { setErr(formatError(e)); }
     finally { setBusy(null); }
   };
@@ -293,6 +310,11 @@ export default function AdminPage() {
                       {a.status === "pending" && (
                         <button onClick={() => approve(a.id)} disabled={busy === a.id} className="btn btn-accent !py-1.5 !px-3 text-xs flex items-center gap-1" data-testid={`quick-approve-${a.id}`}>
                           <Check size={12} /> Одобри
+                        </button>
+                      )}
+                      {(a.status === "ended" || a.status === "reserve_not_met" || a.status === "withdrawn") && (
+                        <button onClick={() => extendListing(a.id, a.title)} disabled={busy === a.id} className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1 !border-[hsl(var(--accent))] !text-[hsl(var(--accent))]" data-testid={`extend-${a.id}`} title="Поднови търга за нов период">
+                          <RefreshCw size={12} /> Поднови
                         </button>
                       )}
                       {a.status === "removed" || a.status === "withdrawn" ? (

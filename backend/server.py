@@ -31,6 +31,11 @@ db = client[os.environ['DB_NAME']]
 app = FastAPI(title="AutoBid.bg API")
 api = APIRouter(prefix="/api")
 
+# ---- Rate limiter (slowapi) ----
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+limiter = Limiter(key_func=get_remote_address, default_limits=[])
+
 JWT_ALGORITHM = "HS256"
 JWT_SECRET = os.environ['JWT_SECRET']
 
@@ -94,7 +99,8 @@ from models import (
 
 # ---- Auth routes ----
 @api.post("/auth/register")
-async def register(payload: UserRegister):
+@limiter.limit("5/minute")
+async def register(request: Request, payload: UserRegister):
     email = payload.email.lower().strip()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="Имейлът вече е регистриран")
@@ -116,7 +122,8 @@ async def register(payload: UserRegister):
     }
 
 @api.post("/auth/login")
-async def login(payload: UserLogin):
+@limiter.limit("10/minute")
+async def login(request: Request, payload: UserLogin):
     email = payload.email.lower().strip()
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(payload.password, user["password_hash"]):
@@ -682,17 +689,49 @@ async def import_from_mobile_bg(payload: MobileBgImport, user: dict = Depends(ge
                 body_type = _MOBILEBG_BODY_MAP.get(key, body_type)
                 break
 
-    # Color: look for "Цвят"
-    color = ""
-    cm = _re.search(r"Цвят[:\s]+([А-Яа-я\s\-]{3,30}?)(?=\s+(?:Регион|Град|Населено|Гориво|Двигател|Пробег|Скорост|Мощност|[А-Я][а-я]{5,}:)|[,\.;|\n])", full_text)
-    if cm:
-        color = cm.group(1).strip(".,; ")
+    # Spec-row lookup: mobile.bg renders "<div class='item'><div>Label</div><div>Value</div></div>"
+    # Build a dict of {label: value} for all spec items in one pass.
+    spec_items: dict = {}
+    for item in soup.select("div.item"):
+        kids = item.find_all("div", recursive=False)
+        if len(kids) >= 2:
+            label = kids[0].get_text(" ", strip=True).strip(":")
+            # Strip unit suffixes in brackets: "Кубатура [куб.см]" → "Кубатура"
+            label_clean = _re.sub(r"\s*\[[^\]]*\]\s*$", "", label).strip()
+            value = kids[1].get_text(" ", strip=True)
+            if label_clean and value:
+                spec_items[label_clean] = value
+                # Also keep original key (with brackets) for diagnostics
+                spec_items[label] = value
 
-    # Location: look for "Регион" / "Населено място"
-    city = ""
-    lm = _re.search(r"(?:Регион|Населено място|Град)[:\s]+([А-Яа-я\s]+?)(?=\s{2,}|[,\.\|]|\n)", full_text)
-    if lm:
-        city = lm.group(1).strip()
+    # Color: prefer structured spec row, fall back to regex on full text.
+    color = spec_items.get("Цвят", "").strip()
+    if not color:
+        cm = _re.search(r"Цвят[:\s]+([А-Яа-я\s\-]{3,30}?)(?=\s+(?:Регион|Град|Населено|Гориво|Двигател|Пробег|Скорост|Мощност|[А-Я][а-я]{5,}:)|[,\.;|\n])", full_text)
+        if cm:
+            color = cm.group(1).strip(".,; ")
+
+    # Location: structured "Регион" / "Населено място" / "Град" first.
+    city = (
+        spec_items.get("Населено място")
+        or spec_items.get("Град")
+        or spec_items.get("Регион")
+        or ""
+    ).strip()
+    if not city:
+        # mobile.bg also places the city in <div class="grad"><span>София</span></div>
+        grad = soup.select_one("div.grad span")
+        if grad:
+            city = grad.get_text(" ", strip=True)
+    if not city:
+        # "Намира се в гр. София" → "София"
+        loc_m = _re.search(r"(?:Намира се в|Град|гр\.)\s*([А-Я][А-Яа-я\s\-]{2,40}?)(?=[,\.\|<\n]|$)", full_text)
+        if loc_m:
+            city = loc_m.group(1).strip(" .,")
+    if not city:
+        lm = _re.search(r"(?:Регион|Населено място|Град)[:\s]+([А-Яа-я\s]+?)(?=\s{2,}|[,\.\|]|\n)", full_text)
+        if lm:
+            city = lm.group(1).strip()
 
     # Description: typically in div.moreInfo > div.text on mobile.bg.
     # Skip the "Допълнителна информация" header block (it's just a section title).
@@ -1815,6 +1854,40 @@ async def admin_update_user(user_id: str, payload: AdminUserUpdate, admin_user: 
     return {"ok": True, "user": fresh}
 
 
+@api.post("/admin/auctions/{auction_id}/extend")
+async def admin_extend_auction(
+    auction_id: str,
+    days: int = Query(default=10, ge=1, le=60),
+    _admin: dict = Depends(require_admin),
+):
+    """Renew an ended/reserve_not_met auction: resets ends_at to now+days and sets status='live'.
+    Preserves bids and current_bid. Clears finalized_at.
+    """
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Обявата не е намерена")
+    if a.get("status") not in ("ended", "reserve_not_met", "withdrawn"):
+        raise HTTPException(
+            status_code=400,
+            detail="Може да се подновяват само обяви със статус 'ended', 'reserve_not_met' или 'withdrawn'",
+        )
+    now = datetime.now(timezone.utc)
+    new_ends = now + timedelta(days=int(days))
+    await db.auctions.update_one(
+        {"id": auction_id},
+        {
+            "$set": {
+                "status": "live",
+                "ends_at": new_ends.isoformat(),
+                "duration_days": int(days),
+                "extended_at": now.isoformat(),
+            },
+            "$unset": {"finalized_at": ""},
+        },
+    )
+    return {"ok": True, "status": "live", "ends_at": new_ends.isoformat()}
+
+
 @api.post("/admin/users/{user_id}/ban")
 async def admin_ban_user(user_id: str, admin_user: dict = Depends(require_admin)):
     """Ban a user — blocks login + bidding. Their existing auctions remain visible."""
@@ -2870,6 +2943,43 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ---- Security headers middleware ----
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    # CSP tuned for SPA — allow self + data: images, inline styles (needed by React),
+    # and common CDNs we actually use. Add google-analytics/tagmanager later if needed.
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://fonts.googleapis.com; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "img-src 'self' data: blob: https:; "
+        "font-src 'self' data: https://fonts.gstatic.com; "
+        "connect-src 'self' https: wss:; "
+        "frame-ancestors 'self';"
+    )
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
+
+# ---- Rate limiting (slowapi) ----
+try:
+    from slowapi import _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+    from slowapi.middleware import SlowAPIMiddleware
+
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(SlowAPIMiddleware)
+except Exception as _rl_err:
+    logging.warning("Rate limiting not enabled: %s", _rl_err)
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
