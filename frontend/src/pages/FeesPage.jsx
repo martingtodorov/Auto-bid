@@ -21,7 +21,7 @@ export default function FeesPage() {
 
       <InfoSection title="За продавачи">
         <div className="rounded-card border border-[hsl(var(--accent))]/30 bg-[hsl(var(--accent-soft))] p-6">
-          <div className="overline text-[hsl(var(--accent))]">Абсолютно безплатно</div>
+          <div className="overline text-[hsl(var(--accent))]">Безплатно</div>
           <div className="font-serif text-4xl mt-2">0 €</div>
           <p className="mt-3 text-[hsl(var(--ink))]/80 leading-relaxed">
             Никакви такси при публикуване, одобрение, промотиране или финализиране на обявата — независимо от изхода на търга. Без абонамент, без скрити комисионни.
