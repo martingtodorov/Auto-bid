@@ -6,6 +6,7 @@ import { api, formatEUR, formatKM } from "../lib/apiClient";
 import AdminEditModal from "../components/AdminEditModal";
 import AdminUsersTab from "../components/AdminUsersTab";
 import AdminDashboard from "../components/AdminDashboard";
+import AdminSettingsTab from "../components/AdminSettingsTab";
 
 const STATUS_LABELS = {
   pending: "Очаква",
@@ -131,6 +132,7 @@ export default function AdminPage() {
     { k: "all", label: `Всички обяви (${allListings.length})`, icon: List },
     { k: "users", label: "Потребители", icon: Users },
     { k: "sold", label: `Продадени (${sold.length})`, icon: Archive },
+    { k: "settings", label: "Настройки", icon: Edit3 },
   ];
 
   return (
@@ -317,6 +319,7 @@ export default function AdminPage() {
         )}
 
         {tab === "users" && <AdminUsersTab currentUserId={user?.id} />}
+        {tab === "settings" && <AdminSettingsTab />}
 
         {tab === "sold" && (
           <div className="mt-10">

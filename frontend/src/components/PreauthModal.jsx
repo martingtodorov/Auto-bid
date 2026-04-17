@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { CreditCard, Lock, X } from "lucide-react";
 import { formatEUR } from "../lib/apiClient";
+import { useSiteSettings, computeBuyerFee } from "../lib/settings";
 
 /**
  * Mock Stripe-style card capture modal. Does no network call — returns a
@@ -14,10 +15,10 @@ export default function PreauthModal({ open, onClose, onConfirm, bidAmount }) {
   const [name, setName] = useState("");
   const [processing, setProcessing] = useState(false);
   const [err, setErr] = useState("");
+  const settings = useSiteSettings();
 
   if (!open) return null;
-  // Buyer fee: 5% of bid, min €150, max €4,000
-  const preauth = Math.min(4000, Math.max(150, Math.round((Number(bidAmount) || 0) * 0.05)));
+  const preauth = computeBuyerFee(bidAmount, settings);
 
   const formatCard = (v) => v.replace(/\D/g, "").slice(0, 16).replace(/(\d{4})(?=\d)/g, "$1 ");
   const formatExp = (v) => {
@@ -57,7 +58,7 @@ export default function PreauthModal({ open, onClose, onConfirm, bidAmount }) {
             <div>
               <div className="overline text-[hsl(var(--ink-muted))]">Такса на купувача</div>
               <div className="font-serif text-2xl mt-1">{formatEUR(preauth)}</div>
-              <div className="text-xs text-[hsl(var(--ink-muted))] mt-1">5% от наддаването (мин. €150, макс. €4 000). Блокира се върху картата до финализиране. При загуба се освобождава изцяло; при победа се таксува.</div>
+              <div className="text-xs text-[hsl(var(--ink-muted))] mt-1">{settings.buyer_fee_pct}% от наддаването (мин. €{settings.buyer_fee_min_eur}, макс. €{settings.buyer_fee_max_eur}). Блокира се върху картата до финализиране. При загуба се освобождава изцяло; при победа се таксува.</div>
             </div>
             <CreditCard size={40} className="text-[hsl(var(--ink-muted))]" />
           </div>

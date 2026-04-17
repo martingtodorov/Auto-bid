@@ -1,8 +1,24 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { Shield, FileCheck, Gavel, Sparkles, TrendingUp, Camera, Users, Award } from "lucide-react";
+import InfoPage from "../components/InfoPage";
+import MarkdownBody from "../components/MarkdownBody";
+import { useSiteSettings } from "../lib/settings";
 
 export default function HowItWorksPage() {
+  const settings = useSiteSettings();
+  const custom = settings?.how_it_works_content?.trim();
+  if (custom) {
+    return (
+      <InfoPage overline="Прозрачни търгове" title="Как работи">
+        <MarkdownBody>{custom}</MarkdownBody>
+      </InfoPage>
+    );
+  }
+  return <DefaultHowItWorks pct={settings?.buyer_fee_pct ?? 2} />;
+}
+
+function DefaultHowItWorks({ pct }) {
   return (
     <main data-testid="how-it-works-page">
       <section className="rule-b">
@@ -44,8 +60,8 @@ export default function HowItWorksPage() {
           <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-0 border border-[hsl(var(--line))]">
             <div className="p-8 border-b md:border-b-0 md:border-r border-[hsl(var(--line))]">
               <div className="overline text-[hsl(var(--ink-muted))]">Купувач</div>
-              <div className="font-serif text-5xl mt-3">2%</div>
-              <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">Buyer's premium при спечелен търг. 2% pre-authorization се блокира при всяка наддавка и се прилага като комисионна при победа.</p>
+              <div className="font-serif text-5xl mt-3">{pct}%</div>
+              <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">Buyer's premium при спечелен търг. {pct}% pre-authorization се блокира при всяка наддавка и се прилага като комисионна при победа.</p>
             </div>
             <div className="p-8 border-b md:border-b-0 md:border-r border-[hsl(var(--line))]">
               <div className="overline text-[hsl(var(--ink-muted))]">Продавач</div>

@@ -7,6 +7,7 @@ import PreauthModal from "../components/PreauthModal";
 import BiddingCreditModal from "../components/BiddingCreditModal";
 import AuctionCard from "../components/AuctionCard";
 import NegotiationPortal from "../components/NegotiationPortal";
+import { useSiteSettings, computeBuyerFee } from "../lib/settings";
 import { setPageMeta, resetPageMeta } from "../lib/seo";
 
 export default function AuctionDetailPage() {
@@ -34,12 +35,10 @@ export default function AuctionDetailPage() {
   const [showCredit, setShowCredit] = useState(false);
   const [nextBid, setNextBid] = useState({ min_next_eur: 0, buyer_fee_eur: 150, step_eur: 100 });
   const wsRef = useRef(null);
+  const settings = useSiteSettings();
 
   // Client-side buyer fee for preview (mirrors backend _buyer_fee)
-  const buyerFeeFor = (amount) => {
-    const n = Number(amount) || 0;
-    return Math.min(4000, Math.max(150, Math.round(n * 0.05)));
-  };
+  const buyerFeeFor = (amount) => computeBuyerFee(amount, settings);
 
   // Variable bid step (mirrors backend _bid_step)
   const bidStepFor = (price) => {
@@ -530,7 +529,7 @@ export default function AuctionDetailPage() {
                       <Shield size={14} className="text-[hsl(var(--accent))] shrink-0 mt-0.5" />
                       <div className="text-xs leading-relaxed">
                         <div className="font-semibold text-[hsl(var(--accent-ink))]">Такса на купувача {formatEUR(preauthPreview)}</div>
-                        <div className="text-[hsl(var(--ink-muted))] mt-0.5">5% от наддаването (мин. €150, макс. €4 000) — блокирани върху картата. При загуба се освобождават изцяло.</div>
+                        <div className="text-[hsl(var(--ink-muted))] mt-0.5">{settings.buyer_fee_pct}% от наддаването (мин. €{settings.buyer_fee_min_eur}, макс. €{settings.buyer_fee_max_eur}) — блокирани върху картата. При загуба се освобождават изцяло.</div>
                       </div>
                     </div>
 

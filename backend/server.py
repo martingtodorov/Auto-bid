@@ -223,6 +223,19 @@ class SavedSearchCreate(BaseModel):
     filters: dict
 
 
+class SiteSettingsUpdate(BaseModel):
+    buyer_fee_pct: Optional[float] = None
+    buyer_fee_min_eur: Optional[float] = None
+    buyer_fee_max_eur: Optional[float] = None
+    seo_title: Optional[str] = None
+    seo_description: Optional[str] = None
+    faq_content: Optional[str] = None
+    terms_content: Optional[str] = None
+    contacts_content: Optional[str] = None
+    fees_content: Optional[str] = None
+    how_it_works_content: Optional[str] = None
+
+
 # ---- Auth routes ----
 @api.post("/auth/register")
 async def register(payload: UserRegister):
@@ -270,6 +283,37 @@ async def me(user: dict = Depends(get_current_user)):
 
 
 # ---- Auction helpers ----
+# Global settings cache (loaded at startup, refreshed on admin update).
+SETTINGS_DEFAULTS = {
+    "buyer_fee_pct": 2.0,
+    "buyer_fee_min_eur": 150.0,
+    "buyer_fee_max_eur": 4000.0,
+    "seo_title": "AutoBid.bg — Автомобилни търгове",
+    "seo_description": "AutoBid.bg е платформа за онлайн търгове на автомобили в България. Всеки автомобил е внимателно подбран, документиран и представен от нашия екип.",
+    "faq_content": "",
+    "terms_content": "",
+    "contacts_content": "",
+    "fees_content": "",
+    "how_it_works_content": "",
+}
+_settings_cache: dict = dict(SETTINGS_DEFAULTS)
+
+
+async def _load_settings_cache() -> None:
+    global _settings_cache
+    doc = await db.site_settings.find_one({"id": "global"}, {"_id": 0})
+    merged = dict(SETTINGS_DEFAULTS)
+    if doc:
+        for k in SETTINGS_DEFAULTS:
+            if k in doc and doc[k] is not None:
+                merged[k] = doc[k]
+    _settings_cache = merged
+
+
+def _settings() -> dict:
+    return _settings_cache
+
+
 def _bid_step(current_price: float) -> float:
     """Variable bid increment based on current bid price (BaT-style).
     €1,000-€2,500 → €100; €2,500-€5,000 → €150; €5,000-€10,000 → €250;
@@ -289,10 +333,14 @@ def _bid_step(current_price: float) -> float:
 
 
 def _buyer_fee(amount_eur: float) -> float:
-    """Buyer's premium = 5% of winning/current bid, min €150, max €4,000 per transaction."""
-    fee = round(float(amount_eur or 0) * 0.05, 2)
-    if fee < 150.0: fee = 150.0
-    if fee > 4000.0: fee = 4000.0
+    """Buyer's premium — configurable by admin. Defaults: 2%, min €150, max €4 000."""
+    s = _settings()
+    pct = float(s.get("buyer_fee_pct", 2.0))
+    fmin = float(s.get("buyer_fee_min_eur", 150.0))
+    fmax = float(s.get("buyer_fee_max_eur", 4000.0))
+    fee = round(float(amount_eur or 0) * (pct / 100.0), 2)
+    if fee < fmin: fee = fmin
+    if fee > fmax: fee = fmax
     return fee
 
 
@@ -1149,6 +1197,55 @@ async def require_admin(user: dict = Depends(get_current_user)):
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Само администратори")
     return user
+
+
+# ---- Site Settings (CMS) ----
+@api.get("/settings")
+async def get_public_settings():
+    """Public subset of site settings (fee %, SEO, page contents)."""
+    s = _settings()
+    return {
+        "buyer_fee_pct": s.get("buyer_fee_pct"),
+        "buyer_fee_min_eur": s.get("buyer_fee_min_eur"),
+        "buyer_fee_max_eur": s.get("buyer_fee_max_eur"),
+        "seo_title": s.get("seo_title"),
+        "seo_description": s.get("seo_description"),
+        "faq_content": s.get("faq_content"),
+        "terms_content": s.get("terms_content"),
+        "contacts_content": s.get("contacts_content"),
+        "fees_content": s.get("fees_content"),
+        "how_it_works_content": s.get("how_it_works_content"),
+    }
+
+
+@api.get("/admin/settings")
+async def admin_get_settings(_admin: dict = Depends(require_admin)):
+    return _settings()
+
+
+@api.put("/admin/settings")
+async def admin_update_settings(payload: SiteSettingsUpdate, _admin: dict = Depends(require_admin)):
+    update = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if not update:
+        return _settings()
+    # Validate numeric ranges
+    if "buyer_fee_pct" in update:
+        pct = float(update["buyer_fee_pct"])
+        if pct < 0 or pct > 25:
+            raise HTTPException(status_code=400, detail="Таксата трябва да е между 0% и 25%")
+    if "buyer_fee_min_eur" in update and float(update["buyer_fee_min_eur"]) < 0:
+        raise HTTPException(status_code=400, detail="Минималната такса не може да е отрицателна")
+    if "buyer_fee_max_eur" in update and float(update["buyer_fee_max_eur"]) < 0:
+        raise HTTPException(status_code=400, detail="Максималната такса не може да е отрицателна")
+
+    update["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.site_settings.update_one(
+        {"id": "global"},
+        {"$set": update, "$setOnInsert": {"id": "global"}},
+        upsert=True,
+    )
+    await _load_settings_cache()
+    return _settings()
 
 
 @api.delete("/admin/comments/{comment_id}")
@@ -2467,6 +2564,7 @@ async def on_startup():
     await db.comments.create_index("auction_id")
     await db.watches.create_index([("user_id", 1), ("auction_id", 1)])
     await db.bidding_credits.create_index([("auction_id", 1), ("user_id", 1)])
+    await _load_settings_cache()
     await seed_admin()
     await seed()
 

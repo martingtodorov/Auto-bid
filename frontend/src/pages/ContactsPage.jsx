@@ -1,43 +1,29 @@
 import React from "react";
 import { Mail, Phone, MapPin, Clock } from "lucide-react";
 import InfoPage, { InfoSection } from "../components/InfoPage";
+import MarkdownBody from "../components/MarkdownBody";
+import { useSiteSettings } from "../lib/settings";
 
 export default function ContactsPage() {
+  const settings = useSiteSettings();
+  const custom = settings?.contacts_content?.trim();
   return (
     <InfoPage overline="Помощ" title="Контакти">
-      <p className="text-lg text-[hsl(var(--ink-muted))]">
-        Нашият екип отговаря в рамките на 1 работен ден.
-      </p>
+      {custom ? <MarkdownBody>{custom}</MarkdownBody> : <DefaultContacts />}
+    </InfoPage>
+  );
+}
 
+function DefaultContacts() {
+  return (
+    <>
+      <p className="text-lg text-[hsl(var(--ink-muted))]">Нашият екип отговаря в рамките на 1 работен ден.</p>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <ContactCard
-          icon={Mail}
-          label="Имейл"
-          value="contact@autobid.bg"
-          href="mailto:contact@autobid.bg"
-          note="За общи запитвания и поддръжка"
-        />
-        <ContactCard
-          icon={Phone}
-          label="Телефон"
-          value="+359 2 444 2828"
-          href="tel:+35924442828"
-          note="Понеделник–Петък · 9:00–18:00"
-        />
-        <ContactCard
-          icon={MapPin}
-          label="Адрес"
-          value="ул. Шишман 18, 1000 София"
-          note="Срещи по предварителна уговорка"
-        />
-        <ContactCard
-          icon={Clock}
-          label="Работно време"
-          value="Пн–Пт: 9:00–18:00"
-          note="Съб: 10:00–14:00 (само онлайн)"
-        />
+        <ContactCard icon={Mail} label="Имейл" value="contact@autobid.bg" href="mailto:contact@autobid.bg" note="За общи запитвания и поддръжка" />
+        <ContactCard icon={Phone} label="Телефон" value="+359 2 444 2828" href="tel:+35924442828" note="Понеделник–Петък · 9:00–18:00" />
+        <ContactCard icon={MapPin} label="Адрес" value="ул. Шишман 18, 1000 София" note="Срещи по предварителна уговорка" />
+        <ContactCard icon={Clock} label="Работно време" value="Пн–Пт: 9:00–18:00" note="Съб: 10:00–14:00 (само онлайн)" />
       </div>
-
       <InfoSection title="Специализирани запитвания">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div className="rounded-card border border-[hsl(var(--line))] bg-white p-5">
@@ -52,7 +38,7 @@ export default function ContactsPage() {
           </div>
         </div>
       </InfoSection>
-    </InfoPage>
+    </>
   );
 }
 

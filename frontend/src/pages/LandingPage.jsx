@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { ArrowRight, Shield, Gavel, FileCheck, Sparkles } from "lucide-react";
 import { api, formatEUR, formatBGN } from "../lib/apiClient";
 import AuctionCard from "../components/AuctionCard";
+import { setPageMeta, resetPageMeta } from "../lib/seo";
+import { useSiteSettings } from "../lib/settings";
 
 const HERO_IMAGE = "https://images.unsplash.com/photo-1698995339730-86b3dd454001?crop=entropy&cs=srgb&fm=jpg&q=85&w=2000";
 
@@ -10,6 +12,19 @@ export default function LandingPage() {
   const [auctions, setAuctions] = useState([]);
   const [featured, setFeatured] = useState([]);
   const [sold, setSold] = useState([]);
+  const settings = useSiteSettings();
+
+  // Update SEO from site settings
+  useEffect(() => {
+    if (settings?.seo_title || settings?.seo_description) {
+      setPageMeta({
+        title: settings.seo_title,
+        description: settings.seo_description,
+        url: window.location.origin,
+      });
+    }
+    return () => resetPageMeta();
+  }, [settings?.seo_title, settings?.seo_description]);
 
   useEffect(() => {
     (async () => {
