@@ -33,13 +33,7 @@ export default function AuctionCard({ auction, compact = false }) {
           ) : (
             <span className="pill pill-live">{t.label}</span>
           )}
-          {auction.has_reserve && (
-            auction.reserve_met
-              ? <span className="pill pill-live" data-testid={`reserve-met-${auction.id}`}>Резервът е достигнат</span>
-              : <span className="pill" data-testid={`with-reserve-${auction.id}`}>С резерв</span>
-          )}
-          {auction.has_reserve === false && !isSold && <span className="pill" data-testid={`no-reserve-${auction.id}`}>Без резерв</span>}
-          {auction.featured && !isSold && <span className="pill">Избрана</span>}
+          {auction.featured && !isSold && <span className="pill">Промотирана</span>}
           {auction.seller_is_verified_dealer && (
             <span className="pill pill-verified flex items-center gap-1" data-testid={`verified-dealer-${auction.id}`}>
               <Shield size={10} /> Проверен дилър
@@ -64,7 +58,7 @@ export default function AuctionCard({ auction, compact = false }) {
           </div>
         )}
 
-        <div className="mt-4 rule-t pt-4 flex items-end justify-between">
+        <div className="mt-4 rule-t pt-4 flex items-start justify-between gap-3">
           <div>
             <div className="overline text-[hsl(var(--ink-muted))]">
               {isSold ? "Продаден за" : "Текуща наддавка"}
@@ -76,7 +70,26 @@ export default function AuctionCard({ auction, compact = false }) {
           </div>
           <div className="text-right">
             <div className="overline text-[hsl(var(--ink-muted))]">Наддавания</div>
-            <div className="flex items-center gap-1.5 mt-1 text-sm font-mono"><Users size={13} />{auction.bid_count || 0}</div>
+            <div className="flex items-center gap-1.5 mt-1 text-sm font-mono justify-end"><Users size={13} />{auction.bid_count || 0}</div>
+            {!isSold && (
+              <div className="mt-2">
+                {auction.has_reserve ? (
+                  auction.reserve_met ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[hsl(var(--accent))] bg-[hsl(var(--accent-soft))] px-2 py-1 rounded-full border border-[hsl(var(--accent))]/30" data-testid={`reserve-met-${auction.id}`}>
+                      ● Резервът е достигнат
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[hsl(var(--ink-muted))] bg-[hsl(var(--surface))] px-2 py-1 rounded-full border border-[hsl(var(--line))]" data-testid={`with-reserve-${auction.id}`}>
+                      ● С резерв
+                    </span>
+                  )
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[hsl(var(--ink))] bg-white px-2 py-1 rounded-full border border-[hsl(var(--line))]" data-testid={`no-reserve-${auction.id}`}>
+                    ● Без резерв
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
