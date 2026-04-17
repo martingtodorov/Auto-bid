@@ -40,8 +40,7 @@ export default function FeesPage() {
       <InfoSection title="Допълнителни услуги (по избор)">
         <ul className="space-y-2 text-[hsl(var(--ink))]/90">
           <li>• <strong>Професионално фотозаснемане</strong> — от €120 (за София)</li>
-          <li>• <strong>Промотиране на заглавна страница</strong> — €50 за 7 дни</li>
-          <li>• <strong>Експертен оглед и технически доклад</strong> — €180</li>
+          <li>• <strong>Промотиране на заглавна страница</strong> — €39 за 7 дни</li>
         </ul>
         <p className="text-xs text-[hsl(var(--ink-muted))] mt-4">
           За повече информация — свържете се с нашия екип през страницата „Контакти“.

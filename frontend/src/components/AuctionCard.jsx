@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { MapPin, Gauge, Fuel, Calendar, Users } from "lucide-react";
+import { MapPin, Gauge, Fuel, Calendar, Users, Shield } from "lucide-react";
 import { formatEUR, formatBGN, formatKM, timeLeft } from "../lib/apiClient";
 
 export default function AuctionCard({ auction, compact = false }) {
@@ -40,6 +40,11 @@ export default function AuctionCard({ auction, compact = false }) {
           )}
           {auction.has_reserve === false && !isSold && <span className="pill" data-testid={`no-reserve-${auction.id}`}>Без резерв</span>}
           {auction.featured && !isSold && <span className="pill">Избрана</span>}
+          {auction.seller_is_verified_dealer && (
+            <span className="pill pill-verified flex items-center gap-1" data-testid={`verified-dealer-${auction.id}`}>
+              <Shield size={10} /> Проверен дилър
+            </span>
+          )}
         </div>
       </div>
 

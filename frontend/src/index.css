@@ -227,6 +227,12 @@ textarea.input { resize: vertical; min-height: 80px; }
     color: hsl(var(--ink-muted));
     background: hsl(var(--surface));
 }
+.pill-verified {
+    border-color: hsl(var(--accent) / 0.4);
+    color: white;
+    background: linear-gradient(135deg, hsl(var(--accent)) 0%, hsl(var(--accent-ink)) 100%);
+    font-weight: 600;
+}
 
 @keyframes pulse {
     0% { box-shadow: 0 0 0 0 hsl(var(--accent) / 0.5); }

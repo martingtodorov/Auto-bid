@@ -270,6 +270,24 @@ def _mask_vin(vin: str) -> str:
     return v[:-7] + ("*" * 7)
 
 
+async def _enrich_dealer_status(items: list) -> list:
+    """Bulk-fetches sellers and adds seller_is_verified_dealer to each auction dict."""
+    if not items:
+        return items
+    seller_ids = {a.get("seller_id") for a in items if a.get("seller_id") and a.get("seller_id") != "platform"}
+    verified_ids = set()
+    if seller_ids:
+        async for u in db.users.find({"id": {"$in": list(seller_ids)}, "is_verified_dealer": True}, {"_id": 0, "id": 1}):
+            verified_ids.add(u["id"])
+    for a in items:
+        sid = a.get("seller_id")
+        if sid == "platform":
+            a["seller_is_verified_dealer"] = True
+        else:
+            a["seller_is_verified_dealer"] = sid in verified_ids
+    return items
+
+
 def _public_auction(a: dict, viewer: Optional[dict] = None) -> dict:
     a = {k: v for k, v in a.items() if k != "_id"}
     a["status"] = _auction_status(a)
@@ -351,6 +369,7 @@ async def list_auctions(
     elif sort == "most_bids":
         items.sort(key=lambda a: a.get("bid_count", 0), reverse=True)
 
+    await _enrich_dealer_status(items)
     return items
 
 @api.get("/auctions/featured")
@@ -360,13 +379,17 @@ async def featured(request: Request):
     raw = await db.auctions.find({"featured": True}, {"_id": 0}).limit(30).to_list(30)
     items = [_public_auction(a, viewer) for a in raw]
     live = [a for a in items if a["status"] == "live"]
-    return live[:6]
+    live = live[:6]
+    await _enrich_dealer_status(live)
+    return live
 
 @api.get("/auctions/sold")
 async def sold(request: Request):
     viewer = await get_optional_user(request)
     items = await db.auctions.find({"status": "sold"}, {"_id": 0}).limit(12).to_list(12)
-    return [_public_auction(a, viewer) for a in items]
+    items = [_public_auction(a, viewer) for a in items]
+    await _enrich_dealer_status(items)
+    return items
 
 @api.get("/auctions/facets")
 async def facets():
