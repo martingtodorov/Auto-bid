@@ -479,6 +479,224 @@ async def create_auction(payload: AuctionCreate, user: dict = Depends(get_curren
     return {"id": auction_id, "status": "pending"}
 
 
+# ---- Mobile.bg import ----
+class MobileBgImport(BaseModel):
+    url: Optional[str] = None
+    html: Optional[str] = None  # alternate: raw pasted HTML/text from the page
+
+
+_MOBILEBG_FUEL_MAP = {
+    "бензинов": "Бензин", "бензин": "Бензин",
+    "дизелов": "Дизел", "дизел": "Дизел",
+    "хибриден": "Хибриден", "хибрид": "Хибриден",
+    "електрически": "Електрически", "електро": "Електрически",
+    "газ/бензин": "Газ/Бензин", "lpg": "Газ/Бензин", "метан": "Газ/Бензин",
+}
+_MOBILEBG_TRANS_MAP = {
+    "автоматична": "Автоматична", "автоматичнa": "Автоматична", "автоматик": "Автоматична",
+    "ръчна": "Ръчна", "ръчни": "Ръчна", "механична": "Ръчна",
+}
+_MOBILEBG_BODY_MAP = {
+    "седан": "Седан", "хечбек": "Хечбек", "комби": "Комби",
+    "джип": "Джип", "suv": "Джип", "кросоувър": "Джип",
+    "купе": "Купе", "кабрио": "Кабрио", "кабриолет": "Кабрио",
+    "ван": "Ван", "миниван": "Ван", "пикап": "Пикап",
+}
+
+
+def _normalize(val: str, mapping: dict, default: str = "") -> str:
+    if not val:
+        return default
+    low = val.strip().lower()
+    for k, v in mapping.items():
+        if k in low:
+            return v
+    return default
+
+
+@api.post("/auctions/import-mobile-bg")
+async def import_from_mobile_bg(payload: MobileBgImport, user: dict = Depends(get_current_user)):
+    """Scrapes a mobile.bg listing URL and returns a dict of pre-filled auction fields.
+    Does NOT include price (user must set it themselves)."""
+    from bs4 import BeautifulSoup
+    import re as _re
+
+    url = (payload.url or "").strip()
+    pasted_html = (payload.html or "").strip()
+
+    html = None
+    if pasted_html:
+        html = pasted_html
+    else:
+        if not url:
+            raise HTTPException(status_code=400, detail="Поставете линк към обявата в mobile.bg или копирайте съдържанието на страницата")
+        if not url.startswith("http"):
+            url = "https://" + url
+        if "mobile.bg" not in url:
+            raise HTTPException(status_code=400, detail="Поддържат се само линкове от mobile.bg")
+
+        try:
+            from curl_cffi import requests as curl_requests
+            import asyncio as _asyncio
+
+            def _fetch():
+                return curl_requests.get(
+                    url,
+                    impersonate="chrome124",
+                    timeout=20,
+                    headers={
+                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                        "Accept-Language": "bg-BG,bg;q=0.9,en-US;q=0.8,en;q=0.7",
+                        "Upgrade-Insecure-Requests": "1",
+                    },
+                    allow_redirects=True,
+                )
+
+            loop = _asyncio.get_event_loop()
+            resp = await loop.run_in_executor(None, _fetch)
+            if resp.status_code >= 400:
+                raise HTTPException(
+                    status_code=502,
+                    detail=(
+                        f"Mobile.bg блокира автоматичен достъп (код {resp.status_code}). "
+                        "Моля отворете обявата във вашия браузър, натиснете Ctrl+A (маркирайте всичко), "
+                        "Ctrl+C (копирайте), после превключете на „Постави текст“ по-долу и залепете (Ctrl+V)."
+                    ),
+                )
+            try:
+                html = resp.content.decode("windows-1251", errors="ignore") if b"windows-1251" in resp.content[:1024].lower() else resp.text
+            except Exception:
+                html = resp.text
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Неуспешна връзка с mobile.bg: {e}")
+
+    # Decode windows-1251 if needed
+    if "<meta" in html and "windows-1251" in html.lower() and "Ã" in html:
+        try:
+            html = resp.content.decode("windows-1251", errors="ignore")
+        except Exception:
+            pass
+
+    soup = BeautifulSoup(html, "lxml")
+    full_text = soup.get_text(" ", strip=True)
+
+    # Title: try h1 first
+    title = ""
+    h1 = soup.find("h1")
+    if h1:
+        title = h1.get_text(" ", strip=True)
+    if not title:
+        title_tag = soup.find("title")
+        if title_tag:
+            title = title_tag.get_text(" ", strip=True).split("|")[0].strip()
+
+    # Extract make + model from title: "BMW X5 3.0d — ..." -> make=BMW, model="X5 3.0d"
+    make = ""
+    model = ""
+    if title:
+        parts = title.split()
+        if len(parts) >= 2:
+            make = parts[0]
+            model = " ".join(parts[1:3])
+
+    # Year: first 4-digit number between 1950-2030
+    year_match = _re.search(r"\b(19[5-9]\d|20[0-2]\d|20[3-5]\d)\s*г\.?", full_text) or _re.search(r"\b(19[5-9]\d|20[0-2]\d|20[3-5]\d)\b", full_text)
+    year = int(year_match.group(1)) if year_match else 0
+
+    # Mileage: look for " 123 456 км" or "123456 км"
+    mileage = 0
+    mi = _re.search(r"([\d\s]{3,10})\s*км", full_text)
+    if mi:
+        try: mileage = int(mi.group(1).replace(" ", "").replace(",", ""))
+        except Exception: pass
+
+    # Power hp
+    power = 0
+    pm = _re.search(r"(\d{2,4})\s*(к\.с\.|кс|hp)", full_text, _re.IGNORECASE)
+    if pm:
+        try: power = int(pm.group(1))
+        except Exception: pass
+
+    # Engine cc
+    engine_cc = 0
+    em = _re.search(r"(\d{3,4})\s*куб\.?\s*см", full_text, _re.IGNORECASE) or _re.search(r"(\d{3,4})\s*cc\b", full_text, _re.IGNORECASE)
+    if em:
+        try: engine_cc = int(em.group(1))
+        except Exception: pass
+    # Sometimes "2.0" or "3.0d" format -> convert
+    if not engine_cc:
+        dm = _re.search(r"\b([0-9])[\.,]([0-9])\s*[dit]?\b", model if model else full_text[:200], _re.IGNORECASE)
+        if dm:
+            try: engine_cc = int(dm.group(1) + dm.group(2) + "00")
+            except Exception: pass
+
+    # Fuel / Transmission / Body - find in text
+    fuel = _normalize(full_text, _MOBILEBG_FUEL_MAP, "Бензин")
+    transmission = _normalize(full_text, _MOBILEBG_TRANS_MAP, "Ръчна")
+    body_type = _normalize(full_text, _MOBILEBG_BODY_MAP, "Седан")
+
+    # Color: look for "Цвят"
+    color = ""
+    cm = _re.search(r"Цвят[:\s]+([А-Яа-я\s\-]{3,30}?)(?=\s+(?:Регион|Град|Населено|Гориво|Двигател|Пробег|Скорост|Мощност|[А-Я][а-я]{5,}:)|[,\.;|\n])", full_text)
+    if cm:
+        color = cm.group(1).strip(".,; ")
+
+    # Location: look for "Регион" / "Населено място"
+    city = ""
+    lm = _re.search(r"(?:Регион|Населено място|Град)[:\s]+([А-Яа-я\s]+?)(?=\s{2,}|[,\.\|]|\n)", full_text)
+    if lm:
+        city = lm.group(1).strip()
+
+    # Description: typically in div with class "moreInfo" or "carInfo" on mobile.bg
+    description = ""
+    for sel in ["div.moreInfo", "div.car-details", "div.description", "[id*=More]", "[id*=Comments]"]:
+        el = soup.select_one(sel)
+        if el:
+            description = el.get_text("\n", strip=True)
+            break
+    if not description and h1:
+        # fallback: try next sibling paragraphs
+        paragraphs = [p.get_text(" ", strip=True) for p in soup.find_all("p") if len(p.get_text(strip=True)) > 40]
+        description = "\n\n".join(paragraphs[:3])
+
+    # Images: find all img tags with large photos
+    images = []
+    for img in soup.find_all("img"):
+        src = img.get("src") or img.get("data-src") or ""
+        if not src:
+            continue
+        if src.startswith("//"):
+            src = "https:" + src
+        elif src.startswith("/"):
+            src = "https://www.mobile.bg" + src
+        if ("mobile.bg" in src or src.startswith("http")) and any(x in src.lower() for x in ["photo", "pic", "big", "jpg", "jpeg", "png"]):
+            if src not in images and "logo" not in src.lower() and "icon" not in src.lower():
+                images.append(src)
+        if len(images) >= 24:
+            break
+
+    return {
+        "title": title[:120] if title else "",
+        "make": make,
+        "model": model.strip(),
+        "year": year,
+        "mileage_km": mileage,
+        "fuel": fuel,
+        "transmission": transmission,
+        "body_type": body_type,
+        "power_hp": power,
+        "engine_cc": engine_cc,
+        "color": color,
+        "city": city,
+        "description": description[:3500] if description else "",
+        "images": images,
+        "source_url": url or "",
+    }
+
+
+
 # ---- Bids ----
 @api.get("/auctions/{auction_id}/bids")
 async def list_bids(auction_id: str):

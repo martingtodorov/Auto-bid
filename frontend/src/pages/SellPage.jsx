@@ -8,7 +8,13 @@ import { CAR_MAKES } from "../lib/makes";
 const FUELS = ["Бензин", "Дизел", "Хибриден", "Електрически", "Газ/Бензин"];
 const TRANSMISSIONS = ["Автоматична", "Ръчна"];
 const BODY_TYPES = ["Седан", "Комби", "Хечбек", "Джип", "Купе", "Кабрио", "Ван", "Пикап"];
-const REGIONS = ["София", "Пловдив", "Варна", "Бургас", "Стара Загора", "Русе", "Плевен"];
+const REGIONS = [
+  "София (град)", "София (област)", "Пловдив", "Варна", "Бургас", "Русе",
+  "Стара Загора", "Плевен", "Сливен", "Добрич", "Шумен", "Хасково",
+  "Перник", "Ямбол", "Пазарджик", "Благоевград", "Велико Търново",
+  "Враца", "Габрово", "Видин", "Монтана", "Кърджали", "Кюстендил",
+  "Ловеч", "Разград", "Силистра", "Смолян", "Търговище",
+];
 
 const inputCls = "w-full border border-[hsl(var(--line))] h-11 px-3 text-sm";
 
@@ -102,6 +108,53 @@ export default function SellPage() {
     finally { setLoading(false); }
   };
 
+  const [importUrl, setImportUrl] = useState("");
+  const [importHtml, setImportHtml] = useState("");
+  const [importMode, setImportMode] = useState("url"); // "url" | "paste"
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState("");
+  const [importErr, setImportErr] = useState("");
+
+  const importMobileBg = async () => {
+    setImportErr(""); setImportMsg("");
+    const payload = {};
+    if (importMode === "url") {
+      const url = (importUrl || "").trim();
+      if (!url) { setImportErr("Поставете линк към обявата в mobile.bg"); return; }
+      payload.url = url;
+    } else {
+      const html = (importHtml || "").trim();
+      if (!html || html.length < 100) { setImportErr("Залепете съдържанието на страницата (поне няколко реда)"); return; }
+      payload.html = html;
+    }
+    setImporting(true);
+    try {
+      const { data } = await api.post("/auctions/import-mobile-bg", payload);
+      setForm((p) => ({
+        ...p,
+        title: data.title || p.title,
+        make: data.make || p.make,
+        model: data.model || p.model,
+        year: data.year || p.year,
+        mileage_km: data.mileage_km || p.mileage_km,
+        fuel: data.fuel || p.fuel,
+        transmission: data.transmission || p.transmission,
+        body_type: data.body_type || p.body_type,
+        power_hp: data.power_hp || p.power_hp,
+        engine_cc: data.engine_cc || p.engine_cc,
+        color: data.color || p.color,
+        city: data.city || p.city,
+        description: data.description || p.description,
+        images_exterior: data.images && data.images.length ? data.images : p.images_exterior,
+      }));
+      const foundImgs = (data.images || []).length;
+      setImportMsg(
+        `Данните са заредени${foundImgs ? ` · ${foundImgs} снимки в "Екстериор"` : ""}. Проверете всички полета, задайте цена и доразпределете снимките по категории.`
+      );
+    } catch (e) { setImportErr(formatError(e)); }
+    finally { setImporting(false); }
+  };
+
   if (submitted) {
     return (
       <main className="py-24 text-center" data-testid="sell-success">
@@ -127,7 +180,73 @@ export default function SellPage() {
             Попълнете подробностите по-долу. Нашият екип ще прегледа заявката, ще направи редакторски материал и ще стартира търга в рамките на 7 дни.
           </p>
 
-          <form onSubmit={submit} className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="mt-10 rounded-card border border-[hsl(var(--accent))]/30 bg-[hsl(var(--accent-soft))] p-5" data-testid="mobile-bg-import">
+            <div>
+              <div className="overline text-[hsl(var(--accent))]">Бърз импорт от mobile.bg</div>
+              <h3 className="font-serif text-xl mt-1.5">Имате обява в mobile.bg?</h3>
+              <p className="text-sm text-[hsl(var(--ink))]/80 mt-1.5">
+                Ще заредим автоматично марка, модел, година, пробег, гориво, цвят, описание и снимки. <strong>Цената и резервата задавате сами.</strong>
+              </p>
+            </div>
+
+            <div className="mt-4 inline-flex rounded-md border border-[hsl(var(--line))] overflow-hidden bg-white text-xs font-semibold">
+              <button type="button" onClick={() => setImportMode("url")} className={`px-4 py-2 ${importMode === "url" ? "bg-[hsl(var(--ink))] text-white" : "text-[hsl(var(--ink-muted))]"}`} data-testid="import-mode-url">
+                От линк
+              </button>
+              <button type="button" onClick={() => setImportMode("paste")} className={`px-4 py-2 border-l border-[hsl(var(--line))] ${importMode === "paste" ? "bg-[hsl(var(--ink))] text-white" : "text-[hsl(var(--ink-muted))]"}`} data-testid="import-mode-paste">
+                Постави текст
+              </button>
+            </div>
+
+            {importMode === "url" ? (
+              <div className="mt-3 flex flex-col sm:flex-row gap-2">
+                <input
+                  type="url"
+                  value={importUrl}
+                  onChange={(e) => setImportUrl(e.target.value)}
+                  placeholder="https://www.mobile.bg/obiava-..."
+                  className="flex-1 border border-[hsl(var(--line))] h-11 px-3 text-sm bg-white"
+                  data-testid="import-url-input"
+                />
+                <button
+                  type="button"
+                  onClick={importMobileBg}
+                  disabled={importing}
+                  className="btn btn-accent !py-2 !px-5 shrink-0"
+                  data-testid="import-url-btn"
+                >
+                  {importing ? "Импортиране…" : "Импортирай от линк"}
+                </button>
+              </div>
+            ) : (
+              <div className="mt-3 space-y-2">
+                <p className="text-xs text-[hsl(var(--ink-muted))] leading-relaxed">
+                  Отворете обявата в mobile.bg, натиснете <kbd className="px-1.5 py-0.5 bg-white border border-[hsl(var(--line))] rounded font-mono text-[10px]">Ctrl+A</kbd> (маркирай всичко), <kbd className="px-1.5 py-0.5 bg-white border border-[hsl(var(--line))] rounded font-mono text-[10px]">Ctrl+C</kbd> (копирай) и залепете тук с <kbd className="px-1.5 py-0.5 bg-white border border-[hsl(var(--line))] rounded font-mono text-[10px]">Ctrl+V</kbd>.
+                </p>
+                <textarea
+                  value={importHtml}
+                  onChange={(e) => setImportHtml(e.target.value)}
+                  placeholder="Поставете тук съдържанието на mobile.bg страницата…"
+                  rows={5}
+                  className="w-full border border-[hsl(var(--line))] px-3 py-2 text-xs bg-white font-mono"
+                  data-testid="import-html-input"
+                />
+                <button
+                  type="button"
+                  onClick={importMobileBg}
+                  disabled={importing}
+                  className="btn btn-accent !py-2 !px-5"
+                  data-testid="import-html-btn"
+                >
+                  {importing ? "Импортиране…" : "Извлечи данните"}
+                </button>
+              </div>
+            )}
+            {importMsg && <p className="mt-3 text-xs text-[hsl(var(--accent-ink))] font-semibold" data-testid="import-success">{importMsg}</p>}
+            {importErr && <p className="mt-3 text-xs text-[hsl(var(--danger))]" data-testid="import-error">{importErr}</p>}
+          </div>
+
+          <form onSubmit={submit} className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-5">
             <Field label="Заглавие" span={2}>
               <input required value={form.title} onChange={(e) => set("title", e.target.value)} className={inputCls} placeholder="Напр. Audi RS6 Avant Performance — Nardo Grey" data-testid="sell-title" />
             </Field>

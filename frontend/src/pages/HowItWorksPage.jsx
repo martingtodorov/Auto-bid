@@ -49,13 +49,13 @@ export default function HowItWorksPage() {
             </div>
             <div className="p-8 border-b md:border-b-0 md:border-r border-[hsl(var(--line))]">
               <div className="overline text-[hsl(var(--ink-muted))]">Продавач</div>
-              <div className="font-serif text-5xl mt-3">€99</div>
-              <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">Еднократна такса листинг при одобрен автомобил.</p>
+              <div className="font-serif text-5xl mt-3">€0</div>
+              <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">Безплатно публикуване, одобрение, промотиране и финализиране на обявата — независимо от изхода на търга.</p>
             </div>
             <div className="p-8">
-              <div className="overline text-[hsl(var(--ink-muted))]">Отказ</div>
+              <div className="overline text-[hsl(var(--ink-muted))]">Неуспешен търг</div>
               <div className="font-serif text-5xl mt-3">€0</div>
-              <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">Нулева такса при неодобрен за публикуване автомобил.</p>
+              <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">Нулева такса, ако не бъде достигната резервната цена или при отказ на сделка.</p>
             </div>
           </div>
         </div>
