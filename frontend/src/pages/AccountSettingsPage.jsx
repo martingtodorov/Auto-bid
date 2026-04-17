@@ -95,7 +95,7 @@ export default function AccountSettingsPage() {
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <Bell size={18} className="text-[hsl(var(--accent))]" />
-              <h2 className="font-serif text-2xl">Записани търсения</h2>
+              <h2 className="font-serif text-2xl">Запазени търсения</h2>
             </div>
             <Link to="/auctions" className="text-xs underline text-[hsl(var(--ink-muted))] flex items-center gap-1">
               <BookmarkPlus size={12} /> Добави от търсенето
@@ -105,7 +105,7 @@ export default function AccountSettingsPage() {
 
           {searches.length === 0 ? (
             <div className="mt-6 py-10 text-center rounded-card bg-[hsl(var(--surface))] border border-dashed border-[hsl(var(--line))] text-sm text-[hsl(var(--ink-muted))]">
-              Нямате записани търсения. Отворете страницата за търгове, приложете филтри и натиснете „Запази търсенето".
+              Нямате запазени търсения. Отворете страницата за търгове, приложете филтри и натиснете „Запази търсенето".
             </div>
           ) : (
             <div className="mt-6 space-y-3" data-testid="saved-searches-list">

@@ -505,7 +505,7 @@ export default function AuctionDetailPage() {
                 )}
 
                 <button onClick={toggleWatch} className={`mt-5 w-full btn flex items-center justify-center gap-2 ${watching ? "btn-primary" : "btn-secondary"}`} data-testid="watch-button">
-                  <Heart size={14} className={watching ? "fill-current" : ""} /> {watching ? "В моя списък" : "Следи търга"}
+                  <Heart size={14} className={watching ? "fill-current" : ""} /> {watching ? "В любими" : "Добави в любими"}
                 </button>
                 <ShareButton auctionId={id} title={a?.title} />
               </div>

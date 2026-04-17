@@ -21,8 +21,8 @@ export default function WatchlistPage() {
     <main data-testid="watchlist-page">
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-16">
         <div className="overline text-[hsl(var(--accent))]">Моят списък</div>
-        <h1 className="font-serif text-4xl lg:text-5xl tracking-tight mt-3">Следени търгове</h1>
-        <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">Всички автомобили, които сте маркирали, за да следите.</p>
+        <h1 className="font-serif text-4xl lg:text-5xl tracking-tight mt-3">Любими търгове</h1>
+        <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">Всички автомобили, които сте маркирали като любими.</p>
 
         {items === null ? (
           <div className="py-20 text-center text-[hsl(var(--ink-muted))]">Зареждане…</div>
@@ -30,7 +30,7 @@ export default function WatchlistPage() {
           <div className="mt-12 py-20 text-center rounded-card border border-[hsl(var(--line))]">
             <Heart size={32} className="mx-auto text-[hsl(var(--ink-muted))]" />
             <p className="mt-4 font-serif text-2xl">Списъкът е празен</p>
-            <p className="mt-2 text-sm text-[hsl(var(--ink-muted))]">Натиснете "Следи търга" в детайлите на обявите.</p>
+            <p className="mt-2 text-sm text-[hsl(var(--ink-muted))]">Натиснете "Добави в любими" в детайлите на обявите.</p>
             <Link to="/auctions" className="btn btn-primary mt-6 inline-flex">Разгледай търгове</Link>
           </div>
         ) : (

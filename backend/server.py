@@ -117,7 +117,7 @@ class AuctionCreate(BaseModel):
     images_interior: List[str] = []
     starting_bid_eur: float
     reserve_eur: Optional[float] = None
-    duration_days: int = 7
+    duration_days: int = 10
     contact_email: EmailStr
     contact_phone: str = Field(min_length=5, max_length=32)
 
@@ -1075,7 +1075,7 @@ async def admin_approve(auction_id: str, _admin: dict = Depends(require_admin)):
     if not a:
         raise HTTPException(status_code=404, detail="Обявата не е намерена")
     now = datetime.now(timezone.utc)
-    ends_at = now + timedelta(days=int(a.get("duration_days", 7)))
+    ends_at = now + timedelta(days=int(a.get("duration_days", 10)))
     await db.auctions.update_one({"id": auction_id}, {"$set": {"status": "live", "ends_at": ends_at.isoformat(), "approved_at": now.isoformat()}})
     seller = await db.users.find_one({"id": a.get("seller_id")}, {"_id": 0})
     if seller and seller.get("email"):

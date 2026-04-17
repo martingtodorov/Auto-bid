@@ -38,7 +38,7 @@ export default function Footer() {
             <li><Link to="/login" className="hover:text-[hsl(var(--accent))]">Вход</Link></li>
             <li><Link to="/register" className="hover:text-[hsl(var(--accent))]">Регистрация</Link></li>
             <li><Link to="/my-listings" className="hover:text-[hsl(var(--accent))]">Моите обяви</Link></li>
-            <li><Link to="/watchlist" className="hover:text-[hsl(var(--accent))]">Следени търгове</Link></li>
+            <li><Link to="/watchlist" className="hover:text-[hsl(var(--accent))]">Любими търгове</Link></li>
           </ul>
         </div>
       </div>

@@ -40,7 +40,7 @@ const emptyForm = (user) => ({
   images_bumper: [],
   images_interior: [],
   starting_bid_eur: 5000, reserve_eur: "",
-  duration_days: 7,
+  duration_days: 10,
 });
 
 const IMG_CATEGORIES = [
@@ -198,7 +198,7 @@ export default function SellPage() {
             <h1 className="font-serif text-4xl lg:text-5xl tracking-tight">Подайте своя автомобил за търг</h1>
           </div>
           <p className="mt-4 text-[hsl(var(--ink-muted))] max-w-2xl leading-relaxed">
-            Попълнете подробностите по-долу. Нашият екип ще прегледа заявката, ще направи редакторски материал и ще стартира търга в рамките на 7 дни.
+            Попълнете подробностите по-долу. Нашият екип ще прегледа заявката, ще направи редакторски материал и ще стартира търга в рамките на 10 дни.
           </p>
 
           <div className="mt-10 rounded-card border border-[hsl(var(--accent))]/30 bg-[hsl(var(--accent-soft))] p-5" data-testid="mobile-bg-import">
