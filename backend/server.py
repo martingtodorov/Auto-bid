@@ -570,9 +570,9 @@ async def import_from_mobile_bg(payload: MobileBgImport, user: dict = Depends(ge
                 import urllib.parse as _urlparse
                 enc = _urlparse.quote(url, safe="")
                 proxy_urls = [
-                    f"https://api.allorigins.win/raw?url={enc}",
+                    f"https://api.codetabs.com/v1/proxy/?quest={url}",
                     f"https://corsproxy.io/?url={enc}",
-                    f"https://api.codetabs.com/v1/proxy/?quest={enc}",
+                    f"https://api.allorigins.win/raw?url={enc}",
                     f"https://thingproxy.freeboard.io/fetch/{url}",
                 ]
 
@@ -581,9 +581,15 @@ async def import_from_mobile_bg(payload: MobileBgImport, user: dict = Depends(ge
                         return curl_requests.get(_p, timeout=25, impersonate="chrome124", allow_redirects=True)
                     try:
                         r = await loop.run_in_executor(None, _fetch_proxy)
-                        if r.status_code < 400 and len(r.text) > 3000 and "затруднения" not in r.text:
-                            resp = r
-                            break
+                        if r.status_code < 400 and len(r.content) > 10000:
+                            # Check that body contains actual cyrillic text (not CF block)
+                            try:
+                                decoded_test = r.content.decode("windows-1251", errors="ignore")
+                                if "Бензин" in decoded_test or "Дизел" in decoded_test or "куб" in decoded_test or "Двигател" in decoded_test:
+                                    resp = r
+                                    break
+                            except Exception:
+                                pass
                     except Exception:
                         continue
 
@@ -664,18 +670,40 @@ async def import_from_mobile_bg(payload: MobileBgImport, user: dict = Depends(ge
         try: power = int(pm.group(1))
         except Exception: pass
 
-    # Engine cc
+    # Engine cc — try multiple patterns in order:
+    # 1) Mobile.bg structured spec field "Обем: 2996"
+    # 2) Explicit "XXXX куб.см" / "XXXX cc" anywhere in text
+    # 3) Liter notation "2.0L", "3.0i", "2.0 TDI/TFSI/CDI/TSI" in title/description
+    # 4) Common suffixes like "30d", "43i", "318d" where first digits hint at displacement
     engine_cc = 0
-    em = _re.search(r"(\d{3,4})\s*куб\.?\s*см", full_text, _re.IGNORECASE) or _re.search(r"(\d{3,4})\s*cc\b", full_text, _re.IGNORECASE)
-    if em:
-        try: engine_cc = int(em.group(1))
-        except Exception: pass
-    # Sometimes "2.0" or "3.0d" format -> convert
+    # (1) structured field
+    for label_m in _re.finditer(r'mpLabel[^>]*>\s*(Обем|Кубатура)\s*[\[\(]?[^<]*?[<][\w\s="/]*?mpInfo[^>]*>\s*(\d+)', html):
+        try:
+            engine_cc = int(label_m.group(2))
+            break
+        except Exception:
+            pass
+
+    # (2) plain text patterns
     if not engine_cc:
-        dm = _re.search(r"\b([0-9])[\.,]([0-9])\s*[dit]?\b", model if model else full_text[:200], _re.IGNORECASE)
-        if dm:
-            try: engine_cc = int(dm.group(1) + dm.group(2) + "00")
+        m = _re.search(r"(\d{3,4})\s*куб\.?\s*см", full_text, _re.IGNORECASE) or _re.search(r"(\d{3,4})\s*cc\b", full_text, _re.IGNORECASE) or _re.search(r"(?:Обем|Кубатура)[:\s]+(\d{3,4})", full_text)
+        if m:
+            try: engine_cc = int(m.group(1))
             except Exception: pass
+
+    # (3) liter notation, e.g. "2.0 TDI", "3.0L", "1.8 TSI", "3.0i"
+    if not engine_cc:
+        search_src = f"{title}\n{model}\n{full_text[:800]}"
+        m = _re.search(r"\b([1-6])[\.,]([0-9])\s*(?:[LlЛл]|TDI|TFSI|TSI|CDI|CRDI|HDI|dCi|THP|MultiAir|Ecoboost|Turbo|[ivtdбa-я]{1,4})?\b", search_src)
+        if m:
+            try:
+                engine_cc = int(m.group(1) + m.group(2) + "00")
+            except Exception:
+                pass
+
+    # Validate range
+    if engine_cc and (engine_cc < 500 or engine_cc > 8500):
+        engine_cc = 0
 
     # Fuel / Transmission / Body - find in text
     fuel = _normalize(full_text, _MOBILEBG_FUEL_MAP, "Бензин")

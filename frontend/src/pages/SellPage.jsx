@@ -27,9 +27,6 @@ function Field({ label, children, span = 1 }) {
   );
 }
 
-const DRAFT_KEY = "autobid.bg:sell-draft:v1";
-const DRAFT_SAVE_DEBOUNCE = 600;
-
 const emptyForm = (user) => ({
   title: "", make: "", model: "", year: 2020, mileage_km: 0,
   fuel: "Бензин", transmission: "Автоматична", body_type: "Седан",
@@ -57,9 +54,6 @@ export default function SellPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState(() => emptyForm(user));
-  const [draftLoaded, setDraftLoaded] = useState(false);
-  const [draftStatus, setDraftStatus] = useState(""); // "saved" | "saving" | "restored" | ""
-  const [hasStoredDraft, setHasStoredDraft] = useState(false);
   const [err, setErr] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -71,66 +65,6 @@ export default function SellPage() {
     }
   }, [user]);
 
-  // --- Draft autosave (localStorage) ---
-  // On mount: check for existing draft
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(DRAFT_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && parsed.form && parsed.savedAt) {
-          setHasStoredDraft(true);
-        }
-      }
-    } catch { /* ignore */ }
-    setDraftLoaded(true);
-  }, []);
-
-  // Debounced autosave — skip until mount check is done
-  useEffect(() => {
-    if (!draftLoaded) return;
-    if (submitted) return;
-    setDraftStatus("saving");
-    const t = setTimeout(() => {
-      try {
-        const payload = JSON.stringify({ form, savedAt: Date.now() });
-        // Guard against quota: if payload > ~4MB, strip heavy categorized images (keep text)
-        if (payload.length < 4_500_000) {
-          window.localStorage.setItem(DRAFT_KEY, payload);
-        } else {
-          const slim = {
-            ...form,
-            images_exterior: [], images_wheels: [], images_bumper: [], images_interior: [],
-          };
-          window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ form: slim, savedAt: Date.now(), slim: true }));
-        }
-        setDraftStatus("saved");
-        setHasStoredDraft(true);
-      } catch {
-        setDraftStatus("");
-      }
-    }, DRAFT_SAVE_DEBOUNCE);
-    return () => clearTimeout(t);
-  }, [form, draftLoaded, submitted]);
-
-  const restoreDraft = () => {
-    try {
-      const raw = window.localStorage.getItem(DRAFT_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (!parsed?.form) return;
-      setForm((p) => ({ ...p, ...parsed.form, contact_email: parsed.form.contact_email || p.contact_email }));
-      setHasStoredDraft(false);
-      setDraftStatus("restored");
-      setTimeout(() => setDraftStatus("saved"), 1500);
-    } catch { /* ignore */ }
-  };
-
-  const discardDraft = () => {
-    try { window.localStorage.removeItem(DRAFT_KEY); } catch {}
-    setHasStoredDraft(false);
-  };
-
   // --- Move photo between categories / reorder ---
   const movePhoto = (fromCat, fromIdx, toCat, toIdx) => {
     if (!IMG_CATEGORIES.find((c) => c.id === fromCat)) return;
@@ -141,7 +75,6 @@ export default function SellPage() {
       if (fromIdx < 0 || fromIdx >= fromList.length) return p;
       const [item] = fromList.splice(fromIdx, 1);
       if (fromCat === toCat) {
-        // Reorder within same list
         const insertAt = toIdx == null ? fromList.length : Math.max(0, Math.min(toIdx, fromList.length));
         fromList.splice(insertAt, 0, item);
         return { ...p, [fromCat]: fromList };
@@ -199,9 +132,6 @@ export default function SellPage() {
         contact_phone: form.contact_phone.trim(),
       };
       await api.post("/auctions", payload);
-      // Clear draft on successful submit
-      try { window.localStorage.removeItem(DRAFT_KEY); } catch {}
-      setHasStoredDraft(false);
       setSubmitted(true);
     } catch (e) { setErr(formatError(e)); }
     finally { setLoading(false); }
@@ -266,29 +196,10 @@ export default function SellPage() {
           <div className="overline text-[hsl(var(--accent))]">Продай автомобил</div>
           <div className="flex items-start justify-between gap-4 flex-wrap mt-3">
             <h1 className="font-serif text-4xl lg:text-5xl tracking-tight">Подайте своя автомобил за търг</h1>
-            {draftStatus && !submitted && (
-              <div className="flex items-center gap-1.5 text-xs text-[hsl(var(--ink-muted))] font-mono pt-2" data-testid="draft-status">
-                <span className={`w-1.5 h-1.5 rounded-full ${draftStatus === "saving" ? "bg-[hsl(var(--ink-muted))] animate-pulse" : "bg-[hsl(var(--accent))]"}`} />
-                {draftStatus === "saving" ? "Запазване…" : draftStatus === "restored" ? "Черновата е възстановена" : "Автоматично запазено"}
-              </div>
-            )}
           </div>
           <p className="mt-4 text-[hsl(var(--ink-muted))] max-w-2xl leading-relaxed">
             Попълнете подробностите по-долу. Нашият екип ще прегледа заявката, ще направи редакторски материал и ще стартира търга в рамките на 7 дни.
           </p>
-
-          {hasStoredDraft && (
-            <div className="mt-8 rounded-card border border-[hsl(var(--line))] bg-[hsl(var(--surface))] p-4 flex items-center justify-between gap-3 flex-wrap" data-testid="draft-banner">
-              <div className="flex items-center gap-3 text-sm">
-                <span className="w-2 h-2 rounded-full bg-[hsl(var(--accent))] animate-pulse" />
-                <span>Имате незавършена чернова. Искате ли да продължите от където сте спрели?</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={discardDraft} className="btn btn-secondary !py-1.5 !px-3 text-xs" data-testid="draft-discard">Изтрий</button>
-                <button type="button" onClick={restoreDraft} className="btn btn-primary !py-1.5 !px-4 text-xs" data-testid="draft-restore">Възстанови</button>
-              </div>
-            </div>
-          )}
 
           <div className="mt-10 rounded-card border border-[hsl(var(--accent))]/30 bg-[hsl(var(--accent-soft))] p-5" data-testid="mobile-bg-import">
             <div>
