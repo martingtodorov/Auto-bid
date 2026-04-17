@@ -72,19 +72,19 @@ export default function AuctionCard({ auction, compact = false }) {
             <div className="overline text-[hsl(var(--ink-muted))]">Наддавания</div>
             <div className="flex items-center gap-1.5 mt-1 text-sm font-mono justify-end"><Users size={13} />{auction.bid_count || 0}</div>
             {!isSold && (
-              <div className="mt-2">
+              <div className="mt-2.5">
                 {auction.has_reserve ? (
                   auction.reserve_met ? (
-                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[hsl(var(--accent))] bg-[hsl(var(--accent-soft))] px-2 py-1 rounded-full border border-[hsl(var(--accent))]/30" data-testid={`reserve-met-${auction.id}`}>
+                    <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[hsl(var(--accent))] bg-[hsl(var(--accent-soft))] px-3 py-1.5 rounded-full border border-[hsl(var(--accent))]/30" data-testid={`reserve-met-${auction.id}`}>
                       ● Резервът е достигнат
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[hsl(var(--ink-muted))] bg-[hsl(var(--surface))] px-2 py-1 rounded-full border border-[hsl(var(--line))]" data-testid={`with-reserve-${auction.id}`}>
+                    <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[hsl(var(--ink))] bg-[hsl(var(--surface))] px-3 py-1.5 rounded-full border border-[hsl(var(--line))]" data-testid={`with-reserve-${auction.id}`}>
                       ● С резерв
                     </span>
                   )
                 ) : (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[hsl(var(--ink))] bg-white px-2 py-1 rounded-full border border-[hsl(var(--line))]" data-testid={`no-reserve-${auction.id}`}>
+                  <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[hsl(var(--ink))] bg-white px-3 py-1.5 rounded-full border border-[hsl(var(--line))]" data-testid={`no-reserve-${auction.id}`}>
                     ● Без резерв
                   </span>
                 )}
