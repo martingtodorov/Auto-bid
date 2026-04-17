@@ -5,6 +5,7 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 import os
+import asyncio
 import uuid
 import logging
 import bcrypt
@@ -80,162 +81,15 @@ async def get_optional_user(request: Request):
         return None
 
 
-# ---- Models ----
-class UserRegister(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=6)
-    name: str = Field(min_length=1)
-
-class UserLogin(BaseModel):
-    email: EmailStr
-    password: str
-
-class UserOut(BaseModel):
-    id: str
-    email: str
-    name: str
-    role: str = "user"
-    created_at: str
-
-class AuctionCreate(BaseModel):
-    title: str
-    make: str
-    model: str
-    year: int
-    mileage_km: int
-    fuel: str
-    transmission: str
-    body_type: str
-    power_hp: int
-    engine_cc: int
-    color: str
-    region: str
-    city: str
-    description: str
-    images: List[str] = []
-    images_exterior: List[str] = []
-    images_wheels: List[str] = []
-    images_bumper: List[str] = []
-    images_interior: List[str] = []
-    starting_bid_eur: float
-    reserve_eur: Optional[float] = None
-    duration_days: int = 10
-    contact_email: EmailStr
-    contact_phone: str = Field(min_length=5, max_length=32)
-
-class BidCreate(BaseModel):
-    amount_eur: float
-    payment_method_id: Optional[str] = None  # mock Stripe payment method token
-
-class BiddingCreditCreate(BaseModel):
-    max_amount_eur: float = Field(gt=0)
-    payment_method_id: str = Field(min_length=4)
-
-class AdminDecision(BaseModel):
-    reason: Optional[str] = None
-
-class CommentCreate(BaseModel):
-    text: str = Field(min_length=1, max_length=1200)
-
-class AuctionUpdate(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    starting_bid_eur: Optional[float] = None
-    reserve_eur: Optional[float] = None
-    images: Optional[List[str]] = None
-    images_exterior: Optional[List[str]] = None
-    images_wheels: Optional[List[str]] = None
-    images_bumper: Optional[List[str]] = None
-    images_interior: Optional[List[str]] = None
-    color: Optional[str] = None
-    region: Optional[str] = None
-    city: Optional[str] = None
-    vin: Optional[str] = None
-
-
-class AdminAuctionUpdate(BaseModel):
-    """Full admin edit — allows changing every field on an auction."""
-    title: Optional[str] = None
-    description: Optional[str] = None
-    make: Optional[str] = None
-    model: Optional[str] = None
-    year: Optional[int] = None
-    mileage_km: Optional[int] = None
-    fuel: Optional[str] = None
-    transmission: Optional[str] = None
-    body_type: Optional[str] = None
-    power_hp: Optional[int] = None
-    engine_cc: Optional[int] = None
-    color: Optional[str] = None
-    region: Optional[str] = None
-    city: Optional[str] = None
-    vin: Optional[str] = None
-    images: Optional[List[str]] = None
-    images_exterior: Optional[List[str]] = None
-    images_wheels: Optional[List[str]] = None
-    images_bumper: Optional[List[str]] = None
-    images_interior: Optional[List[str]] = None
-    starting_bid_eur: Optional[float] = None
-    reserve_eur: Optional[float] = None
-    current_bid_eur: Optional[float] = None
-    ends_at: Optional[str] = None
-    status: Optional[str] = None
-    featured: Optional[bool] = None
-    seller_name: Optional[str] = None
-    contact_email: Optional[str] = None
-    contact_phone: Optional[str] = None
-
-class CounterOfferCreate(BaseModel):
-    price_eur: float
-
-class NegotiationRespond(BaseModel):
-    accept: bool
-
-# --- BaT-style post-auction negotiation (reserve-not-met) ---
-class NegotiationOpening(BaseModel):
-    # Seller's opening offer OR decision to pass.
-    price_eur: Optional[float] = None
-    decline: bool = False
-
-class NegotiationResponse(BaseModel):
-    # Buyer's response.
-    action: str  # "accept" | "counter" | "decline"
-    price_eur: Optional[float] = None
-
-class NegotiationFinal(BaseModel):
-    # Seller's final step (only if buyer countered).
-    action: str  # "accept" | "decline"
-
-class NegotiationMessage(BaseModel):
-    text: str = Field(min_length=1, max_length=2000)
-
-class ProfileUpdate(BaseModel):
-    phone: Optional[str] = None
-    sms_opt_in: Optional[bool] = None
-
-class AdminUserUpdate(BaseModel):
-    name: Optional[str] = None
-    email: Optional[EmailStr] = None
-    phone: Optional[str] = None
-    is_verified_dealer: Optional[bool] = None
-    role: Optional[str] = None  # "user" or "admin"
-
-class SavedSearchCreate(BaseModel):
-    name: str
-    filters: dict
-
-
-class SiteSettingsUpdate(BaseModel):
-    buyer_fee_pct: Optional[float] = None
-    buyer_fee_min_eur: Optional[float] = None
-    buyer_fee_max_eur: Optional[float] = None
-    seo_title: Optional[str] = None
-    seo_description: Optional[str] = None
-    faq_content: Optional[str] = None
-    terms_content: Optional[str] = None
-    contacts_content: Optional[str] = None
-    fees_content: Optional[str] = None
-    how_it_works_content: Optional[str] = None
+# ---- Models (imported from models.py) ----
+from models import (
+    UserRegister, UserLogin, UserOut,
+    AuctionCreate, BidCreate, BiddingCreditCreate, AdminDecision, CommentCreate,
+    AuctionUpdate, AdminAuctionUpdate,
+    CounterOfferCreate, NegotiationRespond,
+    NegotiationOpening, NegotiationResponse, NegotiationFinal, NegotiationMessage,
+    ProfileUpdate, AdminUserUpdate, SavedSearchCreate, SiteSettingsUpdate,
+)
 
 
 # ---- Auth routes ----
@@ -319,48 +173,25 @@ def _settings() -> dict:
 
 
 def _bid_step(current_price: float) -> float:
-    """Variable bid increment based on current bid price (BaT-style).
-    €1,000-€2,500 → €100; €2,500-€5,000 → €150; €5,000-€10,000 → €250;
-    €10,000-€20,000 → €500; €20,000-€50,000 → €1,000;
-    €50,000-€100,000 → €2,000; above €100,000 → €2,500.
-    Below €1,000 we use €50 (reasonable small-car floor).
-    """
-    p = float(current_price or 0)
-    if p < 1000:     return 50.0
-    if p < 2500:     return 100.0
-    if p < 5000:     return 150.0
-    if p < 10000:    return 250.0
-    if p < 20000:    return 500.0
-    if p < 50000:    return 1000.0
-    if p < 100000:   return 2000.0
-    return 2500.0
+    from helpers import bid_step as _bs
+    return _bs(current_price)
 
 
 def _buyer_fee(amount_eur: float) -> float:
     """Buyer's premium — configurable by admin. Defaults: 2%, min €150, max €4 000."""
     s = _settings()
-    pct = float(s.get("buyer_fee_pct", 2.0))
-    fmin = float(s.get("buyer_fee_min_eur", 150.0))
-    fmax = float(s.get("buyer_fee_max_eur", 4000.0))
-    fee = round(float(amount_eur or 0) * (pct / 100.0), 2)
-    if fee < fmin: fee = fmin
-    if fee > fmax: fee = fmax
-    return fee
+    from helpers import buyer_fee as _bf
+    return _bf(
+        amount_eur,
+        s.get("buyer_fee_pct", 2.0),
+        s.get("buyer_fee_min_eur", 150.0),
+        s.get("buyer_fee_max_eur", 4000.0),
+    )
 
 
 def _auction_status(a: dict) -> str:
-    stored = a.get("status")
-    if stored in ("sold", "rejected", "pending", "withdrawn", "reserve_not_met", "ended", "removed"):
-        if stored == "ended":
-            return "ended"
-        return stored
-    end = datetime.fromisoformat(a["ends_at"])
-    if datetime.now(timezone.utc) >= end:
-        reserve = a.get("reserve_eur")
-        if reserve and float(a.get("current_bid_eur", 0)) < float(reserve):
-            return "reserve_not_met"
-        return "ended"
-    return "live"
+    from helpers import auction_status as _as
+    return _as(a)
 
 def _mask_vin(vin: str) -> str:
     if not vin:
@@ -2671,6 +2502,7 @@ async def seed_admin():
 async def on_startup():
     await db.users.create_index("email", unique=True)
     await db.auctions.create_index("id", unique=True)
+    await db.auctions.create_index([("status", 1), ("ends_at", 1)])
     await db.bids.create_index("auction_id")
     await db.comments.create_index("auction_id")
     await db.watches.create_index([("user_id", 1), ("auction_id", 1)])
@@ -2678,6 +2510,106 @@ async def on_startup():
     await _load_settings_cache()
     await seed_admin()
     await seed()
+    # Start background scheduler for auction finalization
+    asyncio.create_task(_auction_finalizer_loop())
+
+
+async def _auction_finalizer_loop():
+    """Runs every 60 seconds. Transitions live auctions whose ends_at has passed:
+      • reserve met or no reserve + bids → 'sold'
+      • reserve not met → 'reserve_not_met' (negotiation auto-creates on first GET)
+      • no bids at all → 'ended'
+    Sends winner email on sold. Releases losing preauths.
+    """
+    while True:
+        try:
+            await _finalize_expired_auctions_once()
+        except Exception as e:
+            logger.error("Auction finalizer loop error: %s", e)
+        await asyncio.sleep(60)
+
+
+async def _finalize_expired_auctions_once():
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    # Find all live auctions past their end time
+    cursor = db.auctions.find(
+        {"status": "live", "ends_at": {"$lte": now_iso}},
+        {"_id": 0},
+    )
+    expired = await cursor.to_list(500)
+    if not expired:
+        return
+
+    for a in expired:
+        auction_id = a["id"]
+        current_bid = float(a.get("current_bid_eur", 0))
+        reserve = a.get("reserve_eur")
+        has_reserve = reserve is not None and float(reserve) > 0
+        has_bids = int(a.get("bid_count", 0)) > 0 and a.get("high_bidder_id")
+
+        if not has_bids:
+            # No bidders → ended without sale
+            await db.auctions.update_one(
+                {"id": auction_id},
+                {"$set": {"status": "ended", "finalized_at": now_iso}},
+            )
+            logger.info("Auto-finalized auction %s → ended (no bids)", auction_id)
+            continue
+
+        if has_reserve and current_bid < float(reserve):
+            # Reserve not met → open negotiation window (lazy-created on first GET)
+            await db.auctions.update_one(
+                {"id": auction_id},
+                {"$set": {"status": "reserve_not_met", "finalized_at": now_iso}},
+            )
+            # Email both parties
+            try:
+                seller = await db.users.find_one({"id": a.get("seller_id")}, {"_id": 0}) if a.get("seller_id") != "platform" else None
+                buyer = await db.users.find_one({"id": a.get("high_bidder_id")}, {"_id": 0})
+                app_url = os.environ.get("APP_URL", "")
+                link = f"{app_url}/auctions/{auction_id}"
+                if seller and seller.get("email"):
+                    from emails import send_email
+                    await send_email(
+                        seller["email"],
+                        f"Резервът не е достигнат: {a.get('title','')}",
+                        f"Резервната цена не е достигната. Имате 24 часа да направите начална оферта на купувача в преговарящата сесия: {link}",
+                    )
+                if buyer and buyer.get("email"):
+                    from emails import send_email
+                    await send_email(
+                        buyer["email"],
+                        f"Резервът не е достигнат: {a.get('title','')}",
+                        f"Резервната цена не е достигната, но продавачът има 24 часа да направи начална оферта. Следете преговарящата сесия: {link}",
+                    )
+            except Exception as e:
+                logger.error("reserve_not_met email failed for %s: %s", auction_id, e)
+            logger.info("Auto-finalized auction %s → reserve_not_met", auction_id)
+            continue
+
+        # Sold (reserve met or no reserve)
+        await db.auctions.update_one(
+            {"id": auction_id},
+            {"$set": {"status": "sold", "finalized_at": now_iso}},
+        )
+        # Release losing bidders' preauths (keep winner's active for capture)
+        await db.bids.update_many(
+            {"auction_id": auction_id, "preauth_status": "authorized", "user_id": {"$ne": a["high_bidder_id"]}},
+            {"$set": {"preauth_status": "released", "preauth_released_at": now_iso}},
+        )
+        await db.bidding_credits.update_many(
+            {"auction_id": auction_id, "status": "authorized", "user_id": {"$ne": a["high_bidder_id"]}},
+            {"$set": {"status": "released", "released_at": now_iso}},
+        )
+        # Notify winner
+        try:
+            winner = await db.users.find_one({"id": a["high_bidder_id"]}, {"_id": 0})
+            if winner and winner.get("email"):
+                await email_won(winner["email"], winner["name"], a["title"], auction_id, current_bid)
+        except Exception as e:
+            logger.error("email_won auto-finalize failed for %s: %s", auction_id, e)
+        logger.info("Auto-finalized auction %s → sold (€%.0f)", auction_id, current_bid)
 
 @api.post("/admin/reseed")
 async def reseed():
