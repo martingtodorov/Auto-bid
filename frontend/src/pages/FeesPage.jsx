@@ -20,31 +20,20 @@ export default function FeesPage() {
       </InfoSection>
 
       <InfoSection title="За продавачи">
-        <div className="rounded-card border border-[hsl(var(--line))] bg-white p-6">
-          <div className="overline text-[hsl(var(--accent))]">Публикуване</div>
-          <div className="font-serif text-4xl mt-2">Безплатно</div>
-          <p className="mt-3 text-[hsl(var(--ink-muted))]">
-            Не удържаме такса за подаване, одобрение или приключване на обявата, независимо от изхода на търга.
+        <div className="rounded-card border border-[hsl(var(--accent))]/30 bg-[hsl(var(--accent-soft))] p-6">
+          <div className="overline text-[hsl(var(--accent))]">Абсолютно безплатно</div>
+          <div className="font-serif text-4xl mt-2">0 €</div>
+          <p className="mt-3 text-[hsl(var(--ink))]/80 leading-relaxed">
+            Никакви такси при публикуване, одобрение, промотиране или финализиране на обявата — независимо от изхода на търга. Без абонамент, без скрити комисионни.
           </p>
+          <ul className="mt-4 space-y-1.5 text-sm text-[hsl(var(--ink))]/90">
+            <li>✓ Безплатно създаване на обява</li>
+            <li>✓ Безплатно поставяне на резервна цена</li>
+            <li>✓ Безплатен редакторски преглед от нашия екип</li>
+            <li>✓ Безплатно промотиране на заглавната страница</li>
+            <li>✓ Без такса при неуспешен търг</li>
+          </ul>
         </div>
-
-        <div className="rounded-card border border-[hsl(var(--line))] bg-white p-6 mt-4">
-          <div className="overline text-[hsl(var(--accent))]">Резервна цена (по избор)</div>
-          <div className="font-serif text-2xl mt-2">0 €</div>
-          <p className="mt-3 text-[hsl(var(--ink-muted))]">
-            Поставянето на резервна цена е безплатно. Ако резервът не бъде достигнат — нямате задължение да продавате.
-          </p>
-        </div>
-      </InfoSection>
-
-      <InfoSection title="Допълнителни услуги (по избор)">
-        <ul className="space-y-2 text-[hsl(var(--ink))]/90">
-          <li>• <strong>Професионално фотозаснемане</strong> — от €120 (за София)</li>
-          <li>• <strong>Промотиране на заглавна страница</strong> — €39 за 7 дни</li>
-        </ul>
-        <p className="text-xs text-[hsl(var(--ink-muted))] mt-4">
-          За повече информация — свържете се с нашия екип през страницата „Контакти“.
-        </p>
       </InfoSection>
     </InfoPage>
   );
