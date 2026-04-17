@@ -455,7 +455,9 @@ export default function AuctionDetailPage() {
                 ) : (
                   <div className="font-serif text-xl mt-2">{a.seller_name}</div>
                 )}
-                <p className="text-xs text-[hsl(var(--ink-muted))] mt-2">Проверен дилър · {a.region}</p>
+                <p className="text-xs text-[hsl(var(--ink-muted))] mt-2" data-testid="seller-badge">
+                  {a.seller_is_verified_dealer ? "Проверен дилър" : "Частно лице"} · {a.region}
+                </p>
               </div>
             </div>
           </aside>

@@ -25,20 +25,20 @@ export default function Footer() {
         <div>
           <div className="overline text-[hsl(var(--ink-muted))]">Помощ</div>
           <ul className="mt-4 space-y-2 text-sm">
-            <li><a href="#">Често задавани въпроси</a></li>
-            <li><a href="#">Такси и комисионни</a></li>
-            <li><a href="#">Контакти</a></li>
-            <li><a href="#">Общи условия</a></li>
+            <li><Link to="/faq" className="hover:text-[hsl(var(--accent))]">Често задавани въпроси</Link></li>
+            <li><Link to="/fees" className="hover:text-[hsl(var(--accent))]">Такси и комисионни</Link></li>
+            <li><Link to="/contacts" className="hover:text-[hsl(var(--accent))]">Контакти</Link></li>
+            <li><Link to="/terms" className="hover:text-[hsl(var(--accent))]">Общи условия</Link></li>
           </ul>
         </div>
 
         <div>
-          <div className="overline text-[hsl(var(--ink-muted))]">Общност</div>
+          <div className="overline text-[hsl(var(--ink-muted))]">Акаунт</div>
           <ul className="mt-4 space-y-2 text-sm">
-            <li><a href="#">Instagram</a></li>
-            <li><a href="#">YouTube</a></li>
-            <li><a href="#">Telegram канал</a></li>
-            <li><a href="#">Бюлетин</a></li>
+            <li><Link to="/login" className="hover:text-[hsl(var(--accent))]">Вход</Link></li>
+            <li><Link to="/register" className="hover:text-[hsl(var(--accent))]">Регистрация</Link></li>
+            <li><Link to="/my-listings" className="hover:text-[hsl(var(--accent))]">Моите обяви</Link></li>
+            <li><Link to="/watchlist" className="hover:text-[hsl(var(--accent))]">Следени търгове</Link></li>
           </ul>
         </div>
       </div>

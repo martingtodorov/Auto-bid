@@ -19,6 +19,10 @@ import WatchlistPage from "./pages/WatchlistPage";
 import MyListingsPage from "./pages/MyListingsPage";
 import ProfilePage from "./pages/ProfilePage";
 import AccountSettingsPage from "./pages/AccountSettingsPage";
+import FAQPage from "./pages/FAQPage";
+import FeesPage from "./pages/FeesPage";
+import ContactsPage from "./pages/ContactsPage";
+import TermsPage from "./pages/TermsPage";
 
 function App() {
   return (
@@ -43,6 +47,10 @@ function App() {
               <Route path="/my-listings" element={<MyListingsPage />} />
               <Route path="/profile/:userId" element={<ProfilePage />} />
               <Route path="/settings" element={<AccountSettingsPage />} />
+              <Route path="/faq" element={<FAQPage />} />
+              <Route path="/fees" element={<FeesPage />} />
+              <Route path="/contacts" element={<ContactsPage />} />
+              <Route path="/terms" element={<TermsPage />} />
               <Route path="*" element={<LandingPage />} />
             </Routes>
           </div>

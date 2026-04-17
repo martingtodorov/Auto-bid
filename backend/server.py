@@ -188,6 +188,13 @@ class ProfileUpdate(BaseModel):
     phone: Optional[str] = None
     sms_opt_in: Optional[bool] = None
 
+class AdminUserUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    is_verified_dealer: Optional[bool] = None
+    role: Optional[str] = None  # "user" or "admin"
+
 class SavedSearchCreate(BaseModel):
     name: str
     filters: dict
@@ -383,6 +390,13 @@ async def get_auction(auction_id: str, request: Request):
     if not a:
         raise HTTPException(status_code=404, detail="Търгът не е намерен")
     public = _public_auction(a, viewer)
+    # Enrich with seller verified status (platform listings are considered verified)
+    seller_id = a.get("seller_id")
+    if seller_id == "platform":
+        public["seller_is_verified_dealer"] = True
+    else:
+        seller = await db.users.find_one({"id": seller_id}, {"_id": 0, "is_verified_dealer": 1}) if seller_id else None
+        public["seller_is_verified_dealer"] = bool(seller and seller.get("is_verified_dealer"))
     # Reveal full VIN to: seller, admin, or anyone who placed a bid on this auction
     if a.get("vin") and viewer:
         is_privileged = viewer.get("role") == "admin" or viewer.get("id") == a.get("seller_id")
@@ -1078,6 +1092,68 @@ async def admin_restore_auction(auction_id: str, _admin: dict = Depends(require_
     new_status = "live" if end > datetime.now(timezone.utc) else "ended"
     await db.auctions.update_one({"id": auction_id}, {"$set": {"status": new_status}})
     return {"ok": True, "status": new_status}
+
+
+# ---- Admin: users ----
+@api.get("/admin/users")
+async def admin_list_users(q: Optional[str] = None, _admin: dict = Depends(require_admin)):
+    query = {}
+    if q:
+        import re
+        rx = {"$regex": re.escape(q.strip()), "$options": "i"}
+        query["$or"] = [{"name": rx}, {"email": rx}, {"phone": rx}]
+    items = await db.users.find(query, {"_id": 0, "password_hash": 0}).sort("created_at", -1).limit(500).to_list(500)
+    return items
+
+
+@api.get("/admin/users/{user_id}")
+async def admin_get_user(user_id: str, _admin: dict = Depends(require_admin)):
+    u = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+    if not u:
+        raise HTTPException(status_code=404, detail="Потребителят не е намерен")
+    return u
+
+
+@api.put("/admin/users/{user_id}")
+async def admin_update_user(user_id: str, payload: AdminUserUpdate, admin_user: dict = Depends(require_admin)):
+    u = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not u:
+        raise HTTPException(status_code=404, detail="Потребителят не е намерен")
+    update = {}
+    if payload.name is not None:
+        update["name"] = payload.name.strip()
+    if payload.email is not None:
+        new_email = payload.email.lower().strip()
+        if new_email != u["email"]:
+            existing = await db.users.find_one({"email": new_email, "id": {"$ne": user_id}})
+            if existing:
+                raise HTTPException(status_code=400, detail="Имейлът вече се използва от друг потребител")
+            update["email"] = new_email
+    if payload.phone is not None:
+        phone = payload.phone.strip()
+        if phone and not phone.startswith("+"):
+            raise HTTPException(status_code=400, detail="Телефонът трябва да е в международен формат (+359...)")
+        update["phone"] = phone
+    if payload.is_verified_dealer is not None:
+        update["is_verified_dealer"] = bool(payload.is_verified_dealer)
+    if payload.role is not None:
+        if payload.role not in ("user", "admin"):
+            raise HTTPException(status_code=400, detail="Невалидна роля")
+        # Protect: prevent admin from demoting themselves
+        if user_id == admin_user["id"] and payload.role != "admin":
+            raise HTTPException(status_code=400, detail="Не можете да смените собствената си роля")
+        update["role"] = payload.role
+
+    if update:
+        await db.users.update_one({"id": user_id}, {"$set": update})
+        # Also propagate name to their auctions.seller_name
+        if "name" in update:
+            await db.auctions.update_many({"seller_id": user_id}, {"$set": {"seller_name": update["name"]}})
+
+    fresh = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+    return {"ok": True, "user": fresh}
+
+
 
 
 # ---- Post-auction reserve-not-met flow ----

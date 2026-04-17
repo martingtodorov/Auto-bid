@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Navigate, Link } from "react-router-dom";
-import { Check, X, Clock, AlertCircle, DollarSign, Archive, Ban, Edit3, Trash2, RotateCcw, Search, List } from "lucide-react";
+import { Check, X, Clock, AlertCircle, DollarSign, Archive, Ban, Edit3, Trash2, RotateCcw, Search, List, Users } from "lucide-react";
 import { useAuth, formatError } from "../lib/auth";
 import { api, formatEUR, formatKM } from "../lib/apiClient";
 import AdminEditModal from "../components/AdminEditModal";
+import AdminUsersTab from "../components/AdminUsersTab";
 
 const STATUS_LABELS = {
   pending: "Очаква",
@@ -115,6 +116,7 @@ export default function AdminPage() {
   const tabs = [
     { k: "pending", label: `Очакващи (${pending.length})`, icon: Clock },
     { k: "all", label: `Всички обяви (${allListings.length})`, icon: List },
+    { k: "users", label: "Потребители", icon: Users },
     { k: "sold", label: `Продадени (${sold.length})`, icon: Archive },
   ];
 
@@ -289,6 +291,8 @@ export default function AdminPage() {
             )}
           </div>
         )}
+
+        {tab === "users" && <AdminUsersTab currentUserId={user?.id} />}
 
         {tab === "sold" && (
           <div className="mt-10">
