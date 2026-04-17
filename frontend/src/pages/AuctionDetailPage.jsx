@@ -6,6 +6,7 @@ import { useAuth, formatError } from "../lib/auth";
 import PreauthModal from "../components/PreauthModal";
 import BiddingCreditModal from "../components/BiddingCreditModal";
 import AuctionCard from "../components/AuctionCard";
+import NegotiationPortal from "../components/NegotiationPortal";
 import { setPageMeta, resetPageMeta } from "../lib/seo";
 
 export default function AuctionDetailPage() {
@@ -31,19 +32,43 @@ export default function AuctionDetailPage() {
   const [related, setRelated] = useState([]);
   const [credit, setCredit] = useState(null);
   const [showCredit, setShowCredit] = useState(false);
+  const [nextBid, setNextBid] = useState({ min_next_eur: 0, buyer_fee_eur: 150, step_eur: 100 });
   const wsRef = useRef(null);
+
+  // Client-side buyer fee for preview (mirrors backend _buyer_fee)
+  const buyerFeeFor = (amount) => {
+    const n = Number(amount) || 0;
+    return Math.min(4000, Math.max(150, Math.round(n * 0.05)));
+  };
+
+  // Variable bid step (mirrors backend _bid_step)
+  const bidStepFor = (price) => {
+    const p = Number(price) || 0;
+    if (p < 1000) return 50;
+    if (p < 2500) return 100;
+    if (p < 5000) return 150;
+    if (p < 10000) return 250;
+    if (p < 20000) return 500;
+    if (p < 50000) return 1000;
+    if (p < 100000) return 2000;
+    return 2500;
+  };
 
   const load = useCallback(async () => {
     try {
       const ra = await api.get(`/auctions/${id}`);
-      const [rb, rc] = await Promise.all([
+      const [rb, rc, rn] = await Promise.all([
         api.get(`/auctions/${id}/bids`).catch(() => ({ data: [] })),
         api.get(`/auctions/${id}/comments`).catch(() => ({ data: [] })),
+        api.get(`/auctions/${id}/next-bid`).catch(() => ({ data: null })),
       ]);
       setA(ra.data);
       setBids(rb.data);
       setComments(rc.data);
-      setBidAmount(String(Math.floor(ra.data.current_bid_eur) + 100));
+      const step = bidStepFor(ra.data.current_bid_eur);
+      const minNext = rn.data?.min_next_eur || (Math.floor(ra.data.current_bid_eur) + step);
+      setNextBid(rn.data || { min_next_eur: minNext, buyer_fee_eur: buyerFeeFor(minNext), step_eur: step });
+      setBidAmount(String(Math.floor(minNext)));
     } catch (e) {
       if (e?.response?.status === 404) setNotFound(true);
       else console.error(e);
@@ -132,12 +157,17 @@ export default function AuctionDetailPage() {
             if (prev.some((b) => b.id === msg.bid.id)) return prev;
             return [{ ...msg.bid, user_name: msg.high_bidder_name, amount_eur: msg.current_bid_eur }, ...prev];
           });
-          setBidAmount((cur) => String(Math.max(Math.floor(msg.current_bid_eur) + 100, Number(cur || 0))));
+          const step = bidStepFor(msg.current_bid_eur);
+          const newMin = Math.floor(msg.current_bid_eur) + step;
+          setNextBid({ min_next_eur: newMin, buyer_fee_eur: buyerFeeFor(newMin), step_eur: step });
+          setBidAmount((cur) => String(Math.max(newMin, Number(cur || 0))));
         } else if (msg.type === "comment") {
           setComments((prev) => {
             if (prev.some((c) => c.id === msg.comment.id)) return prev;
             return [msg.comment, ...prev];
           });
+        } else if (msg.type === "comment_deleted") {
+          setComments((prev) => prev.map((c) => c.id === msg.comment.id ? { ...c, ...msg.comment } : c));
         }
       } catch (e) {}
     };
@@ -160,7 +190,7 @@ export default function AuctionDetailPage() {
     setError("");
     if (!user) { navigate("/login?next=/auctions/" + id); return; }
     const amt = Number(bidAmount);
-    const min = Math.floor(a.current_bid_eur) + 100;
+    const min = nextBid.min_next_eur || (Math.floor(a.current_bid_eur) + bidStepFor(a.current_bid_eur));
     if (!amt || amt < min) { setError(`Минималната следваща наддавка е €${min}`); return; }
     // If credit covers this bid — skip preauth modal and post directly
     if (credit && Number(credit.max_amount_eur) >= amt) {
@@ -235,8 +265,19 @@ export default function AuctionDetailPage() {
   ];
 
   const isLive = a.status === "live";
-  const preauthPreview = Math.round((Number(bidAmount) || 0) * 0.02);
-  const hasPendingCounterForMe = a.counter_status === "pending" && a.counter_offer_to === user?.id;
+  const preauthPreview = buyerFeeFor(Number(bidAmount));
+  const hasPendingCounterForMe = false;  // superseded by NegotiationPortal
+  const isAdmin = user?.role === "admin";
+
+  const deleteComment = async (commentId) => {
+    if (!window.confirm("Да се премахне ли този коментар?")) return;
+    try {
+      await api.delete(`/admin/comments/${commentId}`);
+      setComments((prev) => prev.map((c) => c.id === commentId ? { ...c, deleted: true, text: "Коментарът е премахнат поради неконструктивно съдържание." } : c));
+    } catch (e) {
+      alert(formatError(e));
+    }
+  };
 
   return (
     <main className="rule-b" data-testid="auction-detail-page">
@@ -333,6 +374,10 @@ export default function AuctionDetailPage() {
               <DescriptionWithInteriorShots description={a.description} interiorImages={a.images_interior || []} />
             </div>
 
+            {a.status === "reserve_not_met" && (
+              <NegotiationPortal auctionId={id} auction={a} />
+            )}
+
             <div className="mt-14">
               <div className="overline text-[hsl(var(--accent))]">История на търга</div>
               <h2 className="font-serif text-2xl lg:text-3xl mt-2">Наддавания ({bids.length})</h2>
@@ -365,7 +410,6 @@ export default function AuctionDetailPage() {
               <h2 className="font-serif text-2xl lg:text-3xl mt-2 flex items-center gap-3">
                 <MessageCircle size={22} /> Коментари ({comments.length})
               </h2>
-
               <div className="mt-5 rounded-card border border-[hsl(var(--line))] p-4">
                 <textarea
                   value={commentText}
@@ -385,16 +429,32 @@ export default function AuctionDetailPage() {
 
               <div className="mt-6 space-y-5">
                 {comments.map((c) => (
-                  <div key={c.id} className="rounded-card border border-[hsl(var(--line))] p-5" data-testid={`comment-${c.id}`}>
-                    <div className="flex items-center justify-between">
-                      {c.user_id ? (
-                        <Link to={`/profile/${c.user_id}`} className="text-sm font-semibold hover:text-[hsl(var(--accent))]">{c.user_name}</Link>
-                      ) : (
-                        <div className="text-sm font-semibold">{c.user_name}</div>
-                      )}
-                      <div className="text-xs text-[hsl(var(--ink-muted))] font-mono">{new Date(c.created_at).toLocaleString("bg-BG")}</div>
+                  <div key={c.id} className={`rounded-card border border-[hsl(var(--line))] p-5 ${c.deleted ? "bg-[hsl(var(--surface))] opacity-70" : ""}`} data-testid={`comment-${c.id}`}>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {c.user_id && !c.deleted ? (
+                          <Link to={`/profile/${c.user_id}`} className="text-sm font-semibold hover:text-[hsl(var(--accent))]">{c.user_name}</Link>
+                        ) : (
+                          <div className="text-sm font-semibold">{c.deleted ? "—" : c.user_name}</div>
+                        )}
+                        {c.is_owner && !c.deleted && (
+                          <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[hsl(var(--accent))] text-white" data-testid={`comment-owner-badge-${c.id}`}>Продавач</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <div className="text-xs text-[hsl(var(--ink-muted))] font-mono">{new Date(c.created_at).toLocaleString("bg-BG")}</div>
+                        {isAdmin && !c.deleted && (
+                          <button
+                            onClick={() => deleteComment(c.id)}
+                            className="text-xs text-[hsl(var(--danger))] hover:underline"
+                            data-testid={`admin-delete-comment-${c.id}`}
+                          >
+                            Изтрий
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <p className="mt-3 text-sm leading-relaxed">{c.text}</p>
+                    <p className={`mt-3 text-sm leading-relaxed ${c.deleted ? "italic text-[hsl(var(--ink-muted))]" : ""}`}>{c.text}</p>
                   </div>
                 ))}
               </div>
@@ -421,11 +481,7 @@ export default function AuctionDetailPage() {
                     : a.status === "ended" ? <span className="pill pill-sold">Приключил</span>
                     : t.urgent ? <span className="pill pill-ending">{t.label}</span>
                     : <span className="pill pill-live">{t.label}</span>}
-                  {a.has_reserve && (
-                    a.reserve_met
-                      ? <span className="pill pill-live" data-testid="reserve-met">Резервът е достигнат</span>
-                      : <span className="pill" data-testid="with-reserve">С резерв</span>
-                  )}
+                  {a.has_reserve && <span className="pill" data-testid="with-reserve">С резерв</span>}
                   {a.has_reserve === false && <span className="pill" data-testid="no-reserve">Без резерв</span>}
                   <span className="overline text-[hsl(var(--ink-muted))] ml-auto">{a.bid_count || 0} наддавания</span>
                 </div>
@@ -437,13 +493,13 @@ export default function AuctionDetailPage() {
                   {a.high_bidder_name && (
                     <div className="mt-2 text-xs text-[hsl(var(--ink-muted))]">Водещ: <span className="text-[hsl(var(--ink))]">{a.high_bidder_name}</span></div>
                   )}
-                  {a.has_reserve && !a.reserve_met && isLive && (
+                  {a.has_reserve && a.status === "reserve_not_met" && (
                     <div className="mt-3 text-xs text-[hsl(var(--ink-muted))] flex items-center gap-1.5" data-testid="reserve-not-met">
                       <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--ink-muted))]"></span>
-                      Резервната цена все още не е достигната
+                      Резервната цена не е достигната
                     </div>
                   )}
-                  {a.has_reserve && a.reserve_met && (
+                  {a.has_reserve && a.reserve_met === true && (a.status === "sold" || a.status === "ended") && (
                     <div className="mt-3 text-xs text-[hsl(var(--accent))] flex items-center gap-1.5" data-testid="reserve-reached">
                       <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--accent))]"></span>
                       Резервната цена е достигната
@@ -457,7 +513,8 @@ export default function AuctionDetailPage() {
                     <div className="flex gap-2">
                       <input
                         type="number"
-                        min={Math.floor(a.current_bid_eur) + 100}
+                        min={nextBid.min_next_eur}
+                        step={nextBid.step_eur}
                         value={bidAmount}
                         onChange={(e) => setBidAmount(e.target.value)}
                         className="flex-1 border border-[hsl(var(--line))] h-12 px-3 text-base"
@@ -467,13 +524,13 @@ export default function AuctionDetailPage() {
                         {placing ? "…" : "Наддай"}
                       </button>
                     </div>
-                    <p className="text-xs text-[hsl(var(--ink-muted))] mt-2">Минимум €{Math.floor(a.current_bid_eur) + 100}</p>
+                    <p className="text-xs text-[hsl(var(--ink-muted))] mt-2">Минимум €{nextBid.min_next_eur?.toLocaleString("bg-BG")} · стъпка €{nextBid.step_eur?.toLocaleString("bg-BG")}</p>
 
                     <div className="mt-4 p-3 rounded-card bg-[hsl(var(--accent-soft))] border border-[hsl(var(--accent))]/20 flex items-start gap-2">
                       <Shield size={14} className="text-[hsl(var(--accent))] shrink-0 mt-0.5" />
                       <div className="text-xs leading-relaxed">
-                        <div className="font-semibold text-[hsl(var(--accent-ink))]">Pre-authorization {formatEUR(preauthPreview)}</div>
-                        <div className="text-[hsl(var(--ink-muted))] mt-0.5">2% се блокират върху картата. При победа се прилагат като buyer's premium; иначе се освобождават изцяло.</div>
+                        <div className="font-semibold text-[hsl(var(--accent-ink))]">Такса на купувача {formatEUR(preauthPreview)}</div>
+                        <div className="text-[hsl(var(--ink-muted))] mt-0.5">5% от наддаването (мин. €150, макс. €4 000) — блокирани върху картата. При загуба се освобождават изцяло.</div>
                       </div>
                     </div>
 

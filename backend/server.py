@@ -189,6 +189,24 @@ class CounterOfferCreate(BaseModel):
 class NegotiationRespond(BaseModel):
     accept: bool
 
+# --- BaT-style post-auction negotiation (reserve-not-met) ---
+class NegotiationOpening(BaseModel):
+    # Seller's opening offer OR decision to pass.
+    price_eur: Optional[float] = None
+    decline: bool = False
+
+class NegotiationResponse(BaseModel):
+    # Buyer's response.
+    action: str  # "accept" | "counter" | "decline"
+    price_eur: Optional[float] = None
+
+class NegotiationFinal(BaseModel):
+    # Seller's final step (only if buyer countered).
+    action: str  # "accept" | "decline"
+
+class NegotiationMessage(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
 class ProfileUpdate(BaseModel):
     phone: Optional[str] = None
     sms_opt_in: Optional[bool] = None
@@ -252,6 +270,32 @@ async def me(user: dict = Depends(get_current_user)):
 
 
 # ---- Auction helpers ----
+def _bid_step(current_price: float) -> float:
+    """Variable bid increment based on current bid price (BaT-style).
+    €1,000-€2,500 → €100; €2,500-€5,000 → €150; €5,000-€10,000 → €250;
+    €10,000-€20,000 → €500; €20,000-€50,000 → €1,000;
+    €50,000-€100,000 → €2,000; above €100,000 → €2,500.
+    Below €1,000 we use €50 (reasonable small-car floor).
+    """
+    p = float(current_price or 0)
+    if p < 1000:     return 50.0
+    if p < 2500:     return 100.0
+    if p < 5000:     return 150.0
+    if p < 10000:    return 250.0
+    if p < 20000:    return 500.0
+    if p < 50000:    return 1000.0
+    if p < 100000:   return 2000.0
+    return 2500.0
+
+
+def _buyer_fee(amount_eur: float) -> float:
+    """Buyer's premium = 5% of winning/current bid, min €150, max €4,000 per transaction."""
+    fee = round(float(amount_eur or 0) * 0.05, 2)
+    if fee < 150.0: fee = 150.0
+    if fee > 4000.0: fee = 4000.0
+    return fee
+
+
 def _auction_status(a: dict) -> str:
     stored = a.get("status")
     if stored in ("sold", "rejected", "pending", "withdrawn", "reserve_not_met", "ended", "removed"):
@@ -298,9 +342,15 @@ def _public_auction(a: dict, viewer: Optional[dict] = None) -> dict:
     a["status"] = _auction_status(a)
     reserve = a.get("reserve_eur")
     is_owner_or_admin = viewer and (viewer.get("id") == a.get("seller_id") or viewer.get("role") == "admin")
+    # Reserve outcome is only revealed to the public once the auction has ended.
+    ended_states = ("sold", "ended", "reserve_not_met")
+    show_reserve_outcome = a["status"] in ended_states
     if reserve is not None and reserve > 0:
         a["has_reserve"] = True
-        a["reserve_met"] = float(a.get("current_bid_eur", 0)) >= float(reserve)
+        if show_reserve_outcome or is_owner_or_admin:
+            a["reserve_met"] = float(a.get("current_bid_eur", 0)) >= float(reserve)
+        else:
+            a["reserve_met"] = None
         if not is_owner_or_admin:
             a.pop("reserve_eur", None)
     else:
@@ -875,6 +925,13 @@ async def release_my_credit(auction_id: str, user: dict = Depends(get_current_us
 
 @api.post("/auctions/{auction_id}/bids")
 async def place_bid(auction_id: str, payload: BidCreate, user: dict = Depends(get_current_user)):
+    """
+    Direct bidding (BaT-style):
+      • payload.amount_eur becomes the visible bid immediately.
+      • Minimum next bid = current + variable step (see _bid_step).
+      • Hard anti-sniping: any bid in final 2 min resets timer to 2 min.
+      • Card hold = buyer fee (5% of bid, min €150, max €4,000).
+    """
     a = await db.auctions.find_one({"id": auction_id})
     if not a:
         raise HTTPException(status_code=404, detail="Търгът не е намерен")
@@ -882,90 +939,84 @@ async def place_bid(auction_id: str, payload: BidCreate, user: dict = Depends(ge
         raise HTTPException(status_code=400, detail="Търгът не е активен")
     if a.get("seller_id") == user["id"]:
         raise HTTPException(status_code=400, detail="Не можете да наддавате за собствен автомобил")
-    min_next = float(a["current_bid_eur"]) + 100
-    if payload.amount_eur < min_next:
+
+    current = float(a["current_bid_eur"])
+    step = _bid_step(current)
+    min_next = current + step
+    amount = float(payload.amount_eur)
+    if amount < min_next:
         raise HTTPException(status_code=400, detail=f"Минималната следваща наддавка е €{int(min_next)}")
 
     now = datetime.now(timezone.utc)
 
-    # Check if user has active bidding credit covering this bid amount
-    credit = await db.bidding_credits.find_one({
-        "auction_id": auction_id,
-        "user_id": user["id"],
-        "status": "authorized",
-    }, {"_id": 0})
-    credit_covers = bool(credit and float(credit.get("max_amount_eur", 0)) >= float(payload.amount_eur))
-
+    # Bidding credit or fresh preauth?
+    credit = await db.bidding_credits.find_one(
+        {"auction_id": auction_id, "user_id": user["id"], "status": "authorized"},
+        {"_id": 0},
+    )
+    credit_covers = bool(credit and float(credit.get("max_amount_eur", 0)) >= amount)
     if not credit_covers and not payload.payment_method_id:
         raise HTTPException(status_code=402, detail="Необходима е валидна карта за наддаване")
 
     bid_id = str(uuid.uuid4())
-    preauth_amount = round(float(payload.amount_eur) * 0.02, 2)
+    fee_amount = _buyer_fee(amount)   # card hold = buyer fee
 
-    # Release current user's previous active preauth(s) on this auction
-    # — но само ако НЕ ползваме credit (credit покрива всички наддавания)
+    # Release this user's previous active preauths on this auction (only if not credit)
     if not credit_covers:
         await db.bids.update_many(
             {"auction_id": auction_id, "user_id": user["id"], "preauth_status": "authorized"},
             {"$set": {"preauth_status": "released", "preauth_released_at": now.isoformat()}},
         )
 
-    # Release previous high bidder (different user) preauth + email
-    prev_high_bidder_id = a.get("high_bidder_id")
-    if prev_high_bidder_id and prev_high_bidder_id != user["id"]:
+    # Release previous leader's preauth/credit + email them
+    prev_high = a.get("high_bidder_id")
+    if prev_high and prev_high != user["id"]:
         await db.bids.update_many(
-            {"auction_id": auction_id, "user_id": prev_high_bidder_id, "preauth_status": "authorized"},
+            {"auction_id": auction_id, "user_id": prev_high, "preauth_status": "authorized"},
             {"$set": {"preauth_status": "released", "preauth_released_at": now.isoformat()}},
         )
-        # Also release their bidding credit if any
         await db.bidding_credits.update_many(
-            {"auction_id": auction_id, "user_id": prev_high_bidder_id, "status": "authorized"},
+            {"auction_id": auction_id, "user_id": prev_high, "status": "authorized"},
             {"$set": {"status": "released", "released_at": now.isoformat()}},
         )
-        prev_user = await db.users.find_one({"id": prev_high_bidder_id}, {"_id": 0})
-        if prev_user:
+        prev_user = await db.users.find_one({"id": prev_high}, {"_id": 0})
+        if prev_user and prev_user.get("email"):
             try:
-                await email_outbid(prev_user["email"], prev_user["name"], a["title"], auction_id, float(payload.amount_eur))
+                await email_outbid(prev_user["email"], prev_user["name"], a["title"], auction_id, amount)
             except Exception as e:
                 logger.error("email_outbid failed: %s", e)
 
-    # Build the bid. If credit covers it — link to the credit's preauth instead of creating a new one.
     if credit_covers:
         bid_doc = {
-            "id": bid_id,
-            "auction_id": auction_id,
-            "user_id": user["id"],
-            "user_name": user["name"],
-            "amount_eur": float(payload.amount_eur),
+            "id": bid_id, "auction_id": auction_id,
+            "user_id": user["id"], "user_name": user["name"],
+            "amount_eur": amount,
             "created_at": now.isoformat(),
-            "preauth_id": credit["preauth_id"],
-            "preauth_status": "credit_backed",  # not a fresh transaction
-            "preauth_amount_eur": preauth_amount,
-            "card_last4": credit.get("card_last4"),
-            "credit_id": credit["id"],
+            "preauth_id": credit["preauth_id"], "preauth_status": "credit_backed",
+            "preauth_amount_eur": fee_amount,
+            "card_last4": credit.get("card_last4"), "credit_id": credit["id"],
         }
     else:
         bid_doc = {
-            "id": bid_id,
-            "auction_id": auction_id,
-            "user_id": user["id"],
-            "user_name": user["name"],
-            "amount_eur": float(payload.amount_eur),
+            "id": bid_id, "auction_id": auction_id,
+            "user_id": user["id"], "user_name": user["name"],
+            "amount_eur": amount,
             "created_at": now.isoformat(),
             "preauth_id": f"mock_pi_{uuid.uuid4().hex[:16]}",
             "preauth_status": "authorized",
-            "preauth_amount_eur": preauth_amount,
+            "preauth_amount_eur": fee_amount,
             "card_last4": payload.payment_method_id[-4:] if payload.payment_method_id else None,
         }
     await db.bids.insert_one(bid_doc)
 
     ends_at = datetime.fromisoformat(a["ends_at"])
     update = {
-        "current_bid_eur": float(payload.amount_eur),
+        "current_bid_eur": amount,
         "bid_count": int(a.get("bid_count", 0)) + 1,
         "high_bidder_id": user["id"],
         "high_bidder_name": user["name"],
     }
+    # Hard anti-sniping: any bid in the final 2 min resets the clock to 2 min from now.
     if (ends_at - now).total_seconds() < 120:
         update["ends_at"] = (now + timedelta(minutes=2)).isoformat()
     await db.auctions.update_one({"id": auction_id}, {"$set": update})
@@ -974,28 +1025,27 @@ async def place_bid(auction_id: str, payload: BidCreate, user: dict = Depends(ge
     await hub.broadcast(auction_id, {
         "type": "bid",
         "auction_id": auction_id,
-        "current_bid_eur": float(payload.amount_eur),
+        "current_bid_eur": amount,
         "high_bidder_name": user["name"],
         "bid_count": update["bid_count"],
         "ends_at": update.get("ends_at", a["ends_at"]),
-        "bid": {k: public_bid.get(k) for k in ("id", "user_name", "amount_eur", "created_at")},
+        "bid": {k: public_bid.get(k) for k in ("id", "user_id", "user_name", "amount_eur", "created_at")},
     })
 
-    # Notify seller (if real seller, not platform, and not self-bid already blocked)
+    # Notify seller on new bid
     seller_id = a.get("seller_id")
     if seller_id and seller_id != "platform":
         seller = await db.users.find_one({"id": seller_id}, {"_id": 0})
         if seller and seller.get("email"):
             try:
-                await email_seller_new_bid(seller["email"], seller.get("name", ""), a["title"], auction_id, user["name"], float(payload.amount_eur), update["bid_count"])
+                await email_seller_new_bid(seller["email"], seller.get("name", ""), a["title"], auction_id, user["name"], amount, update["bid_count"])
             except Exception as e:
                 logger.error("email_seller_new_bid failed: %s", e)
 
-    # FOMO SMS blast when auction enters final 5 minutes
+    # FOMO SMS blast in final 5 minutes
     new_ends_at = datetime.fromisoformat(update.get("ends_at", a["ends_at"]))
     seconds_left = (new_ends_at - now).total_seconds()
     if seconds_left <= 300:
-        # Recipients: unique previous bidders (except current) + watchers, who opted in
         recipient_ids: set = set()
         async for b in db.bids.find({"auction_id": auction_id}, {"_id": 0, "user_id": 1}).limit(500):
             if b["user_id"] != user["id"]:
@@ -1010,7 +1060,7 @@ async def place_bid(auction_id: str, payload: BidCreate, user: dict = Depends(ge
             ).to_list(500)
             mins = max(1, int(seconds_left // 60))
             app_url = os.environ.get("APP_URL", "")
-            body = f"AutoBid.bg: Нова наддавка €{int(payload.amount_eur):,} за {a['title'][:50]}. Остават {mins}м. {app_url}/auctions/{auction_id}"
+            body = f"AutoBid.bg: Нова наддавка €{int(amount):,} за {a['title'][:50]}. Остават {mins}м. {app_url}/auctions/{auction_id}"
             for r in recipients:
                 if r.get("phone"):
                     try:
@@ -1018,14 +1068,49 @@ async def place_bid(auction_id: str, payload: BidCreate, user: dict = Depends(ge
                     except Exception as e:
                         logger.error("send_sms failed: %s", e)
 
-    return {"ok": True, "bid": public_bid, "preauth_amount_eur": preauth_amount}
+    return {"ok": True, "bid": public_bid, "preauth_amount_eur": fee_amount, "buyer_fee_eur": fee_amount}
+
+
+@api.get("/auctions/{auction_id}/next-bid")
+async def next_bid_info(auction_id: str):
+    """Returns the minimum next valid bid amount and the estimated buyer fee for it."""
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0, "current_bid_eur": 1, "ends_at": 1, "status": 1})
+    if not a:
+        raise HTTPException(status_code=404, detail="Търгът не е намерен")
+    current = float(a.get("current_bid_eur", 0))
+    step = _bid_step(current)
+    min_next = current + step
+    return {
+        "current_bid_eur": current,
+        "step_eur": step,
+        "min_next_eur": min_next,
+        "buyer_fee_eur": _buyer_fee(min_next),
+    }
+
+
+
 
 
 # ---- Comments ----
+DELETED_COMMENT_TEXT = "Коментарът е премахнат поради неконструктивно съдържание."
+
+
+def _public_comment(c: dict, auction: dict) -> dict:
+    """Mark owner badge + replace text on deleted comments."""
+    d = {k: v for k, v in c.items() if k != "_id"}
+    d["is_owner"] = bool(auction.get("seller_id") and d.get("user_id") == auction.get("seller_id"))
+    if d.get("deleted"):
+        d["text"] = DELETED_COMMENT_TEXT
+    return d
+
+
 @api.get("/auctions/{auction_id}/comments")
 async def list_comments(auction_id: str):
-    items = await db.comments.find({"auction_id": auction_id}, {"_id": 0}).sort("created_at", -1).limit(100).to_list(100)
-    return items
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0, "seller_id": 1})
+    if not a:
+        raise HTTPException(status_code=404, detail="Търгът не е намерен")
+    items = await db.comments.find({"auction_id": auction_id}, {"_id": 0}).sort("created_at", -1).limit(200).to_list(200)
+    return [_public_comment(c, a) for c in items]
 
 @api.post("/auctions/{auction_id}/comments")
 async def add_comment(auction_id: str, payload: CommentCreate, user: dict = Depends(get_current_user)):
@@ -1038,10 +1123,11 @@ async def add_comment(auction_id: str, payload: CommentCreate, user: dict = Depe
         "user_id": user["id"],
         "user_name": user["name"],
         "text": payload.text.strip(),
+        "deleted": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.comments.insert_one(doc)
-    public = {k: v for k, v in doc.items() if k != "_id"}
+    public = _public_comment(doc, a)
     await hub.broadcast(auction_id, {"type": "comment", "comment": public})
 
     # Notify seller (unless seller is commenting on own auction or is platform)
@@ -1063,6 +1149,26 @@ async def require_admin(user: dict = Depends(get_current_user)):
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Само администратори")
     return user
+
+
+@api.delete("/admin/comments/{comment_id}")
+async def admin_delete_comment_endpoint(comment_id: str, admin: dict = Depends(require_admin)):
+    """Soft-delete a comment. Content is replaced with a moderation notice."""
+    c = await db.comments.find_one({"id": comment_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Коментарът не е намерен")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.comments.update_one(
+        {"id": comment_id},
+        {"$set": {"deleted": True, "deleted_at": now, "deleted_by": admin["id"]}},
+    )
+    a = await db.auctions.find_one({"id": c["auction_id"]}, {"_id": 0, "seller_id": 1})
+    if a:
+        updated = {**c, "deleted": True, "deleted_at": now, "deleted_by": admin["id"]}
+        public = _public_comment(updated, a)
+        await hub.broadcast(c["auction_id"], {"type": "comment_deleted", "comment": public})
+    return {"ok": True}
+
 
 @api.get("/admin/pending")
 async def admin_pending(_admin: dict = Depends(require_admin)):
@@ -1813,6 +1919,239 @@ async def respond_counter_offer(auction_id: str, payload: NegotiationRespond, us
             "status": "ended",
         }})
         return {"ok": True, "status": "ended"}
+
+
+# ---- Post-auction negotiation (reserve-not-met) ----
+# Flow:
+#   awaiting_seller_opening (24h) → seller offers price OR declines
+#   awaiting_buyer_response  (24h) → buyer accepts / counters / declines
+#   awaiting_seller_final    (24h) → seller accepts / declines (only if buyer countered)
+#   → accepted / declined / expired
+NEG_WINDOW = timedelta(hours=24)
+NEG_OPEN_STATES = {"awaiting_seller_opening", "awaiting_buyer_response", "awaiting_seller_final"}
+
+
+def _neg_public(n: dict, viewer_id: Optional[str] = None) -> dict:
+    """Strip Mongo _id + normalize for client."""
+    d = {k: v for k, v in n.items() if k != "_id"}
+    # Deadline metadata
+    if d.get("deadline_at"):
+        try:
+            dl = datetime.fromisoformat(d["deadline_at"])
+            d["seconds_left"] = max(0, int((dl - datetime.now(timezone.utc)).total_seconds()))
+        except Exception:
+            d["seconds_left"] = 0
+    return d
+
+
+async def _ensure_negotiation(auction_id: str) -> Optional[dict]:
+    """Auto-create a negotiation when the auction is reserve_not_met and none exists.
+    Also auto-expires if a 24h deadline has elapsed without action.
+    Returns the current negotiation doc or None.
+    """
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        return None
+    if _auction_status(a) != "reserve_not_met" or not a.get("high_bidder_id"):
+        # Nothing to negotiate
+        return await db.negotiations.find_one({"auction_id": auction_id}, {"_id": 0})
+
+    n = await db.negotiations.find_one({"auction_id": auction_id}, {"_id": 0})
+    now = datetime.now(timezone.utc)
+    if not n:
+        doc = {
+            "id": str(uuid.uuid4()),
+            "auction_id": auction_id,
+            "seller_id": a["seller_id"],
+            "seller_name": a.get("seller_name"),
+            "buyer_id": a["high_bidder_id"],
+            "buyer_name": a.get("high_bidder_name"),
+            "status": "awaiting_seller_opening",
+            "final_price_eur": None,
+            "seller_offer_eur": None,
+            "buyer_counter_eur": None,
+            "deadline_at": (now + NEG_WINDOW).isoformat(),
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+            "messages": [],
+        }
+        await db.negotiations.insert_one(doc)
+        n = {k: v for k, v in doc.items() if k != "_id"}
+        return n
+
+    # Check expiry for open states
+    if n.get("status") in NEG_OPEN_STATES and n.get("deadline_at"):
+        try:
+            dl = datetime.fromisoformat(n["deadline_at"])
+            if now >= dl:
+                await db.negotiations.update_one(
+                    {"id": n["id"]},
+                    {"$set": {"status": "expired", "updated_at": now.isoformat()}},
+                )
+                n["status"] = "expired"
+        except Exception:
+            pass
+    return n
+
+
+def _neg_require_party(n: dict, user: dict, party: str):
+    """party = 'seller' | 'buyer' | 'any'"""
+    uid = user["id"]
+    role = user.get("role")
+    if role == "admin":
+        return
+    if party == "seller" and n.get("seller_id") != uid:
+        raise HTTPException(status_code=403, detail="Само продавачът може да извърши това")
+    if party == "buyer" and n.get("buyer_id") != uid:
+        raise HTTPException(status_code=403, detail="Само купувачът може да извърши това")
+    if party == "any" and uid not in (n.get("seller_id"), n.get("buyer_id")):
+        raise HTTPException(status_code=403, detail="Нямате достъп")
+
+
+@api.get("/auctions/{auction_id}/negotiation")
+async def get_negotiation(auction_id: str, user: dict = Depends(get_current_user)):
+    n = await _ensure_negotiation(auction_id)
+    if not n:
+        raise HTTPException(status_code=404, detail="Няма активна преговаряща сесия")
+    _neg_require_party(n, user, "any")
+    return _neg_public(n, user["id"])
+
+
+@api.post("/auctions/{auction_id}/negotiation/opening")
+async def negotiation_opening(auction_id: str, payload: NegotiationOpening, user: dict = Depends(get_current_user)):
+    n = await _ensure_negotiation(auction_id)
+    if not n:
+        raise HTTPException(status_code=404, detail="Няма активна преговаряща сесия")
+    _neg_require_party(n, user, "seller")
+    if n.get("status") != "awaiting_seller_opening":
+        raise HTTPException(status_code=400, detail="Офертата вече е направена")
+
+    now = datetime.now(timezone.utc)
+    if payload.decline:
+        update = {"status": "declined", "updated_at": now.isoformat(), "closed_by": "seller"}
+    else:
+        if not payload.price_eur or payload.price_eur <= 0:
+            raise HTTPException(status_code=400, detail="Невалидна цена")
+        update = {
+            "seller_offer_eur": float(payload.price_eur),
+            "status": "awaiting_buyer_response",
+            "deadline_at": (now + NEG_WINDOW).isoformat(),
+            "updated_at": now.isoformat(),
+        }
+    await db.negotiations.update_one({"id": n["id"]}, {"$set": update})
+    refreshed = await db.negotiations.find_one({"id": n["id"]}, {"_id": 0})
+    return _neg_public(refreshed)
+
+
+@api.post("/auctions/{auction_id}/negotiation/response")
+async def negotiation_response(auction_id: str, payload: NegotiationResponse, user: dict = Depends(get_current_user)):
+    n = await _ensure_negotiation(auction_id)
+    if not n:
+        raise HTTPException(status_code=404, detail="Няма активна преговаряща сесия")
+    _neg_require_party(n, user, "buyer")
+    if n.get("status") != "awaiting_buyer_response":
+        raise HTTPException(status_code=400, detail="Не се очаква ваш отговор в момента")
+
+    now = datetime.now(timezone.utc)
+    action = payload.action
+    if action == "accept":
+        price = float(n["seller_offer_eur"])
+        await _complete_negotiation(n["auction_id"], n["id"], price, now)
+        refreshed = await db.negotiations.find_one({"id": n["id"]}, {"_id": 0})
+        return _neg_public(refreshed)
+    elif action == "counter":
+        if not payload.price_eur or payload.price_eur <= 0:
+            raise HTTPException(status_code=400, detail="Невалидна цена за контраоферта")
+        update = {
+            "buyer_counter_eur": float(payload.price_eur),
+            "status": "awaiting_seller_final",
+            "deadline_at": (now + NEG_WINDOW).isoformat(),
+            "updated_at": now.isoformat(),
+        }
+        await db.negotiations.update_one({"id": n["id"]}, {"$set": update})
+        refreshed = await db.negotiations.find_one({"id": n["id"]}, {"_id": 0})
+        return _neg_public(refreshed)
+    elif action == "decline":
+        await db.negotiations.update_one({"id": n["id"]}, {"$set": {"status": "declined", "updated_at": now.isoformat(), "closed_by": "buyer"}})
+        refreshed = await db.negotiations.find_one({"id": n["id"]}, {"_id": 0})
+        return _neg_public(refreshed)
+    else:
+        raise HTTPException(status_code=400, detail="Невалидно действие")
+
+
+@api.post("/auctions/{auction_id}/negotiation/final")
+async def negotiation_final(auction_id: str, payload: NegotiationFinal, user: dict = Depends(get_current_user)):
+    n = await _ensure_negotiation(auction_id)
+    if not n:
+        raise HTTPException(status_code=404, detail="Няма активна преговаряща сесия")
+    _neg_require_party(n, user, "seller")
+    if n.get("status") != "awaiting_seller_final":
+        raise HTTPException(status_code=400, detail="Не е ваш ред да потвърдите")
+
+    now = datetime.now(timezone.utc)
+    if payload.action == "accept":
+        price = float(n["buyer_counter_eur"])
+        await _complete_negotiation(n["auction_id"], n["id"], price, now)
+    elif payload.action == "decline":
+        await db.negotiations.update_one({"id": n["id"]}, {"$set": {"status": "declined", "updated_at": now.isoformat(), "closed_by": "seller"}})
+    else:
+        raise HTTPException(status_code=400, detail="Невалидно действие")
+    refreshed = await db.negotiations.find_one({"id": n["id"]}, {"_id": 0})
+    return _neg_public(refreshed)
+
+
+async def _complete_negotiation(auction_id: str, negotiation_id: str, price: float, now: datetime):
+    """Mark negotiation accepted + move auction to sold + apply buyer fee."""
+    buyer_fee = _buyer_fee(price)
+    await db.negotiations.update_one(
+        {"id": negotiation_id},
+        {"$set": {
+            "status": "accepted",
+            "final_price_eur": float(price),
+            "buyer_fee_eur": buyer_fee,
+            "completed_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }},
+    )
+    await db.auctions.update_one(
+        {"id": auction_id},
+        {"$set": {
+            "status": "sold",
+            "current_bid_eur": float(price),
+            "finalized_at": now.isoformat(),
+            "premium_amount_eur": buyer_fee,
+        }},
+    )
+    # Notify winner
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if a:
+        winner = await db.users.find_one({"id": a.get("high_bidder_id")}, {"_id": 0})
+        if winner and winner.get("email"):
+            try:
+                await email_won(winner["email"], winner["name"], a["title"], auction_id, float(price))
+            except Exception as e:
+                logger.error("email_won (negotiation) failed: %s", e)
+
+
+@api.post("/auctions/{auction_id}/negotiation/messages")
+async def negotiation_send_message(auction_id: str, payload: NegotiationMessage, user: dict = Depends(get_current_user)):
+    n = await _ensure_negotiation(auction_id)
+    if not n:
+        raise HTTPException(status_code=404, detail="Няма активна преговаряща сесия")
+    _neg_require_party(n, user, "any")
+    msg = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "user_name": user["name"],
+        "role": "seller" if user["id"] == n["seller_id"] else ("buyer" if user["id"] == n["buyer_id"] else "admin"),
+        "text": payload.text.strip(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.negotiations.update_one(
+        {"id": n["id"]},
+        {"$push": {"messages": msg}, "$set": {"updated_at": msg["created_at"]}},
+    )
+    return {"ok": True, "message": msg}
 
 
 # ---- Public profile ----
