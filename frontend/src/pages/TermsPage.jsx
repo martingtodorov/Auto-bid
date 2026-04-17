@@ -2,10 +2,17 @@ import React from "react";
 import InfoPage, { InfoSection } from "../components/InfoPage";
 import MarkdownBody from "../components/MarkdownBody";
 import { useSiteSettings } from "../lib/settings";
+import { useInfoPageSeo } from "../lib/useInfoPageSeo";
 
 export default function TermsPage() {
   const settings = useSiteSettings();
   const custom = settings?.terms_content?.trim();
+  useInfoPageSeo({
+    title: "Общи условия — AutoBid.bg",
+    description: "Общите условия за ползване на платформата AutoBid.bg — права, задължения на продавачи и купувачи.",
+    path: "/terms",
+    crumb: "Общи условия",
+  });
   return (
     <InfoPage overline="Правна информация" title="Общи условия">
       {custom ? (

@@ -3,10 +3,17 @@ import { Mail, Phone, MapPin, Clock } from "lucide-react";
 import InfoPage, { InfoSection } from "../components/InfoPage";
 import MarkdownBody from "../components/MarkdownBody";
 import { useSiteSettings } from "../lib/settings";
+import { useInfoPageSeo } from "../lib/useInfoPageSeo";
 
 export default function ContactsPage() {
   const settings = useSiteSettings();
   const custom = settings?.contacts_content?.trim();
+  useInfoPageSeo({
+    title: "Контакти — AutoBid.bg",
+    description: "Свържете се с екипа на AutoBid.bg — имейл contact@autobid.bg, телефон +359 2 444 2828, София.",
+    path: "/contacts",
+    crumb: "Контакти",
+  });
   return (
     <InfoPage overline="Помощ" title="Контакти">
       {custom ? <MarkdownBody>{custom}</MarkdownBody> : <DefaultContacts />}

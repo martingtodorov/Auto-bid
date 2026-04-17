@@ -8,7 +8,7 @@ import BiddingCreditModal from "../components/BiddingCreditModal";
 import AuctionCard from "../components/AuctionCard";
 import NegotiationPortal from "../components/NegotiationPortal";
 import { useSiteSettings, computeBuyerFee } from "../lib/settings";
-import { setPageMeta, resetPageMeta, buildVehicleJsonLd } from "../lib/seo";
+import { setPageMeta, resetPageMeta, buildVehicleJsonLd, buildBreadcrumbs, combineJsonLd } from "../lib/seo";
 
 export default function AuctionDetailPage() {
   const { id } = useParams();
@@ -116,12 +116,19 @@ export default function AuctionDetailPage() {
   useEffect(() => {
     if (!a) return;
     const url = window.location.href;
+    const origin = window.location.origin;
+    const breadcrumbs = buildBreadcrumbs([
+      { name: "Начало", url: origin + "/" },
+      { name: "Търгове", url: origin + "/auctions" },
+      { name: a.title, url },
+    ]);
+    const vehicle = buildVehicleJsonLd(a, url);
     setPageMeta({
       title: `${a.title} — AutoBid.bg`,
       description: a.description,
       image: a.images?.[0],
       url,
-      jsonLd: buildVehicleJsonLd(a, url),
+      jsonLd: combineJsonLd(vehicle, breadcrumbs),
     });
     return () => resetPageMeta();
   }, [a]);

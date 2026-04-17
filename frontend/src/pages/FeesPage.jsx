@@ -2,6 +2,7 @@ import React from "react";
 import InfoPage, { InfoSection } from "../components/InfoPage";
 import MarkdownBody from "../components/MarkdownBody";
 import { useSiteSettings } from "../lib/settings";
+import { useInfoPageSeo } from "../lib/useInfoPageSeo";
 
 export default function FeesPage() {
   const settings = useSiteSettings();
@@ -9,6 +10,12 @@ export default function FeesPage() {
   const pct = settings?.buyer_fee_pct ?? 2;
   const min = settings?.buyer_fee_min_eur ?? 150;
   const max = settings?.buyer_fee_max_eur ?? 4000;
+  useInfoPageSeo({
+    title: "Такси и комисионни — AutoBid.bg",
+    description: `AutoBid.bg: ${pct}% buyer's premium (мин. €${min}, макс. €${max}). Безплатно за продавачите — без скрити такси.`,
+    path: "/fees",
+    crumb: "Такси",
+  });
   return (
     <InfoPage overline="Помощ" title="Такси и комисионни">
       {custom ? (

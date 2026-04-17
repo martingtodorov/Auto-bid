@@ -4,10 +4,17 @@ import { Shield, FileCheck, Gavel, Sparkles, TrendingUp, Camera, Users, Award } 
 import InfoPage from "../components/InfoPage";
 import MarkdownBody from "../components/MarkdownBody";
 import { useSiteSettings } from "../lib/settings";
+import { useInfoPageSeo } from "../lib/useInfoPageSeo";
 
 export default function HowItWorksPage() {
   const settings = useSiteSettings();
   const custom = settings?.how_it_works_content?.trim();
+  useInfoPageSeo({
+    title: "Как работи — AutoBid.bg",
+    description: "Как работят онлайн търговете за автомобили в AutoBid.bg — от подаване на обява до финализиране на сделката.",
+    path: "/how-it-works",
+    crumb: "Как работи",
+  });
   if (custom) {
     return (
       <InfoPage overline="Прозрачни търгове" title="Как работи">

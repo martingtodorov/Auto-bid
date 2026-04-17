@@ -13,3 +13,4 @@ Disallow: /sell
 
 # Sitemap (dynamic, served by the API)
 Sitemap: https://autobid-bg.preview.emergentagent.com/api/sitemap.xml
+Sitemap: https://autobid-bg.preview.emergentagent.com/api/sitemap-images.xml

@@ -2733,7 +2733,11 @@ def _json_ld_vehicle(a: dict, url: str) -> str:
 
 @api.get("/sitemap.xml", response_class=Response)
 async def sitemap_xml(request: Request):
-    """Dynamic XML sitemap for Google/Bing indexing."""
+    """Dynamic XML sitemap for Google/Bing indexing (includes image sitemap namespace).
+    Embeds up to 20 images per auction URL in the Google Image Sitemap format, so every
+    photo is eligible for Google Image Search — big driver of traffic for car listings.
+    """
+    from html import escape as _esc
     frontend_base = (
         os.environ.get("APP_URL")
         or request.headers.get("origin")
@@ -2752,13 +2756,19 @@ async def sitemap_xml(request: Request):
     # Live + recently ended auctions (indexable)
     cursor = db.auctions.find(
         {"status": {"$in": ["live", "sold", "ended", "reserve_not_met"]}},
-        {"_id": 0, "id": 1, "updated_at": 1, "finalized_at": 1, "created_at": 1, "status": 1},
+        {
+            "_id": 0, "id": 1, "title": 1, "make": 1, "model": 1,
+            "updated_at": 1, "finalized_at": 1, "created_at": 1, "status": 1,
+            "images": 1, "images_exterior": 1, "images_interior": 1,
+            "images_wheels": 1, "images_bumper": 1,
+        },
     ).sort("created_at", -1).limit(5000)
     auctions = await cursor.to_list(5000)
 
     xml_parts = [
         '<?xml version="1.0" encoding="UTF-8"?>',
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"',
+        '        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">',
     ]
     for path, freq, pr in pages:
         xml_parts.append(
@@ -2769,11 +2779,105 @@ async def sitemap_xml(request: Request):
         lastmod = f"<lastmod>{last[:10]}</lastmod>" if last else ""
         freq = "hourly" if a.get("status") == "live" else "monthly"
         pr = "0.9" if a.get("status") == "live" else "0.5"
+        # Collect images (exterior first, then others) — limit to 20 per URL (Google's max is 1000 but small is kinder)
+        imgs = (
+            (a.get("images_exterior") or [])
+            + (a.get("images_interior") or [])
+            + (a.get("images_wheels") or [])
+            + (a.get("images_bumper") or [])
+            + (a.get("images") or [])
+        )
+        # Deduplicate + filter http(s) (skip base64 data URIs — Google can't crawl them)
+        seen = set(); clean_imgs = []
+        for img in imgs:
+            if not img or not isinstance(img, str):
+                continue
+            if img.startswith("data:"):
+                continue
+            if img in seen:
+                continue
+            seen.add(img)
+            clean_imgs.append(img)
+            if len(clean_imgs) >= 20:
+                break
+        caption = _esc((a.get("title") or "").strip()[:160])
+        image_blocks = []
+        for img in clean_imgs:
+            image_blocks.append(
+                f"<image:image><image:loc>{_esc(img)}</image:loc>"
+                + (f"<image:caption>{caption}</image:caption>" if caption else "")
+                + f"<image:title>{caption}</image:title></image:image>"
+            )
         xml_parts.append(
-            f"<url><loc>{frontend_base}/auctions/{a['id']}</loc>{lastmod}<changefreq>{freq}</changefreq><priority>{pr}</priority></url>"
+            f"<url><loc>{frontend_base}/auctions/{a['id']}</loc>"
+            + lastmod
+            + f"<changefreq>{freq}</changefreq><priority>{pr}</priority>"
+            + "".join(image_blocks)
+            + "</url>"
         )
     xml_parts.append("</urlset>")
     return Response(content="\n".join(xml_parts), media_type="application/xml; charset=utf-8")
+
+
+@api.get("/sitemap-images.xml", response_class=Response)
+async def sitemap_images_xml(request: Request):
+    """Dedicated image-only sitemap — convenient for webmasters to submit separately in GSC.
+    Mirrors the main sitemap but focuses on auctions that have real (http/https) images.
+    """
+    from html import escape as _esc
+    frontend_base = (
+        os.environ.get("APP_URL")
+        or request.headers.get("origin")
+        or str(request.base_url).rstrip("/")
+    ).rstrip("/")
+
+    cursor = db.auctions.find(
+        {"status": {"$in": ["live", "sold", "ended", "reserve_not_met"]}},
+        {
+            "_id": 0, "id": 1, "title": 1,
+            "images": 1, "images_exterior": 1, "images_interior": 1,
+            "images_wheels": 1, "images_bumper": 1,
+        },
+    ).sort("created_at", -1).limit(5000)
+    auctions = await cursor.to_list(5000)
+
+    xml = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"',
+        '        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">',
+    ]
+    for a in auctions:
+        imgs_all = (
+            (a.get("images_exterior") or [])
+            + (a.get("images_interior") or [])
+            + (a.get("images_wheels") or [])
+            + (a.get("images_bumper") or [])
+            + (a.get("images") or [])
+        )
+        seen = set(); clean = []
+        for img in imgs_all:
+            if not img or not isinstance(img, str) or img.startswith("data:"):
+                continue
+            if img in seen:
+                continue
+            seen.add(img)
+            clean.append(img)
+            if len(clean) >= 50:
+                break
+        if not clean:
+            continue
+        caption = _esc((a.get("title") or "").strip()[:160])
+        parts = [f"<url><loc>{frontend_base}/auctions/{a['id']}</loc>"]
+        for img in clean:
+            parts.append(
+                f"<image:image><image:loc>{_esc(img)}</image:loc>"
+                + (f"<image:caption>{caption}</image:caption>" if caption else "")
+                + f"<image:title>{caption}</image:title></image:image>"
+            )
+        parts.append("</url>")
+        xml.append("".join(parts))
+    xml.append("</urlset>")
+    return Response(content="\n".join(xml), media_type="application/xml; charset=utf-8")
 
 
 @api.get("/share/auction/{auction_id}", response_class=PlainTextResponse)

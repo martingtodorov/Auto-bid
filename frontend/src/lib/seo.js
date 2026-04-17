@@ -117,3 +117,43 @@ export function buildVehicleJsonLd(a, url) {
   Object.keys(data).forEach((k) => data[k] === undefined && delete data[k]);
   return data;
 }
+
+// Build a BreadcrumbList JSON-LD block. items is [{name, url}, ...] in order from root to leaf.
+export function buildBreadcrumbs(items) {
+  if (!items || !items.length) return null;
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: items.map((it, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      name: it.name,
+      item: it.url,
+    })),
+  };
+}
+
+// Build a FAQPage JSON-LD block from [{q, a}, ...]
+export function buildFaqJsonLd(qa) {
+  if (!qa || !qa.length) return null;
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: qa.map((it) => ({
+      "@type": "Question",
+      name: it.q,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: it.a,
+      },
+    })),
+  };
+}
+
+// Combine multiple JSON-LD blocks into a single array payload for the <script> tag.
+export function combineJsonLd(...blocks) {
+  const clean = blocks.filter(Boolean);
+  if (!clean.length) return null;
+  if (clean.length === 1) return clean[0];
+  return { "@context": "https://schema.org", "@graph": clean };
+}
