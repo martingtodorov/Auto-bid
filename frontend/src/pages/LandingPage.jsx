@@ -52,20 +52,6 @@ export default function LandingPage() {
                   Продай своя автомобил
                 </Link>
               </div>
-              <div className="mt-10 grid grid-cols-3 gap-6 max-w-md">
-                <div>
-                  <div className="font-serif text-3xl">€14М+</div>
-                  <div className="text-xs text-[hsl(var(--ink-muted))] mt-1">Продажби 2024</div>
-                </div>
-                <div>
-                  <div className="font-serif text-3xl">2 840</div>
-                  <div className="text-xs text-[hsl(var(--ink-muted))] mt-1">Автомобила</div>
-                </div>
-                <div>
-                  <div className="font-serif text-3xl">98%</div>
-                  <div className="text-xs text-[hsl(var(--ink-muted))] mt-1">Приключили сделки</div>
-                </div>
-              </div>
             </div>
 
             <div className="lg:col-span-6 fade-up">
