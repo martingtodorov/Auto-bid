@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Navigate, Link } from "react-router-dom";
-import { Check, X, Clock, AlertCircle, DollarSign, Archive, Ban, Edit3, Trash2, RotateCcw, Search, List, Users } from "lucide-react";
+import { Check, X, Clock, AlertCircle, DollarSign, Archive, Ban, Edit3, Trash2, RotateCcw, Search, List, Users, BarChart3, Trash } from "lucide-react";
 import { useAuth, formatError } from "../lib/auth";
 import { api, formatEUR, formatKM } from "../lib/apiClient";
 import AdminEditModal from "../components/AdminEditModal";
 import AdminUsersTab from "../components/AdminUsersTab";
+import AdminDashboard from "../components/AdminDashboard";
 
 const STATUS_LABELS = {
   pending: "Очаква",
@@ -19,7 +20,7 @@ const STATUS_LABELS = {
 
 export default function AdminPage() {
   const { user, loading } = useAuth();
-  const [tab, setTab] = useState("pending");
+  const [tab, setTab] = useState("dashboard");
   const [pending, setPending] = useState([]);
   const [sold, setSold] = useState([]);
   const [allListings, setAllListings] = useState([]);
@@ -112,8 +113,20 @@ export default function AdminPage() {
     catch (e) { setErr(formatError(e)); }
     finally { setBusy(null); }
   };
+  const hardDeleteListing = async (id, title) => {
+    const confirm1 = window.prompt(`ВНИМАНИЕ: Ще изтриете ИЗЦЯЛО обявата "${title || id}" от платформата.\n\nТова ще премахне безвъзвратно:\n• обявата\n• всички наддавания\n• всички коментари\n• всички watchlist записи\n• всички bidding credits\n\nЗа потвърждение напишете ИЗТРИЙ:`);
+    if (confirm1 !== "ИЗТРИЙ") return;
+    setErr(""); setBusy(id);
+    try {
+      const { data } = await api.delete(`/admin/auctions/${id}`);
+      alert(`Изтрити: ${data.deleted.auction} обява, ${data.deleted.bids} наддавания, ${data.deleted.comments} коментари, ${data.deleted.watches} watchers.`);
+      await Promise.all([loadAll(), loadPending(), loadSold()]);
+    } catch (e) { setErr(formatError(e)); }
+    finally { setBusy(null); }
+  };
 
   const tabs = [
+    { k: "dashboard", label: "Начало", icon: BarChart3 },
     { k: "pending", label: `Очакващи (${pending.length})`, icon: Clock },
     { k: "all", label: `Всички обяви (${allListings.length})`, icon: List },
     { k: "users", label: "Потребители", icon: Users },
@@ -143,6 +156,8 @@ export default function AdminPage() {
         </div>
 
         {err && <p className="mt-4 text-sm text-[hsl(var(--danger))]">{err}</p>}
+
+        {tab === "dashboard" && <AdminDashboard />}
 
         {tab === "pending" && (
           <div className="mt-10">
@@ -284,6 +299,15 @@ export default function AdminPage() {
                           <Trash2 size={12} /> Свали
                         </button>
                       ) : null}
+                      <button
+                        onClick={() => hardDeleteListing(a.id, a.title)}
+                        disabled={busy === a.id}
+                        className="btn !py-1.5 !px-3 text-xs flex items-center gap-1 !bg-[hsl(var(--danger))] !text-white !border-[hsl(var(--danger))] hover:opacity-90"
+                        data-testid={`hard-delete-${a.id}`}
+                        title="Изтрий ИЗЦЯЛО (безвъзвратно)"
+                      >
+                        <Trash size={12} /> Изтрий
+                      </button>
                     </div>
                   </div>
                 ))}

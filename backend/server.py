@@ -1571,6 +1571,115 @@ async def admin_restore_auction(auction_id: str, _admin: dict = Depends(require_
     return {"ok": True, "status": new_status}
 
 
+@api.delete("/admin/auctions/{auction_id}")
+async def admin_hard_delete_auction(auction_id: str, _admin: dict = Depends(require_admin)):
+    """PERMANENTLY deletes an auction and all associated records (bids, comments, watches, credits, vin requests)."""
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Обявата не е намерена")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    # Release active credit/preauth mocks before wiping
+    await db.bids.update_many(
+        {"auction_id": auction_id, "preauth_status": "authorized"},
+        {"$set": {"preauth_status": "released", "preauth_released_at": now_iso}},
+    )
+    await db.bidding_credits.update_many(
+        {"auction_id": auction_id, "status": "authorized"},
+        {"$set": {"status": "released", "released_at": now_iso}},
+    )
+    # Cascade delete
+    res_bids = await db.bids.delete_many({"auction_id": auction_id})
+    res_comments = await db.comments.delete_many({"auction_id": auction_id})
+    res_watches = await db.watches.delete_many({"auction_id": auction_id})
+    res_credits = await db.bidding_credits.delete_many({"auction_id": auction_id})
+    res_vin = await db.vin_requests.delete_many({"auction_id": auction_id})
+    await db.auctions.delete_one({"id": auction_id})
+    return {
+        "ok": True,
+        "deleted": {
+            "auction": 1,
+            "bids": res_bids.deleted_count,
+            "comments": res_comments.deleted_count,
+            "watches": res_watches.deleted_count,
+            "bidding_credits": res_credits.deleted_count,
+            "vin_requests": res_vin.deleted_count,
+        },
+    }
+
+
+# ---- Admin: Dashboard / Stats ----
+@api.get("/admin/stats")
+async def admin_stats(_admin: dict = Depends(require_admin)):
+    """Returns key platform metrics for the admin dashboard."""
+    now = datetime.now(timezone.utc)
+    week_ago = (now - timedelta(days=7)).isoformat()
+    month_ago = (now - timedelta(days=30)).isoformat()
+
+    total_auctions = await db.auctions.count_documents({})
+    pending = await db.auctions.count_documents({"status": "pending"})
+    live_stored = await db.auctions.count_documents({"status": {"$in": ["live", None]}})
+    sold = await db.auctions.count_documents({"status": "sold"})
+    removed = await db.auctions.count_documents({"status": {"$in": ["removed", "rejected", "withdrawn"]}})
+    reserve_not_met = await db.auctions.count_documents({"status": "reserve_not_met"})
+
+    # Users
+    total_users = await db.users.count_documents({})
+    admins = await db.users.count_documents({"role": "admin"})
+    verified_dealers = await db.users.count_documents({"is_verified_dealer": True})
+    new_users_week = await db.users.count_documents({"created_at": {"$gte": week_ago}})
+
+    # Bids
+    total_bids = await db.bids.count_documents({})
+    bids_this_week = await db.bids.count_documents({"created_at": {"$gte": week_ago}})
+
+    # GMV (gross merchandise value) + commission from sold
+    gmv_cursor = db.auctions.aggregate([
+        {"$match": {"status": "sold"}},
+        {"$group": {"_id": None, "gmv": {"$sum": "$current_bid_eur"}, "commission": {"$sum": "$premium_amount_eur"}, "count": {"$sum": 1}}},
+    ])
+    gmv_docs = await gmv_cursor.to_list(1)
+    gmv = float(gmv_docs[0]["gmv"]) if gmv_docs else 0.0
+    commission = float(gmv_docs[0]["commission"]) if gmv_docs else 0.0
+    sold_count = int(gmv_docs[0]["count"]) if gmv_docs else 0
+
+    # Month GMV
+    gmv_month_cursor = db.auctions.aggregate([
+        {"$match": {"status": "sold", "finalized_at": {"$gte": month_ago}}},
+        {"$group": {"_id": None, "gmv": {"$sum": "$current_bid_eur"}, "commission": {"$sum": "$premium_amount_eur"}}},
+    ])
+    gmv_month_docs = await gmv_month_cursor.to_list(1)
+    gmv_month = float(gmv_month_docs[0]["gmv"]) if gmv_month_docs else 0.0
+    commission_month = float(gmv_month_docs[0]["commission"]) if gmv_month_docs else 0.0
+
+    return {
+        "auctions": {
+            "total": total_auctions,
+            "pending": pending,
+            "live": live_stored,
+            "sold": sold,
+            "removed": removed,
+            "reserve_not_met": reserve_not_met,
+        },
+        "users": {
+            "total": total_users,
+            "admins": admins,
+            "verified_dealers": verified_dealers,
+            "new_this_week": new_users_week,
+        },
+        "bids": {
+            "total": total_bids,
+            "this_week": bids_this_week,
+        },
+        "revenue": {
+            "gmv_all_time": gmv,
+            "commission_all_time": commission,
+            "gmv_last_30d": gmv_month,
+            "commission_last_30d": commission_month,
+            "sold_count": sold_count,
+        },
+    }
+
+
 # ---- Admin: users ----
 @api.get("/admin/users")
 async def admin_list_users(q: Optional[str] = None, _admin: dict = Depends(require_admin)):
