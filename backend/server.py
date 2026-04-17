@@ -124,6 +124,10 @@ class BidCreate(BaseModel):
     amount_eur: float
     payment_method_id: Optional[str] = None  # mock Stripe payment method token
 
+class BiddingCreditCreate(BaseModel):
+    max_amount_eur: float = Field(gt=0)
+    payment_method_id: str = Field(min_length=4)
+
 class AdminDecision(BaseModel):
     reason: Optional[str] = None
 
@@ -481,6 +485,90 @@ async def list_bids(auction_id: str):
     items = await db.bids.find({"auction_id": auction_id}, {"_id": 0}).sort("amount_eur", -1).limit(50).to_list(50)
     return items
 
+
+# ---- Bidding Credit (pre-authorization for multiple bids) ----
+@api.get("/auctions/{auction_id}/bidding-credit")
+async def get_my_credit(auction_id: str, user: dict = Depends(get_current_user)):
+    credit = await db.bidding_credits.find_one(
+        {"auction_id": auction_id, "user_id": user["id"], "status": "authorized"},
+        {"_id": 0},
+    )
+    return credit or None
+
+
+@api.post("/auctions/{auction_id}/bidding-credit")
+async def create_or_increase_credit(auction_id: str, payload: BiddingCreditCreate, user: dict = Depends(get_current_user)):
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Търгът не е намерен")
+    if _auction_status(a) != "live":
+        raise HTTPException(status_code=400, detail="Търгът не е активен")
+    if a.get("seller_id") == user["id"]:
+        raise HTTPException(status_code=400, detail="Не можете да създавате credit за собствен търг")
+    min_credit = float(a["current_bid_eur"]) + 100
+    if payload.max_amount_eur < min_credit:
+        raise HTTPException(status_code=400, detail=f"Максималната сума трябва да е поне €{int(min_credit)} (следваща наддавка)")
+
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    preauth_amount = round(float(payload.max_amount_eur) * 0.02, 2)
+
+    existing = await db.bidding_credits.find_one(
+        {"auction_id": auction_id, "user_id": user["id"], "status": "authorized"},
+        {"_id": 0},
+    )
+    if existing:
+        # Can only INCREASE, never decrease while active
+        if payload.max_amount_eur <= float(existing.get("max_amount_eur", 0)):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Активният ви кредит е €{int(existing['max_amount_eur']):,}. Можете само да го увеличите.",
+            )
+        # Mock Stripe incremental authorization — keep same preauth_id, bump amount
+        await db.bidding_credits.update_one(
+            {"id": existing["id"]},
+            {"$set": {
+                "max_amount_eur": float(payload.max_amount_eur),
+                "preauth_amount_eur": preauth_amount,
+                "updated_at": now_iso,
+            }},
+        )
+        fresh = await db.bidding_credits.find_one({"id": existing["id"]}, {"_id": 0})
+        return {"ok": True, "credit": fresh, "action": "increased"}
+
+    # Create new credit
+    credit_id = str(uuid.uuid4())
+    doc = {
+        "id": credit_id,
+        "auction_id": auction_id,
+        "user_id": user["id"],
+        "user_name": user["name"],
+        "max_amount_eur": float(payload.max_amount_eur),
+        "preauth_id": f"mock_pi_credit_{uuid.uuid4().hex[:16]}",
+        "preauth_amount_eur": preauth_amount,
+        "status": "authorized",
+        "card_last4": payload.payment_method_id[-4:] if payload.payment_method_id else None,
+        "created_at": now_iso,
+    }
+    await db.bidding_credits.insert_one(doc)
+    fresh = {k: v for k, v in doc.items() if k != "_id"}
+    return {"ok": True, "credit": fresh, "action": "created"}
+
+
+@api.delete("/auctions/{auction_id}/bidding-credit")
+async def release_my_credit(auction_id: str, user: dict = Depends(get_current_user)):
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Търгът не е намерен")
+    if a.get("high_bidder_id") == user["id"] and _auction_status(a) == "live":
+        raise HTTPException(status_code=400, detail="Не можете да освободите кредита докато сте водещ наддавач")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    res = await db.bidding_credits.update_many(
+        {"auction_id": auction_id, "user_id": user["id"], "status": "authorized"},
+        {"$set": {"status": "released", "released_at": now_iso}},
+    )
+    return {"ok": True, "released": res.modified_count}
+
 @api.post("/auctions/{auction_id}/bids")
 async def place_bid(auction_id: str, payload: BidCreate, user: dict = Depends(get_current_user)):
     a = await db.auctions.find_one({"id": auction_id})
@@ -493,18 +581,30 @@ async def place_bid(auction_id: str, payload: BidCreate, user: dict = Depends(ge
     min_next = float(a["current_bid_eur"]) + 100
     if payload.amount_eur < min_next:
         raise HTTPException(status_code=400, detail=f"Минималната следваща наддавка е €{int(min_next)}")
-    if not payload.payment_method_id:
-        raise HTTPException(status_code=402, detail="Необходима е валидна карта за наддаване")
 
     now = datetime.now(timezone.utc)
+
+    # Check if user has active bidding credit covering this bid amount
+    credit = await db.bidding_credits.find_one({
+        "auction_id": auction_id,
+        "user_id": user["id"],
+        "status": "authorized",
+    }, {"_id": 0})
+    credit_covers = bool(credit and float(credit.get("max_amount_eur", 0)) >= float(payload.amount_eur))
+
+    if not credit_covers and not payload.payment_method_id:
+        raise HTTPException(status_code=402, detail="Необходима е валидна карта за наддаване")
+
     bid_id = str(uuid.uuid4())
     preauth_amount = round(float(payload.amount_eur) * 0.02, 2)
 
     # Release current user's previous active preauth(s) on this auction
-    await db.bids.update_many(
-        {"auction_id": auction_id, "user_id": user["id"], "preauth_status": "authorized"},
-        {"$set": {"preauth_status": "released", "preauth_released_at": now.isoformat()}},
-    )
+    # — но само ако НЕ ползваме credit (credit покрива всички наддавания)
+    if not credit_covers:
+        await db.bids.update_many(
+            {"auction_id": auction_id, "user_id": user["id"], "preauth_status": "authorized"},
+            {"$set": {"preauth_status": "released", "preauth_released_at": now.isoformat()}},
+        )
 
     # Release previous high bidder (different user) preauth + email
     prev_high_bidder_id = a.get("high_bidder_id")
@@ -513,6 +613,11 @@ async def place_bid(auction_id: str, payload: BidCreate, user: dict = Depends(ge
             {"auction_id": auction_id, "user_id": prev_high_bidder_id, "preauth_status": "authorized"},
             {"$set": {"preauth_status": "released", "preauth_released_at": now.isoformat()}},
         )
+        # Also release their bidding credit if any
+        await db.bidding_credits.update_many(
+            {"auction_id": auction_id, "user_id": prev_high_bidder_id, "status": "authorized"},
+            {"$set": {"status": "released", "released_at": now.isoformat()}},
+        )
         prev_user = await db.users.find_one({"id": prev_high_bidder_id}, {"_id": 0})
         if prev_user:
             try:
@@ -520,18 +625,34 @@ async def place_bid(auction_id: str, payload: BidCreate, user: dict = Depends(ge
             except Exception as e:
                 logger.error("email_outbid failed: %s", e)
 
-    bid_doc = {
-        "id": bid_id,
-        "auction_id": auction_id,
-        "user_id": user["id"],
-        "user_name": user["name"],
-        "amount_eur": float(payload.amount_eur),
-        "created_at": now.isoformat(),
-        "preauth_id": f"mock_pi_{uuid.uuid4().hex[:16]}",
-        "preauth_status": "authorized",
-        "preauth_amount_eur": preauth_amount,
-        "card_last4": payload.payment_method_id[-4:] if payload.payment_method_id else None,
-    }
+    # Build the bid. If credit covers it — link to the credit's preauth instead of creating a new one.
+    if credit_covers:
+        bid_doc = {
+            "id": bid_id,
+            "auction_id": auction_id,
+            "user_id": user["id"],
+            "user_name": user["name"],
+            "amount_eur": float(payload.amount_eur),
+            "created_at": now.isoformat(),
+            "preauth_id": credit["preauth_id"],
+            "preauth_status": "credit_backed",  # not a fresh transaction
+            "preauth_amount_eur": preauth_amount,
+            "card_last4": credit.get("card_last4"),
+            "credit_id": credit["id"],
+        }
+    else:
+        bid_doc = {
+            "id": bid_id,
+            "auction_id": auction_id,
+            "user_id": user["id"],
+            "user_name": user["name"],
+            "amount_eur": float(payload.amount_eur),
+            "created_at": now.isoformat(),
+            "preauth_id": f"mock_pi_{uuid.uuid4().hex[:16]}",
+            "preauth_status": "authorized",
+            "preauth_amount_eur": preauth_amount,
+            "card_last4": payload.payment_method_id[-4:] if payload.payment_method_id else None,
+        }
     await db.bids.insert_one(bid_doc)
 
     ends_at = datetime.fromisoformat(a["ends_at"])
@@ -687,9 +808,15 @@ async def admin_finalize(auction_id: str, _admin: dict = Depends(require_admin))
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     if not a:
         raise HTTPException(status_code=404, detail="Обявата не е намерена")
+    now_iso = datetime.now(timezone.utc).isoformat()
     await db.bids.update_many(
         {"auction_id": auction_id, "preauth_status": "authorized"},
-        {"$set": {"preauth_status": "released", "preauth_released_at": datetime.now(timezone.utc).isoformat()}},
+        {"$set": {"preauth_status": "released", "preauth_released_at": now_iso}},
+    )
+    # Release all bidding credits too
+    await db.bidding_credits.update_many(
+        {"auction_id": auction_id, "status": "authorized"},
+        {"$set": {"status": "released", "released_at": now_iso}},
     )
     await db.auctions.update_one({"id": auction_id}, {"$set": {"status": "sold", "premium_captured": False}})
     winner_id = a.get("high_bidder_id")
@@ -705,31 +832,54 @@ async def admin_finalize(auction_id: str, _admin: dict = Depends(require_admin))
 
 @api.post("/admin/auctions/{auction_id}/capture-premium")
 async def admin_capture_premium(auction_id: str, _admin: dict = Depends(require_admin)):
-    """Captures winner's 3% pre-authorization as buyer's premium. Releases losing bidders' preauths."""
+    """Captures winner's 2% pre-authorization as buyer's premium. Releases losing bidders' preauths."""
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     if not a:
         raise HTTPException(status_code=404, detail="Обявата не е намерена")
     now_iso = datetime.now(timezone.utc).isoformat()
     winner_id = a.get("high_bidder_id")
 
-    # Capture winner's authorized preauth (if any)
+    # Capture winner's bidding credit (preferred) OR their authorized preauth
     captured_amount = 0.0
     if winner_id:
-        winner_bid = await db.bids.find_one(
-            {"auction_id": auction_id, "user_id": winner_id, "preauth_status": "authorized"},
+        winner_credit = await db.bidding_credits.find_one(
+            {"auction_id": auction_id, "user_id": winner_id, "status": "authorized"},
             {"_id": 0},
-            sort=[("amount_eur", -1)],
         )
-        if winner_bid:
-            captured_amount = float(winner_bid.get("preauth_amount_eur", 0.0))
-            await db.bids.update_one(
-                {"id": winner_bid["id"]},
+        if winner_credit:
+            # Capture 2% of actual winning bid, not max credit
+            captured_amount = round(float(a.get("current_bid_eur", 0)) * 0.02, 2)
+            await db.bidding_credits.update_one(
+                {"id": winner_credit["id"]},
+                {"$set": {"status": "captured", "captured_at": now_iso, "captured_amount_eur": captured_amount}},
+            )
+            # Mark the winning bid linked to this credit
+            await db.bids.update_many(
+                {"auction_id": auction_id, "user_id": winner_id, "credit_id": winner_credit["id"]},
                 {"$set": {"preauth_status": "captured", "preauth_captured_at": now_iso}},
             )
+        else:
+            winner_bid = await db.bids.find_one(
+                {"auction_id": auction_id, "user_id": winner_id, "preauth_status": "authorized"},
+                {"_id": 0},
+                sort=[("amount_eur", -1)],
+            )
+            if winner_bid:
+                captured_amount = float(winner_bid.get("preauth_amount_eur", 0.0))
+                await db.bids.update_one(
+                    {"id": winner_bid["id"]},
+                    {"$set": {"preauth_status": "captured", "preauth_captured_at": now_iso}},
+                )
 
-    # Release all other authorized preauths
-    q = {"auction_id": auction_id, "preauth_status": "authorized"}
-    await db.bids.update_many(q, {"$set": {"preauth_status": "released", "preauth_released_at": now_iso}})
+    # Release all OTHER authorized preauths and credits
+    await db.bids.update_many(
+        {"auction_id": auction_id, "preauth_status": "authorized"},
+        {"$set": {"preauth_status": "released", "preauth_released_at": now_iso}},
+    )
+    await db.bidding_credits.update_many(
+        {"auction_id": auction_id, "status": "authorized"},
+        {"$set": {"status": "released", "released_at": now_iso}},
+    )
 
     await db.auctions.update_one(
         {"id": auction_id},
@@ -1564,6 +1714,7 @@ async def on_startup():
     await db.bids.create_index("auction_id")
     await db.comments.create_index("auction_id")
     await db.watches.create_index([("user_id", 1), ("auction_id", 1)])
+    await db.bidding_credits.create_index([("auction_id", 1), ("user_id", 1)])
     await seed_admin()
     await seed()
 

@@ -4,6 +4,7 @@ import { Calendar, Gauge, Fuel, Settings, MapPin, Palette, Zap, Cog, MessageCirc
 import { api, API_BASE, formatEUR, formatBGN, formatKM, timeLeft } from "../lib/apiClient";
 import { useAuth, formatError } from "../lib/auth";
 import PreauthModal from "../components/PreauthModal";
+import BiddingCreditModal from "../components/BiddingCreditModal";
 import AuctionCard from "../components/AuctionCard";
 
 export default function AuctionDetailPage() {
@@ -27,6 +28,8 @@ export default function AuctionDetailPage() {
   const [vinMsg, setVinMsg] = useState("");
   const [vinErr, setVinErr] = useState("");
   const [related, setRelated] = useState([]);
+  const [credit, setCredit] = useState(null);
+  const [showCredit, setShowCredit] = useState(false);
   const wsRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -76,6 +79,12 @@ export default function AuctionDetailPage() {
   useEffect(() => {
     if (!user || !id) { setWatching(false); return; }
     api.get(`/auctions/${id}/watch-status`).then((r) => setWatching(!!r.data.watching)).catch(() => {});
+  }, [user, id]);
+
+  // Bidding credit
+  useEffect(() => {
+    if (!user || !id) { setCredit(null); return; }
+    api.get(`/auctions/${id}/bidding-credit`).then((r) => setCredit(r.data || null)).catch(() => setCredit(null));
   }, [user, id]);
 
   const toggleWatch = async () => {
@@ -140,6 +149,11 @@ export default function AuctionDetailPage() {
     const amt = Number(bidAmount);
     const min = Math.floor(a.current_bid_eur) + 100;
     if (!amt || amt < min) { setError(`Минималната следваща наддавка е €${min}`); return; }
+    // If credit covers this bid — skip preauth modal and post directly
+    if (credit && Number(credit.max_amount_eur) >= amt) {
+      confirmBid(null);
+      return;
+    }
     setShowPreauth(true);
   };
 
@@ -147,7 +161,9 @@ export default function AuctionDetailPage() {
     setShowPreauth(false);
     setPlacing(true);
     try {
-      await api.post(`/auctions/${id}/bids`, { amount_eur: Number(bidAmount), payment_method_id: paymentMethodId });
+      const payload = { amount_eur: Number(bidAmount) };
+      if (paymentMethodId) payload.payment_method_id = paymentMethodId;
+      await api.post(`/auctions/${id}/bids`, payload);
     } catch (e) {
       setError(formatError(e));
     } finally {
@@ -212,6 +228,15 @@ export default function AuctionDetailPage() {
   return (
     <main className="rule-b" data-testid="auction-detail-page">
       <PreauthModal open={showPreauth} onClose={() => setShowPreauth(false)} onConfirm={confirmBid} bidAmount={bidAmount} />
+      {showCredit && a && (
+        <BiddingCreditModal
+          auctionId={id}
+          currentBid={a.current_bid_eur}
+          currentCredit={credit}
+          onClose={() => setShowCredit(false)}
+          onSaved={(c) => setCredit(c)}
+        />
+      )}
 
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-8">
         <Link to="/auctions" className="inline-flex items-center gap-2 text-sm text-[hsl(var(--ink-muted))] hover:text-[hsl(var(--ink))]">
@@ -438,6 +463,29 @@ export default function AuctionDetailPage() {
                         <div className="text-[hsl(var(--ink-muted))] mt-0.5">2% се блокират върху картата. При победа се прилагат като buyer's premium; иначе се освобождават изцяло.</div>
                       </div>
                     </div>
+
+                    {user && credit && (
+                      <div className="mt-3 p-3 rounded-card bg-white border border-[hsl(var(--accent))]/40 flex items-start justify-between gap-2" data-testid="credit-active-badge">
+                        <div className="text-xs leading-relaxed">
+                          <div className="font-semibold text-[hsl(var(--accent))] flex items-center gap-1.5">
+                            <Zap size={12} /> Активен кредит · {formatEUR(credit.max_amount_eur)}
+                          </div>
+                          <div className="text-[hsl(var(--ink-muted))] mt-0.5">Можете да наддавате до тази сума без нови картови транзакции.</div>
+                        </div>
+                        <button onClick={() => setShowCredit(true)} className="text-xs font-semibold text-[hsl(var(--accent))] hover:underline shrink-0" data-testid="credit-manage-btn">Управи</button>
+                      </div>
+                    )}
+                    {user && !credit && (
+                      <button onClick={() => setShowCredit(true)} className="mt-3 w-full rounded-card border border-dashed border-[hsl(var(--accent))]/40 bg-[hsl(var(--accent-soft))]/50 hover:bg-[hsl(var(--accent-soft))] p-3 text-left transition" data-testid="credit-open-btn">
+                        <div className="flex items-center gap-2 text-xs">
+                          <Zap size={13} className="text-[hsl(var(--accent))] shrink-0" />
+                          <div>
+                            <div className="font-semibold text-[hsl(var(--accent-ink))]">Наддавай без нови транзакции</div>
+                            <div className="text-[hsl(var(--ink-muted))] mt-0.5">Преавторизирай се за по-голяма сума →</div>
+                          </div>
+                        </div>
+                      </button>
+                    )}
 
                     {error && <p className="text-xs text-[hsl(var(--danger))] mt-2" data-testid="bid-error">{error}</p>}
                   </div>
