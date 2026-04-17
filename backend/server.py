@@ -11,7 +11,8 @@ import bcrypt
 import jwt
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Query, WebSocket, WebSocketDisconnect, Response
+from fastapi.responses import PlainTextResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
@@ -2001,6 +2002,52 @@ async def reseed():
     await db.watches.delete_many({})
     await seed()
     return {"ok": True}
+
+
+# ---- SEO / Social sharing: returns HTML with Open Graph tags for crawlers ----
+@api.get("/share/auction/{auction_id}", response_class=PlainTextResponse)
+async def share_auction(auction_id: str, request: Request):
+    from html import escape as _esc
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    # Frontend URL for the actual auction page (where browsers redirect to)
+    frontend_base = request.headers.get("origin") or str(request.base_url).rstrip("/")
+    target = f"{frontend_base}/auctions/{auction_id}"
+
+    if not a:
+        title = "AutoBid.bg — Търг"
+        description = "Търгът не е намерен."
+        image = f"{frontend_base}/og-default.jpg"
+    else:
+        title = f"{a.get('title','')} — AutoBid.bg"
+        description = (a.get("description") or "")[:280]
+        image = (a.get("images") or [None])[0] or f"{frontend_base}/og-default.jpg"
+
+    html = f"""<!DOCTYPE html>
+<html lang="bg">
+<head>
+<meta charset="UTF-8">
+<title>{_esc(title)}</title>
+<meta name="description" content="{_esc(description)}">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="AutoBid.bg">
+<meta property="og:title" content="{_esc(title)}">
+<meta property="og:description" content="{_esc(description)}">
+<meta property="og:image" content="{_esc(image)}">
+<meta property="og:url" content="{_esc(target)}">
+<meta property="og:locale" content="bg_BG">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{_esc(title)}">
+<meta name="twitter:description" content="{_esc(description)}">
+<meta name="twitter:image" content="{_esc(image)}">
+<link rel="canonical" href="{_esc(target)}">
+<meta http-equiv="refresh" content="0; url={_esc(target)}">
+</head>
+<body>
+<script>window.location.replace({repr(target)});</script>
+<p>Пренасочване към <a href="{_esc(target)}">{_esc(target)}</a>…</p>
+</body>
+</html>"""
+    return Response(content=html, media_type="text/html; charset=utf-8")
 
 
 # ---- Mount ----

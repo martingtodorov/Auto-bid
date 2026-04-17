@@ -9,7 +9,6 @@ import { AuthProvider } from "./lib/auth";
 dndPolyfill({
   dragImageCenterOnTouch: true,
   forceApply: false,
-  tryFindDraggableTarget: true,
 });
 // Allow scroll while dragging by listening passive:false on touchmove
 window.addEventListener("touchmove", () => {}, { passive: false });

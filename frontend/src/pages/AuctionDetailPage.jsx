@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { Calendar, Gauge, Fuel, Settings, MapPin, Palette, Zap, Cog, MessageCircle, Heart, ArrowLeft, Shield, Wifi } from "lucide-react";
+import { Calendar, Gauge, Fuel, Settings, MapPin, Palette, Zap, Cog, MessageCircle, Heart, ArrowLeft, Shield, Wifi, Share2 } from "lucide-react";
 import { api, API_BASE, formatEUR, formatBGN, formatKM, timeLeft } from "../lib/apiClient";
 import { useAuth, formatError } from "../lib/auth";
 import PreauthModal from "../components/PreauthModal";
 import BiddingCreditModal from "../components/BiddingCreditModal";
 import AuctionCard from "../components/AuctionCard";
+import { setPageMeta, resetPageMeta } from "../lib/seo";
 
 export default function AuctionDetailPage() {
   const { id } = useParams();
@@ -86,6 +87,18 @@ export default function AuctionDetailPage() {
     if (!user || !id) { setCredit(null); return; }
     api.get(`/auctions/${id}/bidding-credit`).then((r) => setCredit(r.data || null)).catch(() => setCredit(null));
   }, [user, id]);
+
+  // SEO meta tags
+  useEffect(() => {
+    if (!a) return;
+    setPageMeta({
+      title: `${a.title} — AutoBid.bg`,
+      description: a.description,
+      image: a.images?.[0],
+      url: window.location.href,
+    });
+    return () => resetPageMeta();
+  }, [a]);
 
   const toggleWatch = async () => {
     if (!user) { navigate("/login?next=/auctions/" + id); return; }
@@ -494,6 +507,7 @@ export default function AuctionDetailPage() {
                 <button onClick={toggleWatch} className={`mt-5 w-full btn flex items-center justify-center gap-2 ${watching ? "btn-primary" : "btn-secondary"}`} data-testid="watch-button">
                   <Heart size={14} className={watching ? "fill-current" : ""} /> {watching ? "В моя списък" : "Следи търга"}
                 </button>
+                <ShareButton auctionId={id} title={a?.title} />
               </div>
 
               <div className="rounded-card border border-[hsl(var(--line))] p-6 bg-[hsl(var(--surface))]">
@@ -595,6 +609,35 @@ function DescriptionWithInteriorShots({ description, interiorImages }) {
     <div className="mt-4 max-w-3xl space-y-4" data-testid="auction-description">
       {blocks}
     </div>
+  );
+}
+
+
+function ShareButton({ auctionId, title }) {
+  const [copied, setCopied] = React.useState(false);
+  const shareUrl = `${window.location.origin}/api/share/auction/${auctionId}`;
+
+  const share = async () => {
+    const data = { title: title || "AutoBid.bg", url: shareUrl };
+    try {
+      if (navigator.share) {
+        await navigator.share(data);
+        return;
+      }
+    } catch { /* user cancelled or not supported */ }
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      window.prompt("Копирайте линка:", shareUrl);
+    }
+  };
+
+  return (
+    <button onClick={share} className="mt-2 w-full btn btn-secondary flex items-center justify-center gap-2" data-testid="share-button">
+      <Share2 size={14} /> {copied ? "Линкът е копиран" : "Сподели обявата"}
+    </button>
   );
 }
 
