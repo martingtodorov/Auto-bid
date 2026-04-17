@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { Search, Edit3, Shield, User as UserIcon, Check, X } from "lucide-react";
+import { Search, Edit3, Shield, User as UserIcon, Check, X, Ban, RotateCcw, Trash2 } from "lucide-react";
 import { api } from "../lib/apiClient";
 import { formatError } from "../lib/auth";
 
@@ -8,6 +8,7 @@ export default function AdminUsersTab({ currentUserId }) {
   const [q, setQ] = useState("");
   const [err, setErr] = useState("");
   const [editing, setEditing] = useState(null);
+  const [busyId, setBusyId] = useState(null);
 
   const load = useCallback(async () => {
     setErr("");
@@ -18,6 +19,35 @@ export default function AdminUsersTab({ currentUserId }) {
   }, [q]);
 
   useEffect(() => { load(); }, [load]);
+
+  const toggleBan = async (u) => {
+    const action = u.banned ? "отблокирате" : "блокирате";
+    if (!window.confirm(`Сигурни ли сте, че искате да ${action} ${u.name}?`)) return;
+    setErr(""); setBusyId(u.id);
+    try {
+      await api.post(`/admin/users/${u.id}/${u.banned ? "unban" : "ban"}`);
+      await load();
+    } catch (e) { setErr(formatError(e)); }
+    finally { setBusyId(null); }
+  };
+
+  const deleteUser = async (u) => {
+    const confirm1 = window.prompt(
+      `ВНИМАНИЕ: Ще изтриете акаунта на "${u.name}" (${u.email}) БЕЗВЪЗВРАТНО.\n\n` +
+      `Ще бъдат изтрити: всички наддавания, коментари, watchlist, запазени търсения и кредити.\n` +
+      `Обявите им ще бъдат анонимизирани (запазени за историческа коректност).\n\n` +
+      `За потвърждение напишете ИЗТРИЙ:`
+    );
+    if (confirm1 !== "ИЗТРИЙ") return;
+    setErr(""); setBusyId(u.id);
+    try {
+      const { data } = await api.delete(`/admin/users/${u.id}`);
+      const d = data.deleted;
+      alert(`Изтрит: ${u.name}. Каскадно: ${d.bids} наддавания, ${d.comments} коментари, ${d.watches} watchers, ${d.saved_searches} търсения, ${d.auctions_anonymized} анонимизирани обяви.`);
+      await load();
+    } catch (e) { setErr(formatError(e)); }
+    finally { setBusyId(null); }
+  };
 
   return (
     <div className="mt-10" data-testid="admin-users-tab">
@@ -46,7 +76,7 @@ export default function AdminUsersTab({ currentUserId }) {
         </div>
       ) : (
         <div className="rounded-card border border-[hsl(var(--line))] overflow-hidden bg-white" data-testid="users-list">
-          <div className="hidden md:grid grid-cols-[1.2fr_1.4fr_1fr_0.9fr_0.6fr_0.7fr] gap-3 px-5 py-3 rule-b bg-[hsl(var(--surface))] overline text-[hsl(var(--ink-muted))]">
+          <div className="hidden md:grid grid-cols-[1.2fr_1.4fr_1fr_0.9fr_0.6fr_1.1fr] gap-3 px-5 py-3 rule-b bg-[hsl(var(--surface))] overline text-[hsl(var(--ink-muted))]">
             <span>Име</span>
             <span>Имейл</span>
             <span>Телефон</span>
@@ -55,8 +85,13 @@ export default function AdminUsersTab({ currentUserId }) {
             <span className="text-right">Действия</span>
           </div>
           {items.map((u) => (
-            <div key={u.id} className="grid grid-cols-1 md:grid-cols-[1.2fr_1.4fr_1fr_0.9fr_0.6fr_0.7fr] gap-3 items-center p-4 rule-b last:border-b-0 text-sm" data-testid={`user-row-${u.id}`}>
-              <div className="font-semibold">{u.name}</div>
+            <div key={u.id} className={`grid grid-cols-1 md:grid-cols-[1.2fr_1.4fr_1fr_0.9fr_0.6fr_1.1fr] gap-3 items-center p-4 rule-b last:border-b-0 text-sm ${u.banned ? "bg-[hsl(var(--danger))]/5" : ""}`} data-testid={`user-row-${u.id}`}>
+              <div className="font-semibold flex items-center gap-2">
+                {u.name}
+                {u.banned && (
+                  <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-[hsl(var(--danger))] text-white" data-testid={`banned-badge-${u.id}`}>Блокиран</span>
+                )}
+              </div>
               <div className="font-mono text-xs truncate">{u.email}</div>
               <div className="font-mono text-xs">{u.phone || "—"}</div>
               <div>
@@ -73,10 +108,32 @@ export default function AdminUsersTab({ currentUserId }) {
                   <span className="text-xs text-[hsl(var(--ink-muted))]">Потребител</span>
                 )}
               </div>
-              <div className="flex justify-end">
-                <button onClick={() => setEditing(u)} className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1" data-testid={`edit-user-${u.id}`}>
-                  <Edit3 size={12} /> Редактирай
+              <div className="flex flex-wrap justify-end gap-1.5">
+                <button onClick={() => setEditing(u)} className="btn btn-secondary !py-1.5 !px-2.5 text-xs flex items-center gap-1" data-testid={`edit-user-${u.id}`}>
+                  <Edit3 size={12} /> Редакт.
                 </button>
+                {u.id !== currentUserId && u.role !== "admin" && (
+                  <>
+                    <button
+                      onClick={() => toggleBan(u)}
+                      disabled={busyId === u.id}
+                      className={`btn !py-1.5 !px-2.5 text-xs flex items-center gap-1 ${u.banned ? "btn-accent" : "btn-secondary !text-[hsl(var(--ink))]"}`}
+                      data-testid={`${u.banned ? "unban" : "ban"}-user-${u.id}`}
+                      title={u.banned ? "Отблокирай" : "Блокирай"}
+                    >
+                      {u.banned ? <><RotateCcw size={12} /> Отблок.</> : <><Ban size={12} /> Блокирай</>}
+                    </button>
+                    <button
+                      onClick={() => deleteUser(u)}
+                      disabled={busyId === u.id}
+                      className="btn btn-secondary !py-1.5 !px-2.5 text-xs flex items-center gap-1 !text-[hsl(var(--danger))] !border-[hsl(var(--danger))]/40 hover:!bg-[hsl(var(--danger))] hover:!text-white"
+                      data-testid={`delete-user-${u.id}`}
+                      title="Изтрий"
+                    >
+                      <Trash2 size={12} /> Изтрий
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           ))}

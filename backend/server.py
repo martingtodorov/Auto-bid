@@ -65,6 +65,8 @@ async def get_current_user(request: Request) -> dict:
         user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
         if not user:
             raise HTTPException(status_code=401, detail="Потребителят не е намерен")
+        if user.get("banned"):
+            raise HTTPException(status_code=403, detail="Акаунтът е блокиран. За въпроси: contact@autobid.bg")
         return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Сесията е изтекла")
@@ -265,6 +267,8 @@ async def login(payload: UserLogin):
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(payload.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Грешен имейл или парола")
+    if user.get("banned"):
+        raise HTTPException(status_code=403, detail="Акаунтът е блокиран. За въпроси: contact@autobid.bg")
     token = create_token(user["id"], email)
     return {
         "token": token,
@@ -1980,6 +1984,76 @@ async def admin_update_user(user_id: str, payload: AdminUserUpdate, admin_user: 
     return {"ok": True, "user": fresh}
 
 
+@api.post("/admin/users/{user_id}/ban")
+async def admin_ban_user(user_id: str, admin_user: dict = Depends(require_admin)):
+    """Ban a user — blocks login + bidding. Their existing auctions remain visible."""
+    if user_id == admin_user["id"]:
+        raise HTTPException(status_code=400, detail="Не можете да блокирате собствения си акаунт")
+    u = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not u:
+        raise HTTPException(status_code=404, detail="Потребителят не е намерен")
+    if u.get("role") == "admin":
+        raise HTTPException(status_code=400, detail="Не можете да блокирате друг администратор")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.users.update_one({"id": user_id}, {"$set": {"banned": True, "banned_at": now, "banned_by": admin_user["id"]}})
+    return {"ok": True, "banned": True}
+
+
+@api.post("/admin/users/{user_id}/unban")
+async def admin_unban_user(user_id: str, _admin: dict = Depends(require_admin)):
+    u = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not u:
+        raise HTTPException(status_code=404, detail="Потребителят не е намерен")
+    await db.users.update_one({"id": user_id}, {"$set": {"banned": False}, "$unset": {"banned_at": "", "banned_by": ""}})
+    return {"ok": True, "banned": False}
+
+
+@api.delete("/admin/users/{user_id}")
+async def admin_delete_user(user_id: str, admin_user: dict = Depends(require_admin)):
+    """Hard-delete a user + cascade: their bids, comments, watches, saved searches, bidding credits.
+    Their auctions are kept (for ledger integrity) but seller_name is anonymized.
+    """
+    if user_id == admin_user["id"]:
+        raise HTTPException(status_code=400, detail="Не можете да изтриете собствения си акаунт")
+    u = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not u:
+        raise HTTPException(status_code=404, detail="Потребителят не е намерен")
+    if u.get("role") == "admin":
+        raise HTTPException(status_code=400, detail="Не можете да изтриете друг администратор")
+
+    # Cascade
+    bids = await db.bids.delete_many({"user_id": user_id})
+    comments = await db.comments.delete_many({"user_id": user_id})
+    watches = await db.watches.delete_many({"user_id": user_id})
+    saved = await db.saved_searches.delete_many({"user_id": user_id})
+    credits = await db.bidding_credits.delete_many({"user_id": user_id})
+    # Anonymize their auctions (keep for ledger/sales history; platform takes ownership)
+    anon = await db.auctions.update_many(
+        {"seller_id": user_id},
+        {"$set": {"seller_name": "Изтрит потребител", "seller_id": "deleted"}},
+    )
+    # Clear any high-bidder references pointing to this user (ongoing auctions)
+    hb = await db.auctions.update_many(
+        {"high_bidder_id": user_id},
+        {"$set": {"high_bidder_id": None, "high_bidder_name": None}},
+    )
+    # Finally remove the user
+    await db.users.delete_one({"id": user_id})
+    return {
+        "ok": True,
+        "deleted": {
+            "user": 1,
+            "bids": bids.deleted_count,
+            "comments": comments.deleted_count,
+            "watches": watches.deleted_count,
+            "saved_searches": saved.deleted_count,
+            "bidding_credits": credits.deleted_count,
+            "auctions_anonymized": anon.modified_count,
+            "bidder_references_cleared": hb.modified_count,
+        },
+    }
+
+
 
 
 # ---- Post-auction reserve-not-met flow ----
@@ -2616,6 +2690,92 @@ async def reseed():
 
 
 # ---- SEO / Social sharing: returns HTML with Open Graph tags for crawlers ----
+def _json_ld_vehicle(a: dict, url: str) -> str:
+    """Build schema.org Vehicle structured data for a listing (great for Google search)."""
+    import json as _json
+    offers = {
+        "@type": "Offer",
+        "priceCurrency": "EUR",
+        "price": float(a.get("current_bid_eur", 0)),
+        "url": url,
+        "availability": "https://schema.org/InStock" if a.get("status") == "live" else "https://schema.org/SoldOut",
+    }
+    data = {
+        "@context": "https://schema.org",
+        "@type": "Vehicle",
+        "name": a.get("title", ""),
+        "brand": {"@type": "Brand", "name": a.get("make", "")},
+        "model": a.get("model", ""),
+        "modelDate": a.get("year"),
+        "bodyType": a.get("body_type"),
+        "fuelType": a.get("fuel"),
+        "vehicleTransmission": a.get("transmission"),
+        "color": a.get("color"),
+        "mileageFromOdometer": {
+            "@type": "QuantitativeValue",
+            "value": a.get("mileage_km"),
+            "unitCode": "KMT",
+        } if a.get("mileage_km") else None,
+        "vehicleEngine": {
+            "@type": "EngineSpecification",
+            "engineDisplacement": {"@type": "QuantitativeValue", "value": a.get("engine_cc"), "unitCode": "CMQ"},
+            "enginePower": {"@type": "QuantitativeValue", "value": a.get("power_hp"), "unitCode": "BHP"},
+        } if a.get("engine_cc") else None,
+        "image": (a.get("images") or [None])[0],
+        "description": (a.get("description") or "")[:600],
+        "url": url,
+        "offers": offers,
+    }
+    # Strip None values for cleanliness
+    clean = {k: v for k, v in data.items() if v is not None}
+    return _json.dumps(clean, ensure_ascii=False)
+
+
+@api.get("/sitemap.xml", response_class=Response)
+async def sitemap_xml(request: Request):
+    """Dynamic XML sitemap for Google/Bing indexing."""
+    frontend_base = (
+        os.environ.get("APP_URL")
+        or request.headers.get("origin")
+        or str(request.base_url).rstrip("/")
+    ).rstrip("/")
+    # Static pages
+    pages = [
+        ("", "daily", "1.0"),
+        ("/auctions", "hourly", "0.9"),
+        ("/how-it-works", "monthly", "0.7"),
+        ("/faq", "monthly", "0.6"),
+        ("/fees", "monthly", "0.6"),
+        ("/contacts", "monthly", "0.5"),
+        ("/terms", "yearly", "0.3"),
+    ]
+    # Live + recently ended auctions (indexable)
+    cursor = db.auctions.find(
+        {"status": {"$in": ["live", "sold", "ended", "reserve_not_met"]}},
+        {"_id": 0, "id": 1, "updated_at": 1, "finalized_at": 1, "created_at": 1, "status": 1},
+    ).sort("created_at", -1).limit(5000)
+    auctions = await cursor.to_list(5000)
+
+    xml_parts = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ]
+    for path, freq, pr in pages:
+        xml_parts.append(
+            f"<url><loc>{frontend_base}{path}</loc><changefreq>{freq}</changefreq><priority>{pr}</priority></url>"
+        )
+    for a in auctions:
+        last = a.get("finalized_at") or a.get("updated_at") or a.get("created_at") or ""
+        lastmod = f"<lastmod>{last[:10]}</lastmod>" if last else ""
+        freq = "hourly" if a.get("status") == "live" else "monthly"
+        pr = "0.9" if a.get("status") == "live" else "0.5"
+        xml_parts.append(
+            f"<url><loc>{frontend_base}/auctions/{a['id']}</loc>{lastmod}<changefreq>{freq}</changefreq><priority>{pr}</priority></url>"
+        )
+    xml_parts.append("</urlset>")
+    return Response(content="\n".join(xml_parts), media_type="application/xml; charset=utf-8")
+
+
 @api.get("/share/auction/{auction_id}", response_class=PlainTextResponse)
 async def share_auction(auction_id: str, request: Request):
     from html import escape as _esc
@@ -2628,10 +2788,12 @@ async def share_auction(auction_id: str, request: Request):
         title = "AutoBid.bg — Търг"
         description = "Търгът не е намерен."
         image = f"{frontend_base}/og-default.jpg"
+        json_ld = ""
     else:
         title = f"{a.get('title','')} — AutoBid.bg"
         description = (a.get("description") or "")[:280]
         image = (a.get("images") or [None])[0] or f"{frontend_base}/og-default.jpg"
+        json_ld = f'<script type="application/ld+json">{_json_ld_vehicle(a, target)}</script>'
 
     html = f"""<!DOCTYPE html>
 <html lang="bg">
@@ -2651,6 +2813,7 @@ async def share_auction(auction_id: str, request: Request):
 <meta name="twitter:description" content="{_esc(description)}">
 <meta name="twitter:image" content="{_esc(image)}">
 <link rel="canonical" href="{_esc(target)}">
+{json_ld}
 <meta http-equiv="refresh" content="0; url={_esc(target)}">
 </head>
 <body>

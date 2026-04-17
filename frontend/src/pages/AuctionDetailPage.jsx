@@ -8,7 +8,7 @@ import BiddingCreditModal from "../components/BiddingCreditModal";
 import AuctionCard from "../components/AuctionCard";
 import NegotiationPortal from "../components/NegotiationPortal";
 import { useSiteSettings, computeBuyerFee } from "../lib/settings";
-import { setPageMeta, resetPageMeta } from "../lib/seo";
+import { setPageMeta, resetPageMeta, buildVehicleJsonLd } from "../lib/seo";
 
 export default function AuctionDetailPage() {
   const { id } = useParams();
@@ -112,14 +112,16 @@ export default function AuctionDetailPage() {
     api.get(`/auctions/${id}/bidding-credit`).then((r) => setCredit(r.data || null)).catch(() => setCredit(null));
   }, [user, id]);
 
-  // SEO meta tags
+  // SEO meta tags + structured data
   useEffect(() => {
     if (!a) return;
+    const url = window.location.href;
     setPageMeta({
       title: `${a.title} — AutoBid.bg`,
       description: a.description,
       image: a.images?.[0],
-      url: window.location.href,
+      url,
+      jsonLd: buildVehicleJsonLd(a, url),
     });
     return () => resetPageMeta();
   }, [a]);

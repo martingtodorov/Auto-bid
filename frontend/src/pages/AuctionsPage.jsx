@@ -4,6 +4,7 @@ import { useAuth, formatError } from "../lib/auth";
 import AuctionCard from "../components/AuctionCard";
 import { SlidersHorizontal, X, Search, BookmarkPlus, Check } from "lucide-react";
 import { mergeMakes } from "../lib/makes";
+import { setPageMeta, resetPageMeta } from "../lib/seo";
 
 export default function AuctionsPage() {
   const { user } = useAuth();
@@ -24,6 +25,15 @@ export default function AuctionsPage() {
     const params = new URLSearchParams(window.location.search);
     const q = params.get("q");
     if (q) setFilters((p) => ({ ...p, q, status: "" }));
+  }, []);
+
+  useEffect(() => {
+    setPageMeta({
+      title: "Всички търгове — AutoBid.bg",
+      description: "Разгледайте всички активни автомобилни търгове в AutoBid.bg — филтрирайте по марка, година, регион, гориво и цена.",
+      url: window.location.href,
+    });
+    return () => resetPageMeta();
   }, []);
 
   const load = useCallback(async () => {

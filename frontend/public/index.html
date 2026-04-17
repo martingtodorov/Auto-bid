@@ -4,22 +4,68 @@
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#0f4f3a" />
-        <title>AutoBid.bg — Автомобилни търгове</title>
-        <meta name="description" content="AutoBid.bg е платформа за онлайн търгове на автомобили в България. Всеки автомобил е внимателно подбран, документиран и представен от нашия екип." />
+        <title>AutoBid.bg — Онлайн търгове за автомобили в България</title>
+        <meta name="description" content="AutoBid.bg — най-добрите автомобили на търг в България. Прозрачно наддаване, редакционен преглед, 60+ снимки и защита на купувача. Регистрирайте се и наддавайте безплатно." />
+        <meta name="keywords" content="автомобилни търгове, онлайн търг, коли на търг, продавам кола, купувам кола, BMW, Mercedes, Audi, Porsche, търг България, auto aukzion, autobid" />
+        <meta name="author" content="AutoBid.bg" />
+        <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+        <meta name="googlebot" content="index, follow" />
+        <link rel="canonical" href="https://autobid.bg/" />
+        <link rel="alternate" hreflang="bg" href="https://autobid.bg/" />
+        <link rel="alternate" hreflang="x-default" href="https://autobid.bg/" />
 
         <!-- Open Graph -->
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="AutoBid.bg" />
-        <meta property="og:title" content="AutoBid.bg — Автомобилни търгове" />
-        <meta property="og:description" content="Открийте изключителни автомобили на онлайн търг." />
+        <meta property="og:title" content="AutoBid.bg — Онлайн търгове за автомобили в България" />
+        <meta property="og:description" content="Открийте изключителни автомобили на онлайн търг. Прозрачно наддаване, редакционен преглед и 60+ снимки на всяка обява." />
         <meta property="og:image" content="/og-default.jpg" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
         <meta property="og:locale" content="bg_BG" />
+        <meta property="og:url" content="https://autobid.bg/" />
 
         <!-- Twitter -->
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="AutoBid.bg — Автомобилни търгове" />
-        <meta name="twitter:description" content="Открийте изключителни автомобили на онлайн търг." />
+        <meta name="twitter:title" content="AutoBid.bg — Онлайн търгове за автомобили" />
+        <meta name="twitter:description" content="Най-добрите автомобили на търг в България. Редакционно подбрани, документирани и защитени." />
         <meta name="twitter:image" content="/og-default.jpg" />
+
+        <!-- Structured Data: Organization + WebSite with SearchAction -->
+        <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "Organization",
+              "@id": "https://autobid.bg/#org",
+              "name": "AutoBid.bg",
+              "url": "https://autobid.bg/",
+              "logo": "https://autobid.bg/og-default.jpg",
+              "sameAs": [],
+              "contactPoint": [{
+                "@type": "ContactPoint",
+                "contactType": "customer support",
+                "email": "contact@autobid.bg",
+                "availableLanguage": ["bg", "en"]
+              }]
+            },
+            {
+              "@type": "WebSite",
+              "@id": "https://autobid.bg/#website",
+              "url": "https://autobid.bg/",
+              "name": "AutoBid.bg",
+              "publisher": { "@id": "https://autobid.bg/#org" },
+              "inLanguage": "bg-BG",
+              "potentialAction": {
+                "@type": "SearchAction",
+                "target": "https://autobid.bg/auctions?q={search_term_string}",
+                "query-input": "required name=search_term_string"
+              }
+            }
+          ]
+        }
+        </script>
 
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
