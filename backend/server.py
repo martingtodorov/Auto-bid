@@ -731,12 +731,21 @@ async def import_from_mobile_bg(payload: MobileBgImport, user: dict = Depends(ge
         if title_tag:
             title = title_tag.get_text(" ", strip=True).split("|")[0].strip()
 
+    # Strip any "Обява: <id>" / "ID: <id>" suffix or prefix (mobile.bg shows listing id in h1)
+    def _strip_listing_id(s: str) -> str:
+        if not s:
+            return s
+        s = _re.sub(r"\s*(?:Обява|ID|No\.?)[:\s]*\d+\s*", " ", s, flags=_re.IGNORECASE)
+        s = _re.sub(r"\s{2,}", " ", s).strip(" -—|")
+        return s
+
+    title = _strip_listing_id(title)
+
     # Extract make + model from title: "BMW X5 3.0d — ..." -> make=BMW, model="X5 ..."
     make = ""
     model = ""
     if title:
-        # Strip "Обява: ..." suffix
-        clean_title = _re.sub(r"\s*(?:Обява|ID)[:\s]*\d+.*$", "", title).strip()
+        clean_title = title
         parts = clean_title.split()
         if len(parts) >= 2:
             make = parts[0]
@@ -769,27 +778,45 @@ async def import_from_mobile_bg(payload: MobileBgImport, user: dict = Depends(ge
         except Exception: pass
 
     # Engine cc — try multiple patterns in order:
-    # 1) Mobile.bg structured spec field "Обем: 2996"
-    # 2) Explicit "XXXX куб.см" / "XXXX cc" anywhere in text
-    # 3) Liter notation "2.0L", "3.0i", "2.0 TDI/TFSI/CDI/TSI" in title/description
-    # 4) Common suffixes like "30d", "43i", "318d" where first digits hint at displacement
+    # 1) Modern mobile.bg "item" block: <div class="item"><div>Кубатура [куб.см]</div><div>3000 см<sup>3</sup></div></div>
+    # 2) Legacy mpLabel/mpInfo structure
+    # 3) Explicit "XXXX куб.см" / "XXXX cc" anywhere in text
+    # 4) Liter notation "2.0L", "3.0i", "2.0 TDI/TFSI/CDI/TSI" in title/description
     engine_cc = 0
-    # (1) structured field
-    for label_m in _re.finditer(r'mpLabel[^>]*>\s*(Обем|Кубатура)\s*[\[\(]?[^<]*?[<][\w\s="/]*?mpInfo[^>]*>\s*(\d+)', html):
-        try:
-            engine_cc = int(label_m.group(2))
-            break
-        except Exception:
-            pass
 
-    # (2) plain text patterns
+    # (1) Modern "item" spec row — find div.item whose first inner div mentions Кубатура/Обем,
+    #     then grab the first digit-group from the sibling value div.
+    for item in soup.select("div.item"):
+        kids = item.find_all("div", recursive=False)
+        if len(kids) >= 2:
+            label_txt = kids[0].get_text(" ", strip=True)
+            if _re.search(r"\b(Кубатура|Обем)\b", label_txt, _re.IGNORECASE):
+                val_txt = kids[1].get_text(" ", strip=True)
+                m = _re.search(r"(\d{3,5})", val_txt)
+                if m:
+                    try:
+                        engine_cc = int(m.group(1))
+                        break
+                    except Exception:
+                        pass
+
+    # (2) Legacy structured field
     if not engine_cc:
-        m = _re.search(r"(\d{3,4})\s*куб\.?\s*см", full_text, _re.IGNORECASE) or _re.search(r"(\d{3,4})\s*cc\b", full_text, _re.IGNORECASE) or _re.search(r"(?:Обем|Кубатура)[:\s]+(\d{3,4})", full_text)
+        for label_m in _re.finditer(r'mpLabel[^>]*>\s*(Обем|Кубатура)\s*[\[\(]?[^<]*?[<][\w\s="/]*?mpInfo[^>]*>\s*(\d+)', html):
+            try:
+                engine_cc = int(label_m.group(2))
+                break
+            except Exception:
+                pass
+
+    # (3) plain text patterns
+    if not engine_cc:
+        m = _re.search(r"(\d{3,4})\s*куб\.?\s*см", full_text, _re.IGNORECASE) or _re.search(r"(\d{3,4})\s*cc\b", full_text, _re.IGNORECASE) or _re.search(r"(?:Обем|Кубатура)[^0-9]{0,40}(\d{3,5})", full_text)
         if m:
             try: engine_cc = int(m.group(1))
             except Exception: pass
 
-    # (3) liter notation, e.g. "2.0 TDI", "3.0L", "1.8 TSI", "3.0i"
+    # (4) liter notation, e.g. "2.0 TDI", "3.0L", "1.8 TSI", "3.0i"
     if not engine_cc:
         search_src = f"{title}\n{model}\n{full_text[:800]}"
         m = _re.search(r"\b([1-6])[\.,]([0-9])\s*(?:[LlЛл]|TDI|TFSI|TSI|CDI|CRDI|HDI|dCi|THP|MultiAir|Ecoboost|Turbo|[ivtdбa-я]{1,4})?\b", search_src)
@@ -832,13 +859,23 @@ async def import_from_mobile_bg(payload: MobileBgImport, user: dict = Depends(ge
     if lm:
         city = lm.group(1).strip()
 
-    # Description: typically in div with class "moreInfo" or "carInfo" on mobile.bg
+    # Description: typically in div.moreInfo > div.text on mobile.bg.
+    # Skip the "Допълнителна информация" header block (it's just a section title).
     description = ""
-    for sel in ["div.moreInfo", "div.car-details", "div.description", "[id*=More]", "[id*=Comments]"]:
-        el = soup.select_one(sel)
-        if el:
-            description = el.get_text("\n", strip=True)
-            break
+    # Prefer the inner text div which contains the seller's actual description
+    inner = soup.select_one("div.moreInfo div.text") or soup.select_one("div.moreInfo > .text")
+    if inner:
+        description = inner.get_text("\n", strip=True)
+    else:
+        for sel in ["div.moreInfo", "div.car-details", "div.description", "[id*=More]", "[id*=Comments]"]:
+            el = soup.select_one(sel)
+            if el:
+                description = el.get_text("\n", strip=True)
+                break
+    # Strip any leading "Допълнителна информация" heading that leaked in
+    if description:
+        description = _re.sub(r"^\s*Допълнителна\s+информация\s*\n?", "", description, flags=_re.IGNORECASE)
+        description = description.strip()
     if not description and h1:
         # fallback: try next sibling paragraphs
         paragraphs = [p.get_text(" ", strip=True) for p in soup.find_all("p") if len(p.get_text(strip=True)) > 40]
