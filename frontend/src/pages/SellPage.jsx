@@ -459,8 +459,13 @@ export default function SellPage() {
 
             {err && <p className="md:col-span-2 text-sm text-[hsl(var(--danger))]" data-testid="sell-error">{err}</p>}
 
-            <div className="md:col-span-2 flex items-center gap-4 mt-4">
-              <button type="submit" disabled={loading} className="btn btn-primary" data-testid="sell-submit">
+            <div className="md:col-span-2 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 mt-4">
+              <button
+                type="submit"
+                disabled={loading}
+                className="btn btn-primary w-full sm:w-auto !h-14 sm:!h-auto !text-base sm:!text-sm !px-8 sm:!px-6 font-semibold shadow-lg sm:shadow-none"
+                data-testid="sell-submit"
+              >
                 {loading ? "Изпращане…" : "Подай за одобрение"}
               </button>
               <p className="text-xs text-[hsl(var(--ink-muted))]">След одобрение нашият екип ще направи професионален фото отчет.</p>

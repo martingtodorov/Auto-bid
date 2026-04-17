@@ -1,7 +1,18 @@
 import React from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { polyfill as dndPolyfill } from "mobile-drag-drop";
+import "mobile-drag-drop/default.css";
 import { AuthProvider } from "./lib/auth";
+
+// Enable HTML5 drag-and-drop on touch devices
+dndPolyfill({
+  dragImageCenterOnTouch: true,
+  forceApply: false,
+  tryFindDraggableTarget: true,
+});
+// Allow scroll while dragging by listening passive:false on touchmove
+window.addEventListener("touchmove", () => {}, { passive: false });
 import Nav from "./components/Nav";
 import LiveTicker from "./components/LiveTicker";
 import Footer from "./components/Footer";

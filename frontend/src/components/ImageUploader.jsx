@@ -184,19 +184,6 @@ export default function ImageUploader({
                     data-testid={`${testId}-move-${i}`}
                     title="Премести в друга категория"
                   ><ArrowRightLeft size={12} /></button>
-                  {menuOpen === i && (
-                    <div className="absolute right-0 top-full mt-1 bg-white rounded-md border border-[hsl(var(--line))] shadow-lg py-1 z-10 min-w-[140px]" data-testid={`${testId}-menu-${i}`}>
-                      {availableCategories.map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => moveToOther(i, c.id)}
-                          className="w-full text-left px-3 py-1.5 text-xs hover:bg-[hsl(var(--surface))] whitespace-nowrap"
-                          data-testid={`${testId}-moveto-${c.id}-${i}`}
-                        >→ {c.label}</button>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
             </div>
@@ -215,6 +202,33 @@ export default function ImageUploader({
         )}
       </div>
       <input ref={ref} type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} data-testid={`${testId}-input`} />
+      {menuOpen != null && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/40" onClick={() => setMenuOpen(null)} data-testid={`${testId}-menu-overlay`} />
+          <div className="fixed left-0 right-0 bottom-0 sm:left-auto sm:right-6 sm:bottom-6 sm:w-72 z-50 bg-white rounded-t-xl sm:rounded-xl shadow-2xl border border-[hsl(var(--line))] overflow-hidden" data-testid={`${testId}-menu`}>
+            <div className="px-5 py-3 border-b border-[hsl(var(--line))] bg-[hsl(var(--surface))]">
+              <div className="text-xs text-[hsl(var(--ink-muted))]">Премести снимка #{menuOpen + 1} в:</div>
+            </div>
+            {availableCategories.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => moveToOther(menuOpen, c.id)}
+                className="w-full text-left px-5 py-4 sm:py-3 text-sm hover:bg-[hsl(var(--surface))] border-b border-[hsl(var(--line))] last:border-b-0 flex items-center gap-2"
+                data-testid={`${testId}-moveto-${c.id}-${menuOpen}`}
+              >
+                <ArrowRightLeft size={14} className="text-[hsl(var(--accent))]" /> {c.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setMenuOpen(null)}
+              className="w-full text-center px-5 py-4 sm:py-3 text-sm text-[hsl(var(--ink-muted))] bg-[hsl(var(--surface))]"
+              data-testid={`${testId}-menu-cancel`}
+            >Отказ</button>
+          </div>
+        </>
+      )}
       {!label && (
         <p className="mt-2 text-xs text-[hsl(var(--ink-muted))] flex items-center gap-1.5">
           <ImageIcon size={11} /> JPEG/PNG · автоматично се оптимизират до 1600px
