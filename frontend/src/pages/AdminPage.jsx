@@ -225,6 +225,9 @@ export default function AdminPage() {
                             <button onClick={() => setRejectingId(a.id)} className="btn btn-secondary !py-2 !px-4 flex items-center gap-2" data-testid={`reject-${a.id}`}>
                               <X size={14} /> Откажи
                             </button>
+                            <button onClick={() => hardDeleteListing(a.id, a.title)} disabled={busy === a.id} className="btn btn-secondary !py-2 !px-4 flex items-center gap-2 !text-[hsl(var(--danger))] !border-[hsl(var(--danger))]/40 hover:!bg-[hsl(var(--danger))] hover:!text-white" data-testid={`delete-pending-${a.id}`}>
+                              <Trash size={14} /> Изтрий
+                            </button>
                           </div>
                         )}
                       </div>
@@ -375,6 +378,9 @@ export default function AdminPage() {
                         )}
                         <button onClick={() => setEditingId(a.id)} className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1" data-testid={`edit-sold-${a.id}`}>
                           <Edit3 size={12} /> Редактирай
+                        </button>
+                        <button onClick={() => hardDeleteListing(a.id, a.title)} disabled={busy === a.id} className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1 !text-[hsl(var(--danger))] !border-[hsl(var(--danger))]/40 hover:!bg-[hsl(var(--danger))] hover:!text-white" data-testid={`delete-sold-${a.id}`}>
+                          <Trash size={12} /> Изтрий
                         </button>
                       </div>
                     </div>
