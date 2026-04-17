@@ -539,32 +539,66 @@ async def import_from_mobile_bg(payload: MobileBgImport, user: dict = Depends(ge
             from curl_cffi import requests as curl_requests
             import asyncio as _asyncio
 
-            def _fetch():
-                return curl_requests.get(
-                    url,
-                    impersonate="chrome124",
-                    timeout=20,
-                    headers={
-                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                        "Accept-Language": "bg-BG,bg;q=0.9,en-US;q=0.8,en;q=0.7",
-                        "Upgrade-Insecure-Requests": "1",
-                    },
-                    allow_redirects=True,
-                )
+            impersonations = ["chrome131", "chrome124", "safari17_0"]
+            resp = None
+            last_status = None
+            for imp in impersonations:
+                def _fetch(_imp=imp):
+                    return curl_requests.get(
+                        url,
+                        impersonate=_imp,
+                        timeout=20,
+                        headers={
+                            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                            "Accept-Language": "bg-BG,bg;q=0.9,en-US;q=0.8,en;q=0.7",
+                            "Upgrade-Insecure-Requests": "1",
+                            "Referer": "https://www.google.com/",
+                        },
+                        allow_redirects=True,
+                    )
 
-            loop = _asyncio.get_event_loop()
-            resp = await loop.run_in_executor(None, _fetch)
-            if resp.status_code >= 400:
+                loop = _asyncio.get_event_loop()
+                r = await loop.run_in_executor(None, _fetch)
+                last_status = r.status_code
+                if r.status_code < 400 and len(r.text) > 3000 and "затруднения" not in r.text:
+                    resp = r
+                    break
+
+            # Fallback: public CORS/scrape proxies — mobile.bg blocks datacenter IPs
+            if resp is None:
+                import urllib.parse as _urlparse
+                enc = _urlparse.quote(url, safe="")
+                proxy_urls = [
+                    f"https://api.allorigins.win/raw?url={enc}",
+                    f"https://corsproxy.io/?url={enc}",
+                    f"https://api.codetabs.com/v1/proxy/?quest={enc}",
+                    f"https://thingproxy.freeboard.io/fetch/{url}",
+                ]
+
+                for proxy_url in proxy_urls:
+                    def _fetch_proxy(_p=proxy_url):
+                        return curl_requests.get(_p, timeout=25, impersonate="chrome124", allow_redirects=True)
+                    try:
+                        r = await loop.run_in_executor(None, _fetch_proxy)
+                        if r.status_code < 400 and len(r.text) > 3000 and "затруднения" not in r.text:
+                            resp = r
+                            break
+                    except Exception:
+                        continue
+
+            if resp is None:
                 raise HTTPException(
                     status_code=502,
-                    detail=(
-                        f"Mobile.bg блокира автоматичен достъп (код {resp.status_code}). "
-                        "Моля отворете обявата във вашия браузър, натиснете Ctrl+A (маркирайте всичко), "
-                        "Ctrl+C (копирайте), после превключете на „Постави текст“ по-долу и залепете (Ctrl+V)."
-                    ),
+                    detail="Не успяхме да заредим обявата. Моля проверете линка.",
                 )
+
             try:
-                html = resp.content.decode("windows-1251", errors="ignore") if b"windows-1251" in resp.content[:1024].lower() else resp.text
+                # mobile.bg често сервира страниците в windows-1251
+                raw = resp.content
+                if b"windows-1251" in raw[:1024].lower():
+                    html = raw.decode("windows-1251", errors="ignore")
+                else:
+                    html = resp.text
             except Exception:
                 html = resp.text
         except HTTPException:
@@ -592,14 +626,24 @@ async def import_from_mobile_bg(payload: MobileBgImport, user: dict = Depends(ge
         if title_tag:
             title = title_tag.get_text(" ", strip=True).split("|")[0].strip()
 
-    # Extract make + model from title: "BMW X5 3.0d — ..." -> make=BMW, model="X5 3.0d"
+    # Extract make + model from title: "BMW X5 3.0d — ..." -> make=BMW, model="X5 ..."
     make = ""
     model = ""
     if title:
-        parts = title.split()
+        # Strip "Обява: ..." suffix
+        clean_title = _re.sub(r"\s*(?:Обява|ID)[:\s]*\d+.*$", "", title).strip()
+        parts = clean_title.split()
         if len(parts) >= 2:
             make = parts[0]
-            model = " ".join(parts[1:3])
+            # Take everything up to year or dash (up to first 5 words max)
+            model_parts = []
+            for w in parts[1:6]:
+                if _re.match(r"^(19[5-9]\d|20[0-2]\d)[.,г]*$", w):
+                    break
+                if w in ("-", "—", "–"):
+                    break
+                model_parts.append(w)
+            model = " ".join(model_parts).strip()
 
     # Year: first 4-digit number between 1950-2030
     year_match = _re.search(r"\b(19[5-9]\d|20[0-2]\d|20[3-5]\d)\s*г\.?", full_text) or _re.search(r"\b(19[5-9]\d|20[0-2]\d|20[3-5]\d)\b", full_text)
@@ -635,7 +679,19 @@ async def import_from_mobile_bg(payload: MobileBgImport, user: dict = Depends(ge
     # Fuel / Transmission / Body - find in text
     fuel = _normalize(full_text, _MOBILEBG_FUEL_MAP, "Бензин")
     transmission = _normalize(full_text, _MOBILEBG_TRANS_MAP, "Ръчна")
-    body_type = _normalize(full_text, _MOBILEBG_BODY_MAP, "Седан")
+    # Body type: check ordered list so "Купе"/"Кабрио" match before "джип"/"suv"
+    body_type = "Седан"
+    body_order = ["кабриолет", "кабрио", "купе", "комби", "хечбек", "джип", "suv", "кросоувър", "ван", "пикап", "седан"]
+    lowered = full_text.lower()
+    # Look specifically for "Категория" keyword for precise match
+    cat = _re.search(r"Категория[:\s]+([А-Яа-я\-]+)", full_text)
+    if cat:
+        body_type = _normalize(cat.group(1), _MOBILEBG_BODY_MAP, body_type)
+    else:
+        for key in body_order:
+            if key in lowered:
+                body_type = _MOBILEBG_BODY_MAP.get(key, body_type)
+                break
 
     # Color: look for "Цвят"
     color = ""
@@ -671,8 +727,9 @@ async def import_from_mobile_bg(payload: MobileBgImport, user: dict = Depends(ge
             src = "https:" + src
         elif src.startswith("/"):
             src = "https://www.mobile.bg" + src
-        if ("mobile.bg" in src or src.startswith("http")) and any(x in src.lower() for x in ["photo", "pic", "big", "jpg", "jpeg", "png"]):
-            if src not in images and "logo" not in src.lower() and "icon" not in src.lower():
+        if ("mobile.bg" in src or src.startswith("http")) and any(x in src.lower() for x in ["photo", "pic", "big", "jpg", "jpeg", "png", "webp"]):
+            low = src.lower()
+            if src not in images and not any(bad in low for bad in ["logo", "icon", "nophoto", "placeholder", "sprite", "avatar"]):
                 images.append(src)
         if len(images) >= 24:
             break

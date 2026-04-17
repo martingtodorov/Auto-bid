@@ -109,27 +109,17 @@ export default function SellPage() {
   };
 
   const [importUrl, setImportUrl] = useState("");
-  const [importHtml, setImportHtml] = useState("");
-  const [importMode, setImportMode] = useState("url"); // "url" | "paste"
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState("");
   const [importErr, setImportErr] = useState("");
 
   const importMobileBg = async () => {
     setImportErr(""); setImportMsg("");
-    const payload = {};
-    if (importMode === "url") {
-      const url = (importUrl || "").trim();
-      if (!url) { setImportErr("Поставете линк към обявата в mobile.bg"); return; }
-      payload.url = url;
-    } else {
-      const html = (importHtml || "").trim();
-      if (!html || html.length < 100) { setImportErr("Залепете съдържанието на страницата (поне няколко реда)"); return; }
-      payload.html = html;
-    }
+    const url = (importUrl || "").trim();
+    if (!url) { setImportErr("Поставете линк към обявата в mobile.bg"); return; }
     setImporting(true);
     try {
-      const { data } = await api.post("/auctions/import-mobile-bg", payload);
+      const { data } = await api.post("/auctions/import-mobile-bg", { url });
       setForm((p) => ({
         ...p,
         title: data.title || p.title,
@@ -185,63 +175,29 @@ export default function SellPage() {
               <div className="overline text-[hsl(var(--accent))]">Бърз импорт от mobile.bg</div>
               <h3 className="font-serif text-xl mt-1.5">Имате обява в mobile.bg?</h3>
               <p className="text-sm text-[hsl(var(--ink))]/80 mt-1.5">
-                Ще заредим автоматично марка, модел, година, пробег, гориво, цвят, описание и снимки. <strong>Цената и резервата задавате сами.</strong>
+                Ще заредим автоматично марка, модел, година, пробег, гориво, цвят, описание и снимки. <strong>Цената и резервът задавате сами.</strong>
               </p>
             </div>
 
-            <div className="mt-4 inline-flex rounded-md border border-[hsl(var(--line))] overflow-hidden bg-white text-xs font-semibold">
-              <button type="button" onClick={() => setImportMode("url")} className={`px-4 py-2 ${importMode === "url" ? "bg-[hsl(var(--ink))] text-white" : "text-[hsl(var(--ink-muted))]"}`} data-testid="import-mode-url">
-                От линк
-              </button>
-              <button type="button" onClick={() => setImportMode("paste")} className={`px-4 py-2 border-l border-[hsl(var(--line))] ${importMode === "paste" ? "bg-[hsl(var(--ink))] text-white" : "text-[hsl(var(--ink-muted))]"}`} data-testid="import-mode-paste">
-                Постави текст
+            <div className="mt-4 flex flex-col sm:flex-row gap-2">
+              <input
+                type="url"
+                value={importUrl}
+                onChange={(e) => setImportUrl(e.target.value)}
+                placeholder="https://www.mobile.bg/obiava-..."
+                className="flex-1 border border-[hsl(var(--line))] h-11 px-3 text-sm bg-white"
+                data-testid="import-url-input"
+              />
+              <button
+                type="button"
+                onClick={importMobileBg}
+                disabled={importing}
+                className="btn btn-accent !py-2 !px-5 shrink-0"
+                data-testid="import-url-btn"
+              >
+                {importing ? "Импортиране…" : "Импортирай данните"}
               </button>
             </div>
-
-            {importMode === "url" ? (
-              <div className="mt-3 flex flex-col sm:flex-row gap-2">
-                <input
-                  type="url"
-                  value={importUrl}
-                  onChange={(e) => setImportUrl(e.target.value)}
-                  placeholder="https://www.mobile.bg/obiava-..."
-                  className="flex-1 border border-[hsl(var(--line))] h-11 px-3 text-sm bg-white"
-                  data-testid="import-url-input"
-                />
-                <button
-                  type="button"
-                  onClick={importMobileBg}
-                  disabled={importing}
-                  className="btn btn-accent !py-2 !px-5 shrink-0"
-                  data-testid="import-url-btn"
-                >
-                  {importing ? "Импортиране…" : "Импортирай от линк"}
-                </button>
-              </div>
-            ) : (
-              <div className="mt-3 space-y-2">
-                <p className="text-xs text-[hsl(var(--ink-muted))] leading-relaxed">
-                  Отворете обявата в mobile.bg, натиснете <kbd className="px-1.5 py-0.5 bg-white border border-[hsl(var(--line))] rounded font-mono text-[10px]">Ctrl+A</kbd> (маркирай всичко), <kbd className="px-1.5 py-0.5 bg-white border border-[hsl(var(--line))] rounded font-mono text-[10px]">Ctrl+C</kbd> (копирай) и залепете тук с <kbd className="px-1.5 py-0.5 bg-white border border-[hsl(var(--line))] rounded font-mono text-[10px]">Ctrl+V</kbd>.
-                </p>
-                <textarea
-                  value={importHtml}
-                  onChange={(e) => setImportHtml(e.target.value)}
-                  placeholder="Поставете тук съдържанието на mobile.bg страницата…"
-                  rows={5}
-                  className="w-full border border-[hsl(var(--line))] px-3 py-2 text-xs bg-white font-mono"
-                  data-testid="import-html-input"
-                />
-                <button
-                  type="button"
-                  onClick={importMobileBg}
-                  disabled={importing}
-                  className="btn btn-accent !py-2 !px-5"
-                  data-testid="import-html-btn"
-                >
-                  {importing ? "Импортиране…" : "Извлечи данните"}
-                </button>
-              </div>
-            )}
             {importMsg && <p className="mt-3 text-xs text-[hsl(var(--accent-ink))] font-semibold" data-testid="import-success">{importMsg}</p>}
             {importErr && <p className="mt-3 text-xs text-[hsl(var(--danger))]" data-testid="import-error">{importErr}</p>}
           </div>
