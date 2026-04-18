@@ -177,6 +177,9 @@ class SiteSettingsUpdate(BaseModel):
     buyer_fee_max_eur: Optional[float] = None
     seo_title: Optional[str] = None
     seo_description: Optional[str] = None
+    google_site_verification: Optional[str] = None
+    bing_site_verification: Optional[str] = None
+    google_analytics_id: Optional[str] = None
     faq_content: Optional[str] = None
     terms_content: Optional[str] = None
     contacts_content: Optional[str] = None

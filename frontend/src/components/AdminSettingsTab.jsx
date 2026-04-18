@@ -28,6 +28,9 @@ export default function AdminSettingsTab() {
         buyer_fee_max_eur: data.buyer_fee_max_eur ?? 4000,
         seo_title: data.seo_title ?? "",
         seo_description: data.seo_description ?? "",
+        google_site_verification: data.google_site_verification ?? "",
+        bing_site_verification: data.bing_site_verification ?? "",
+        google_analytics_id: data.google_analytics_id ?? "",
         faq_content: data.faq_content ?? "",
         terms_content: data.terms_content ?? "",
         contacts_content: data.contacts_content ?? "",
@@ -46,6 +49,9 @@ export default function AdminSettingsTab() {
         buyer_fee_max_eur: Number(form.buyer_fee_max_eur),
         seo_title: form.seo_title,
         seo_description: form.seo_description,
+        google_site_verification: form.google_site_verification,
+        bing_site_verification: form.bing_site_verification,
+        google_analytics_id: form.google_analytics_id,
         faq_content: form.faq_content,
         terms_content: form.terms_content,
         contacts_content: form.contacts_content,
@@ -107,6 +113,48 @@ export default function AdminSettingsTab() {
               onChange={(e) => set("seo_description", e.target.value)}
               maxLength={320}
               className="w-full border border-[hsl(var(--line))] p-3 text-sm" />
+          </Field>
+        </div>
+      </section>
+
+      {/* Search Engine Verification */}
+      <section className="rounded-card border border-[hsl(var(--line))] bg-white p-6">
+        <h2 className="font-serif text-2xl">Потвърждение на собственост (Search Console)</h2>
+        <p className="mt-2 text-sm text-[hsl(var(--ink-muted))]">
+          Поставете само съдържанието на meta тага (не целия HTML). Пример за Google: „<code className="text-xs font-mono">abcdef1234567890</code>" от <code className="text-xs">&lt;meta name="google-site-verification" content="..."&gt;</code>.
+        </p>
+        <div className="mt-5 space-y-4">
+          <Field label="Google Search Console — google-site-verification" testid="gsc-verification">
+            <input
+              type="text"
+              value={form.google_site_verification}
+              onChange={(e) => set("google_site_verification", e.target.value.trim())}
+              placeholder="Напр. oZ7q8Xj...Kf9aA"
+              maxLength={200}
+              className="w-full border border-[hsl(var(--line))] h-11 px-3 text-sm font-mono"
+            />
+          </Field>
+          <Field label="Bing Webmaster Tools — msvalidate.01" testid="bing-verification">
+            <input
+              type="text"
+              value={form.bing_site_verification}
+              onChange={(e) => set("bing_site_verification", e.target.value.trim())}
+              placeholder="Напр. 1A2B3C4D5E6F7G8H9I0J"
+              maxLength={200}
+              className="w-full border border-[hsl(var(--line))] h-11 px-3 text-sm font-mono"
+            />
+          </Field>
+          <Field label="Google Analytics 4 Measurement ID" testid="ga-id">
+            <input
+              type="text"
+              value={form.google_analytics_id}
+              onChange={(e) => set("google_analytics_id", e.target.value.trim())}
+              placeholder="G-XXXXXXXXXX"
+              pattern="^G-[A-Z0-9]{4,}$"
+              maxLength={50}
+              className="w-full border border-[hsl(var(--line))] h-11 px-3 text-sm font-mono"
+            />
+            <p className="mt-1 text-xs text-[hsl(var(--ink-muted))]">Трябва да започва с „G-". Оставете празно, за да изключите трекинга.</p>
           </Field>
         </div>
       </section>

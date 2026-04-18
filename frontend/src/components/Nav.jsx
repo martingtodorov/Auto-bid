@@ -26,18 +26,18 @@ export default function Nav() {
   return (
     <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md rule-b" data-testid="main-navigation">
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10">
-        <div className="flex items-center justify-between h-16">
-          <Link to="/" className="flex items-center gap-2" data-testid="brand-logo">
+        <div className="flex items-center justify-between h-16 gap-6">
+          <Link to="/" className="flex items-center gap-2 shrink-0 mr-2 md:mr-6" data-testid="brand-logo">
             <span className="font-serif text-2xl tracking-tight">AutoBid<span className="text-[hsl(var(--accent))]">.bg</span></span>
           </Link>
 
-          <nav className="hidden md:flex items-center gap-8">
+          <nav className="hidden md:flex items-center gap-5 lg:gap-7 shrink-0">
             {links.map((l) => (
               <NavLink
                 key={l.to}
                 to={l.to}
                 className={({ isActive }) =>
-                  `text-sm tracking-wide ${isActive ? "text-[hsl(var(--accent))]" : "text-[hsl(var(--ink))] hover:text-[hsl(var(--accent))]"}`
+                  `text-sm tracking-wide whitespace-nowrap ${isActive ? "text-[hsl(var(--accent))]" : "text-[hsl(var(--ink))] hover:text-[hsl(var(--accent))]"}`
                 }
                 data-testid={`nav-link-${l.to.slice(1)}`}
               >
@@ -46,7 +46,7 @@ export default function Nav() {
             ))}
           </nav>
 
-          <form onSubmit={doSearch} className="hidden lg:flex items-center flex-1 max-w-xs mx-6 relative">
+          <form onSubmit={doSearch} className="hidden lg:flex items-center flex-1 max-w-[220px] relative">
             <Search size={14} className="absolute left-3 text-[hsl(var(--ink-muted))]" />
             <input
               type="text"
@@ -58,26 +58,26 @@ export default function Nav() {
             />
           </form>
 
-          <div className="hidden md:flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-3 lg:gap-4 shrink-0">
             {user ? (
               <>
                 {user.role === "admin" && (
-                  <Link to="/admin" className="text-sm text-[hsl(var(--accent))]" data-testid="nav-admin">Админ</Link>
+                  <Link to="/admin" className="text-sm text-[hsl(var(--accent))] whitespace-nowrap" data-testid="nav-admin">Админ</Link>
                 )}
-                <Link to="/my-listings" className="text-sm" data-testid="nav-my-listings">Мои обяви</Link>
-                <Link to="/watchlist" className="text-sm" data-testid="nav-watchlist">Любими</Link>
-                <Link to="/settings" className="text-sm" data-testid="nav-settings">Настройки</Link>
-                <Link to="/dashboard" className="flex items-center gap-2 text-sm" data-testid="nav-dashboard">
+                <Link to="/my-listings" className="text-sm whitespace-nowrap hidden xl:inline" data-testid="nav-my-listings">Мои обяви</Link>
+                <Link to="/watchlist" className="text-sm whitespace-nowrap hidden xl:inline" data-testid="nav-watchlist">Любими</Link>
+                <Link to="/settings" className="text-sm whitespace-nowrap hidden xl:inline" data-testid="nav-settings">Настройки</Link>
+                <Link to="/dashboard" className="flex items-center gap-1.5 text-sm whitespace-nowrap" data-testid="nav-dashboard">
                   <User size={16} />
-                  {user.name}
+                  <span className="max-w-[110px] truncate">{user.name}</span>
                 </Link>
-                <button onClick={() => { logout(); navigate("/"); }} className="btn btn-secondary !py-2 !px-4" data-testid="nav-logout">
+                <button onClick={() => { logout(); navigate("/"); }} className="btn btn-secondary !py-2 !px-3 lg:!px-4 whitespace-nowrap" data-testid="nav-logout">
                   Изход
                 </button>
               </>
             ) : (
               <>
-                <Link to="/login" className="text-sm" data-testid="nav-login">Вход</Link>
+                <Link to="/login" className="text-sm whitespace-nowrap" data-testid="nav-login">Вход</Link>
                 <Link to="/register" className="btn btn-primary !py-2 !px-4" data-testid="nav-register">Регистрация</Link>
               </>
             )}

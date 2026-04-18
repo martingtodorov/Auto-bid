@@ -113,54 +113,7 @@ from models import (
 )
 
 
-# ---- Auth routes ----
-@api.post("/auth/register")
-@limiter.limit("5/minute")
-async def register(request: Request, payload: UserRegister):
-    email = payload.email.lower().strip()
-    if await db.users.find_one({"email": email}):
-        raise HTTPException(status_code=400, detail="Имейлът вече е регистриран")
-    user_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
-    doc = {
-        "id": user_id,
-        "email": email,
-        "name": payload.name.strip(),
-        "password_hash": hash_password(payload.password),
-        "role": "user",
-        "created_at": now,
-    }
-    await db.users.insert_one(doc)
-    token = create_token(user_id, email)
-    return {
-        "token": token,
-        "user": {"id": user_id, "email": email, "name": doc["name"], "role": "user", "created_at": now},
-    }
-
-@api.post("/auth/login")
-@limiter.limit("10/minute")
-async def login(request: Request, payload: UserLogin):
-    email = payload.email.lower().strip()
-    user = await db.users.find_one({"email": email})
-    if not user or not verify_password(payload.password, user["password_hash"]):
-        raise HTTPException(status_code=401, detail="Грешен имейл или парола")
-    if user.get("banned"):
-        raise HTTPException(status_code=403, detail="Акаунтът е блокиран. За въпроси: contact@autobid.bg")
-    token = create_token(user["id"], email)
-    return {
-        "token": token,
-        "user": {
-            "id": user["id"],
-            "email": user["email"],
-            "name": user["name"],
-            "role": user.get("role", "user"),
-            "created_at": user["created_at"],
-        },
-    }
-
-@api.get("/auth/me")
-async def me(user: dict = Depends(get_current_user)):
-    return user
+# ---- Auth routes moved to routers/auth.py ----
 
 
 # ---- Auction helpers ----
@@ -171,6 +124,9 @@ SETTINGS_DEFAULTS = {
     "buyer_fee_max_eur": 4000.0,
     "seo_title": "AutoBid.bg — Автомобилни търгове",
     "seo_description": "AutoBid.bg е платформа за онлайн търгове на автомобили в България. Всеки автомобил е внимателно подбран, документиран и представен от нашия екип.",
+    "google_site_verification": "",
+    "bing_site_verification": "",
+    "google_analytics_id": "",
     "faq_content": "",
     "terms_content": "",
     "contacts_content": "",
@@ -1167,7 +1123,7 @@ async def require_admin(user: dict = Depends(get_current_user)):
 # ---- Site Settings (CMS) ----
 @api.get("/settings")
 async def get_public_settings():
-    """Public subset of site settings (fee %, SEO, page contents)."""
+    """Public subset of site settings (fee %, SEO, verification tags, page contents)."""
     s = _settings()
     return {
         "buyer_fee_pct": s.get("buyer_fee_pct"),
@@ -1175,6 +1131,9 @@ async def get_public_settings():
         "buyer_fee_max_eur": s.get("buyer_fee_max_eur"),
         "seo_title": s.get("seo_title"),
         "seo_description": s.get("seo_description"),
+        "google_site_verification": s.get("google_site_verification"),
+        "bing_site_verification": s.get("bing_site_verification"),
+        "google_analytics_id": s.get("google_analytics_id"),
         "faq_content": s.get("faq_content"),
         "terms_content": s.get("terms_content"),
         "contacts_content": s.get("contacts_content"),
@@ -2527,6 +2486,7 @@ async def reseed():
 # Include sub-routers (refactored out of server.py for clarity)
 from routers import seo as _seo_router  # noqa: E402
 from routers import negotiations as _neg_router  # noqa: E402
+from routers import auth as _auth_router  # noqa: E402
 
 # Wire up injected deps for the negotiation router
 _neg_router.configure(
@@ -2537,8 +2497,19 @@ _neg_router.configure(
 )
 _neg_router.register_routes(get_current_user)
 
+# Wire up injected deps for the auth router
+_auth_router.configure(
+    hash_password=hash_password,
+    verify_password=verify_password,
+    create_token=create_token,
+    get_current_user=get_current_user,
+    limiter=limiter,
+)
+_auth_router.register_routes()
+
 api.include_router(_seo_router.router)
 api.include_router(_neg_router.router)
+api.include_router(_auth_router.router)
 
 app.include_router(api)
 
