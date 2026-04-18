@@ -7,6 +7,7 @@ import PreauthModal from "../components/PreauthModal";
 import BiddingCreditModal from "../components/BiddingCreditModal";
 import AuctionCard from "../components/AuctionCard";
 import NegotiationPortal from "../components/NegotiationPortal";
+import Lightbox from "../components/Lightbox";
 import { useSiteSettings, computeBuyerFee } from "../lib/settings";
 import { setPageMeta, resetPageMeta, buildVehicleJsonLd, buildBreadcrumbs, combineJsonLd } from "../lib/seo";
 
@@ -18,6 +19,7 @@ export default function AuctionDetailPage() {
   const [bids, setBids] = useState([]);
   const [comments, setComments] = useState([]);
   const [photoIdx, setPhotoIdx] = useState(0);
+  const [lightboxIdx, setLightboxIdx] = useState(null);
   const [bidAmount, setBidAmount] = useState("");
   const [commentText, setCommentText] = useState("");
   const [t, setT] = useState({ label: "" });
@@ -316,8 +318,13 @@ export default function AuctionDetailPage() {
               </span>
             </div>
 
-            <div className="mt-8 border border-[hsl(var(--line))] rounded-card aspect-[4/3] overflow-hidden bg-[hsl(var(--surface))]">
-              <img src={a.images?.[photoIdx]} alt={a.title} className="w-full h-full object-cover" />
+            <div className="mt-8 border border-[hsl(var(--line))] rounded-card aspect-[4/3] overflow-hidden bg-[hsl(var(--surface))] cursor-zoom-in relative group" onClick={() => setLightboxIdx(photoIdx)} data-testid="main-gallery-image">
+              <img src={a.images?.[photoIdx]} alt={a.title} className="w-full h-full object-cover transition group-hover:scale-[1.02]" />
+              {a.images?.length > 0 && (
+                <div className="absolute bottom-3 right-3 px-2.5 py-1 rounded-full bg-black/55 text-white text-xs font-mono opacity-0 group-hover:opacity-100 transition pointer-events-none">
+                  {photoIdx + 1} / {a.images.length} · Увеличи
+                </div>
+              )}
             </div>
             {a.images?.length > 1 && (
               <div className="mt-3 grid grid-cols-5 gap-2">
@@ -610,6 +617,15 @@ export default function AuctionDetailPage() {
             </div>
           </div>
         </section>
+      )}
+
+      {lightboxIdx !== null && (
+        <Lightbox
+          images={a.images || []}
+          index={lightboxIdx}
+          onClose={() => setLightboxIdx(null)}
+          onChange={(i) => { setLightboxIdx(i); setPhotoIdx(i); }}
+        />
       )}
     </main>
   );
