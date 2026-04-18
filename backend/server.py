@@ -34,7 +34,23 @@ api = APIRouter(prefix="/api")
 # ---- Rate limiter (slowapi) ----
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-limiter = Limiter(key_func=get_remote_address, default_limits=[])
+
+
+def _real_client_ip(request: Request) -> str:
+    """Resolve the real client IP behind the Kubernetes ingress / load balancer.
+    Falls back to the direct remote address if no trusted proxy header is present.
+    """
+    # X-Forwarded-For may contain a comma-separated list — the FIRST entry is the client.
+    xff = request.headers.get("x-forwarded-for") or request.headers.get("X-Forwarded-For")
+    if xff:
+        return xff.split(",")[0].strip()
+    real = request.headers.get("x-real-ip") or request.headers.get("X-Real-Ip")
+    if real:
+        return real.strip()
+    return get_remote_address(request)
+
+
+limiter = Limiter(key_func=_real_client_ip, default_limits=[])
 
 JWT_ALGORITHM = "HS256"
 JWT_SECRET = os.environ['JWT_SECRET']
@@ -377,7 +393,33 @@ async def get_auction(auction_id: str, request: Request):
     return public
 
 @api.post("/auctions")
-async def create_auction(payload: AuctionCreate, user: dict = Depends(get_current_user)):
+@limiter.limit("10/minute")
+async def create_auction(request: Request, payload: AuctionCreate, user: dict = Depends(get_current_user)):
+    # --- Size limits (DoS protection against huge base64 images) ---
+    # Each image is a base64 data URL or https URL. Cap per-image + total payload.
+    MAX_PER_IMG = 5 * 1024 * 1024        # 5 MB per image (base64 overhead considered)
+    MAX_TOTAL_IMGS = 120
+    MAX_TOTAL_PAYLOAD = 120 * 1024 * 1024  # 120 MB aggregate
+
+    total_bytes = 0
+    total_count = 0
+    for bucket in (payload.images, payload.images_exterior, payload.images_wheels,
+                   payload.images_bumper, payload.images_interior):
+        if not bucket:
+            continue
+        for item in bucket:
+            if not isinstance(item, str):
+                continue
+            size = len(item)
+            if size > MAX_PER_IMG:
+                raise HTTPException(status_code=413, detail="Една от снимките е твърде голяма (макс. 5 MB всяка)")
+            total_bytes += size
+            total_count += 1
+    if total_count > MAX_TOTAL_IMGS:
+        raise HTTPException(status_code=413, detail=f"Твърде много снимки (макс. {MAX_TOTAL_IMGS})")
+    if total_bytes > MAX_TOTAL_PAYLOAD:
+        raise HTTPException(status_code=413, detail="Общият размер на снимките надвишава 120 MB")
+
     # Validate per-category image minimums (when using categorized uploader)
     exterior = payload.images_exterior or []
     wheels = payload.images_wheels or []
@@ -456,7 +498,8 @@ def _normalize(val: str, mapping: dict, default: str = "") -> str:
 
 
 @api.post("/auctions/import-mobile-bg")
-async def import_from_mobile_bg(payload: MobileBgImport, user: dict = Depends(get_current_user)):
+@limiter.limit("10/minute")
+async def import_from_mobile_bg(request: Request, payload: MobileBgImport, user: dict = Depends(get_current_user)):
     """Scrapes a mobile.bg listing URL and returns a dict of pre-filled auction fields.
     Does NOT include price (user must set it themselves)."""
     from bs4 import BeautifulSoup
@@ -464,6 +507,16 @@ async def import_from_mobile_bg(payload: MobileBgImport, user: dict = Depends(ge
 
     url = (payload.url or "").strip()
     pasted_html = (payload.html or "").strip()
+
+    # SSRF protection: accept only known mobile.bg hostnames (scheme must be http/https).
+    if url:
+        from urllib.parse import urlparse
+        p = urlparse(url)
+        if p.scheme not in ("http", "https"):
+            raise HTTPException(status_code=400, detail="Невалиден URL (разрешени са само http/https)")
+        host = (p.hostname or "").lower()
+        if not (host == "mobile.bg" or host.endswith(".mobile.bg")):
+            raise HTTPException(status_code=400, detail="Разрешени са само URL-и от mobile.bg")
 
     html = None
     if pasted_html:
@@ -883,7 +936,8 @@ async def release_my_credit(auction_id: str, user: dict = Depends(get_current_us
     return {"ok": True, "released": res.modified_count}
 
 @api.post("/auctions/{auction_id}/bids")
-async def place_bid(auction_id: str, payload: BidCreate, user: dict = Depends(get_current_user)):
+@limiter.limit("30/minute")
+async def place_bid(request: Request, auction_id: str, payload: BidCreate, user: dict = Depends(get_current_user)):
     """
     Direct bidding (BaT-style):
       • payload.amount_eur becomes the visible bid immediately.
@@ -2033,237 +2087,8 @@ async def respond_counter_offer(auction_id: str, payload: NegotiationRespond, us
         return {"ok": True, "status": "ended"}
 
 
-# ---- Post-auction negotiation (reserve-not-met) ----
-# Flow:
-#   awaiting_seller_opening (24h) → seller offers price OR declines
-#   awaiting_buyer_response  (24h) → buyer accepts / counters / declines
-#   awaiting_seller_final    (24h) → seller accepts / declines (only if buyer countered)
-#   → accepted / declined / expired
-NEG_WINDOW = timedelta(hours=24)
-NEG_OPEN_STATES = {"awaiting_seller_opening", "awaiting_buyer_response", "awaiting_seller_final"}
+# ---- Post-auction negotiation moved to routers/negotiations.py ----
 
-
-def _neg_public(n: dict, viewer_id: Optional[str] = None) -> dict:
-    """Strip Mongo _id + normalize for client."""
-    d = {k: v for k, v in n.items() if k != "_id"}
-    # Deadline metadata
-    if d.get("deadline_at"):
-        try:
-            dl = datetime.fromisoformat(d["deadline_at"])
-            d["seconds_left"] = max(0, int((dl - datetime.now(timezone.utc)).total_seconds()))
-        except Exception:
-            d["seconds_left"] = 0
-    return d
-
-
-async def _ensure_negotiation(auction_id: str) -> Optional[dict]:
-    """Auto-create a negotiation when the auction is reserve_not_met and none exists.
-    Also auto-expires if a 24h deadline has elapsed without action.
-    Returns the current negotiation doc or None.
-    """
-    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
-    if not a:
-        return None
-    if _auction_status(a) != "reserve_not_met" or not a.get("high_bidder_id"):
-        # Nothing to negotiate
-        return await db.negotiations.find_one({"auction_id": auction_id}, {"_id": 0})
-
-    n = await db.negotiations.find_one({"auction_id": auction_id}, {"_id": 0})
-    now = datetime.now(timezone.utc)
-    if not n:
-        doc = {
-            "id": str(uuid.uuid4()),
-            "auction_id": auction_id,
-            "seller_id": a["seller_id"],
-            "seller_name": a.get("seller_name"),
-            "buyer_id": a["high_bidder_id"],
-            "buyer_name": a.get("high_bidder_name"),
-            "status": "awaiting_seller_opening",
-            "final_price_eur": None,
-            "seller_offer_eur": None,
-            "buyer_counter_eur": None,
-            "deadline_at": (now + NEG_WINDOW).isoformat(),
-            "created_at": now.isoformat(),
-            "updated_at": now.isoformat(),
-            "messages": [],
-        }
-        await db.negotiations.insert_one(doc)
-        n = {k: v for k, v in doc.items() if k != "_id"}
-        return n
-
-    # Check expiry for open states
-    if n.get("status") in NEG_OPEN_STATES and n.get("deadline_at"):
-        try:
-            dl = datetime.fromisoformat(n["deadline_at"])
-            if now >= dl:
-                await db.negotiations.update_one(
-                    {"id": n["id"]},
-                    {"$set": {"status": "expired", "updated_at": now.isoformat()}},
-                )
-                n["status"] = "expired"
-        except Exception:
-            pass
-    return n
-
-
-def _neg_require_party(n: dict, user: dict, party: str):
-    """party = 'seller' | 'buyer' | 'any'"""
-    uid = user["id"]
-    role = user.get("role")
-    if role == "admin":
-        return
-    if party == "seller" and n.get("seller_id") != uid:
-        raise HTTPException(status_code=403, detail="Само продавачът може да извърши това")
-    if party == "buyer" and n.get("buyer_id") != uid:
-        raise HTTPException(status_code=403, detail="Само купувачът може да извърши това")
-    if party == "any" and uid not in (n.get("seller_id"), n.get("buyer_id")):
-        raise HTTPException(status_code=403, detail="Нямате достъп")
-
-
-@api.get("/auctions/{auction_id}/negotiation")
-async def get_negotiation(auction_id: str, user: dict = Depends(get_current_user)):
-    n = await _ensure_negotiation(auction_id)
-    if not n:
-        raise HTTPException(status_code=404, detail="Няма активна преговаряща сесия")
-    _neg_require_party(n, user, "any")
-    return _neg_public(n, user["id"])
-
-
-@api.post("/auctions/{auction_id}/negotiation/opening")
-async def negotiation_opening(auction_id: str, payload: NegotiationOpening, user: dict = Depends(get_current_user)):
-    n = await _ensure_negotiation(auction_id)
-    if not n:
-        raise HTTPException(status_code=404, detail="Няма активна преговаряща сесия")
-    _neg_require_party(n, user, "seller")
-    if n.get("status") != "awaiting_seller_opening":
-        raise HTTPException(status_code=400, detail="Офертата вече е направена")
-
-    now = datetime.now(timezone.utc)
-    if payload.decline:
-        update = {"status": "declined", "updated_at": now.isoformat(), "closed_by": "seller"}
-    else:
-        if not payload.price_eur or payload.price_eur <= 0:
-            raise HTTPException(status_code=400, detail="Невалидна цена")
-        update = {
-            "seller_offer_eur": float(payload.price_eur),
-            "status": "awaiting_buyer_response",
-            "deadline_at": (now + NEG_WINDOW).isoformat(),
-            "updated_at": now.isoformat(),
-        }
-    await db.negotiations.update_one({"id": n["id"]}, {"$set": update})
-    refreshed = await db.negotiations.find_one({"id": n["id"]}, {"_id": 0})
-    return _neg_public(refreshed)
-
-
-@api.post("/auctions/{auction_id}/negotiation/response")
-async def negotiation_response(auction_id: str, payload: NegotiationResponse, user: dict = Depends(get_current_user)):
-    n = await _ensure_negotiation(auction_id)
-    if not n:
-        raise HTTPException(status_code=404, detail="Няма активна преговаряща сесия")
-    _neg_require_party(n, user, "buyer")
-    if n.get("status") != "awaiting_buyer_response":
-        raise HTTPException(status_code=400, detail="Не се очаква ваш отговор в момента")
-
-    now = datetime.now(timezone.utc)
-    action = payload.action
-    if action == "accept":
-        price = float(n["seller_offer_eur"])
-        await _complete_negotiation(n["auction_id"], n["id"], price, now)
-        refreshed = await db.negotiations.find_one({"id": n["id"]}, {"_id": 0})
-        return _neg_public(refreshed)
-    elif action == "counter":
-        if not payload.price_eur or payload.price_eur <= 0:
-            raise HTTPException(status_code=400, detail="Невалидна цена за контраоферта")
-        update = {
-            "buyer_counter_eur": float(payload.price_eur),
-            "status": "awaiting_seller_final",
-            "deadline_at": (now + NEG_WINDOW).isoformat(),
-            "updated_at": now.isoformat(),
-        }
-        await db.negotiations.update_one({"id": n["id"]}, {"$set": update})
-        refreshed = await db.negotiations.find_one({"id": n["id"]}, {"_id": 0})
-        return _neg_public(refreshed)
-    elif action == "decline":
-        await db.negotiations.update_one({"id": n["id"]}, {"$set": {"status": "declined", "updated_at": now.isoformat(), "closed_by": "buyer"}})
-        refreshed = await db.negotiations.find_one({"id": n["id"]}, {"_id": 0})
-        return _neg_public(refreshed)
-    else:
-        raise HTTPException(status_code=400, detail="Невалидно действие")
-
-
-@api.post("/auctions/{auction_id}/negotiation/final")
-async def negotiation_final(auction_id: str, payload: NegotiationFinal, user: dict = Depends(get_current_user)):
-    n = await _ensure_negotiation(auction_id)
-    if not n:
-        raise HTTPException(status_code=404, detail="Няма активна преговаряща сесия")
-    _neg_require_party(n, user, "seller")
-    if n.get("status") != "awaiting_seller_final":
-        raise HTTPException(status_code=400, detail="Не е ваш ред да потвърдите")
-
-    now = datetime.now(timezone.utc)
-    if payload.action == "accept":
-        price = float(n["buyer_counter_eur"])
-        await _complete_negotiation(n["auction_id"], n["id"], price, now)
-    elif payload.action == "decline":
-        await db.negotiations.update_one({"id": n["id"]}, {"$set": {"status": "declined", "updated_at": now.isoformat(), "closed_by": "seller"}})
-    else:
-        raise HTTPException(status_code=400, detail="Невалидно действие")
-    refreshed = await db.negotiations.find_one({"id": n["id"]}, {"_id": 0})
-    return _neg_public(refreshed)
-
-
-async def _complete_negotiation(auction_id: str, negotiation_id: str, price: float, now: datetime):
-    """Mark negotiation accepted + move auction to sold + apply buyer fee."""
-    buyer_fee = _buyer_fee(price)
-    await db.negotiations.update_one(
-        {"id": negotiation_id},
-        {"$set": {
-            "status": "accepted",
-            "final_price_eur": float(price),
-            "buyer_fee_eur": buyer_fee,
-            "completed_at": now.isoformat(),
-            "updated_at": now.isoformat(),
-        }},
-    )
-    await db.auctions.update_one(
-        {"id": auction_id},
-        {"$set": {
-            "status": "sold",
-            "current_bid_eur": float(price),
-            "finalized_at": now.isoformat(),
-            "premium_amount_eur": buyer_fee,
-        }},
-    )
-    # Notify winner
-    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
-    if a:
-        winner = await db.users.find_one({"id": a.get("high_bidder_id")}, {"_id": 0})
-        if winner and winner.get("email"):
-            try:
-                await email_won(winner["email"], winner["name"], a["title"], auction_id, float(price))
-            except Exception as e:
-                logger.error("email_won (negotiation) failed: %s", e)
-
-
-@api.post("/auctions/{auction_id}/negotiation/messages")
-async def negotiation_send_message(auction_id: str, payload: NegotiationMessage, user: dict = Depends(get_current_user)):
-    n = await _ensure_negotiation(auction_id)
-    if not n:
-        raise HTTPException(status_code=404, detail="Няма активна преговаряща сесия")
-    _neg_require_party(n, user, "any")
-    msg = {
-        "id": str(uuid.uuid4()),
-        "user_id": user["id"],
-        "user_name": user["name"],
-        "role": "seller" if user["id"] == n["seller_id"] else ("buyer" if user["id"] == n["buyer_id"] else "admin"),
-        "text": payload.text.strip(),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    await db.negotiations.update_one(
-        {"id": n["id"]},
-        {"$push": {"messages": msg}, "$set": {"updated_at": msg["created_at"]}},
-    )
-    return {"ok": True, "message": msg}
 
 
 # ---- Public profile ----
@@ -2694,246 +2519,27 @@ async def reseed():
     return {"ok": True}
 
 
-# ---- SEO / Social sharing: returns HTML with Open Graph tags for crawlers ----
-def _json_ld_vehicle(a: dict, url: str) -> str:
-    """Build schema.org Vehicle structured data for a listing (great for Google search)."""
-    import json as _json
-    offers = {
-        "@type": "Offer",
-        "priceCurrency": "EUR",
-        "price": float(a.get("current_bid_eur", 0)),
-        "url": url,
-        "availability": "https://schema.org/InStock" if a.get("status") == "live" else "https://schema.org/SoldOut",
-    }
-    data = {
-        "@context": "https://schema.org",
-        "@type": "Vehicle",
-        "name": a.get("title", ""),
-        "brand": {"@type": "Brand", "name": a.get("make", "")},
-        "model": a.get("model", ""),
-        "modelDate": a.get("year"),
-        "bodyType": a.get("body_type"),
-        "fuelType": a.get("fuel"),
-        "vehicleTransmission": a.get("transmission"),
-        "color": a.get("color"),
-        "mileageFromOdometer": {
-            "@type": "QuantitativeValue",
-            "value": a.get("mileage_km"),
-            "unitCode": "KMT",
-        } if a.get("mileage_km") else None,
-        "vehicleEngine": {
-            "@type": "EngineSpecification",
-            "engineDisplacement": {"@type": "QuantitativeValue", "value": a.get("engine_cc"), "unitCode": "CMQ"},
-            "enginePower": {"@type": "QuantitativeValue", "value": a.get("power_hp"), "unitCode": "BHP"},
-        } if a.get("engine_cc") else None,
-        "image": (a.get("images") or [None])[0],
-        "description": (a.get("description") or "")[:600],
-        "url": url,
-        "offers": offers,
-    }
-    # Strip None values for cleanliness
-    clean = {k: v for k, v in data.items() if v is not None}
-    return _json.dumps(clean, ensure_ascii=False)
+# ---- SEO / Sitemap / Share endpoints moved to routers/seo.py ----
 
-
-@api.get("/sitemap.xml", response_class=Response)
-async def sitemap_xml(request: Request):
-    """Dynamic XML sitemap for Google/Bing indexing (includes image sitemap namespace).
-    Embeds up to 20 images per auction URL in the Google Image Sitemap format, so every
-    photo is eligible for Google Image Search — big driver of traffic for car listings.
-    """
-    from html import escape as _esc
-    frontend_base = (
-        os.environ.get("APP_URL")
-        or request.headers.get("origin")
-        or str(request.base_url).rstrip("/")
-    ).rstrip("/")
-    # Static pages
-    pages = [
-        ("", "daily", "1.0"),
-        ("/auctions", "hourly", "0.9"),
-        ("/how-it-works", "monthly", "0.7"),
-        ("/faq", "monthly", "0.6"),
-        ("/fees", "monthly", "0.6"),
-        ("/contacts", "monthly", "0.5"),
-        ("/terms", "yearly", "0.3"),
-    ]
-    # Live + recently ended auctions (indexable)
-    cursor = db.auctions.find(
-        {"status": {"$in": ["live", "sold", "ended", "reserve_not_met"]}},
-        {
-            "_id": 0, "id": 1, "title": 1, "make": 1, "model": 1,
-            "updated_at": 1, "finalized_at": 1, "created_at": 1, "status": 1,
-            "images": 1, "images_exterior": 1, "images_interior": 1,
-            "images_wheels": 1, "images_bumper": 1,
-        },
-    ).sort("created_at", -1).limit(5000)
-    auctions = await cursor.to_list(5000)
-
-    xml_parts = [
-        '<?xml version="1.0" encoding="UTF-8"?>',
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"',
-        '        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">',
-    ]
-    for path, freq, pr in pages:
-        xml_parts.append(
-            f"<url><loc>{frontend_base}{path}</loc><changefreq>{freq}</changefreq><priority>{pr}</priority></url>"
-        )
-    for a in auctions:
-        last = a.get("finalized_at") or a.get("updated_at") or a.get("created_at") or ""
-        lastmod = f"<lastmod>{last[:10]}</lastmod>" if last else ""
-        freq = "hourly" if a.get("status") == "live" else "monthly"
-        pr = "0.9" if a.get("status") == "live" else "0.5"
-        # Collect images (exterior first, then others) — limit to 20 per URL (Google's max is 1000 but small is kinder)
-        imgs = (
-            (a.get("images_exterior") or [])
-            + (a.get("images_interior") or [])
-            + (a.get("images_wheels") or [])
-            + (a.get("images_bumper") or [])
-            + (a.get("images") or [])
-        )
-        # Deduplicate + filter http(s) (skip base64 data URIs — Google can't crawl them)
-        seen = set(); clean_imgs = []
-        for img in imgs:
-            if not img or not isinstance(img, str):
-                continue
-            if img.startswith("data:"):
-                continue
-            if img in seen:
-                continue
-            seen.add(img)
-            clean_imgs.append(img)
-            if len(clean_imgs) >= 20:
-                break
-        caption = _esc((a.get("title") or "").strip()[:160])
-        image_blocks = []
-        for img in clean_imgs:
-            image_blocks.append(
-                f"<image:image><image:loc>{_esc(img)}</image:loc>"
-                + (f"<image:caption>{caption}</image:caption>" if caption else "")
-                + f"<image:title>{caption}</image:title></image:image>"
-            )
-        xml_parts.append(
-            f"<url><loc>{frontend_base}/auctions/{a['id']}</loc>"
-            + lastmod
-            + f"<changefreq>{freq}</changefreq><priority>{pr}</priority>"
-            + "".join(image_blocks)
-            + "</url>"
-        )
-    xml_parts.append("</urlset>")
-    return Response(content="\n".join(xml_parts), media_type="application/xml; charset=utf-8")
-
-
-@api.get("/sitemap-images.xml", response_class=Response)
-async def sitemap_images_xml(request: Request):
-    """Dedicated image-only sitemap — convenient for webmasters to submit separately in GSC.
-    Mirrors the main sitemap but focuses on auctions that have real (http/https) images.
-    """
-    from html import escape as _esc
-    frontend_base = (
-        os.environ.get("APP_URL")
-        or request.headers.get("origin")
-        or str(request.base_url).rstrip("/")
-    ).rstrip("/")
-
-    cursor = db.auctions.find(
-        {"status": {"$in": ["live", "sold", "ended", "reserve_not_met"]}},
-        {
-            "_id": 0, "id": 1, "title": 1,
-            "images": 1, "images_exterior": 1, "images_interior": 1,
-            "images_wheels": 1, "images_bumper": 1,
-        },
-    ).sort("created_at", -1).limit(5000)
-    auctions = await cursor.to_list(5000)
-
-    xml = [
-        '<?xml version="1.0" encoding="UTF-8"?>',
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"',
-        '        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">',
-    ]
-    for a in auctions:
-        imgs_all = (
-            (a.get("images_exterior") or [])
-            + (a.get("images_interior") or [])
-            + (a.get("images_wheels") or [])
-            + (a.get("images_bumper") or [])
-            + (a.get("images") or [])
-        )
-        seen = set(); clean = []
-        for img in imgs_all:
-            if not img or not isinstance(img, str) or img.startswith("data:"):
-                continue
-            if img in seen:
-                continue
-            seen.add(img)
-            clean.append(img)
-            if len(clean) >= 50:
-                break
-        if not clean:
-            continue
-        caption = _esc((a.get("title") or "").strip()[:160])
-        parts = [f"<url><loc>{frontend_base}/auctions/{a['id']}</loc>"]
-        for img in clean:
-            parts.append(
-                f"<image:image><image:loc>{_esc(img)}</image:loc>"
-                + (f"<image:caption>{caption}</image:caption>" if caption else "")
-                + f"<image:title>{caption}</image:title></image:image>"
-            )
-        parts.append("</url>")
-        xml.append("".join(parts))
-    xml.append("</urlset>")
-    return Response(content="\n".join(xml), media_type="application/xml; charset=utf-8")
-
-
-@api.get("/share/auction/{auction_id}", response_class=PlainTextResponse)
-async def share_auction(auction_id: str, request: Request):
-    from html import escape as _esc
-    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
-    # Frontend URL for the actual auction page (where browsers redirect to)
-    frontend_base = request.headers.get("origin") or str(request.base_url).rstrip("/")
-    target = f"{frontend_base}/auctions/{auction_id}"
-
-    if not a:
-        title = "AutoBid.bg — Търг"
-        description = "Търгът не е намерен."
-        image = f"{frontend_base}/og-default.jpg"
-        json_ld = ""
-    else:
-        title = f"{a.get('title','')} — AutoBid.bg"
-        description = (a.get("description") or "")[:280]
-        image = (a.get("images") or [None])[0] or f"{frontend_base}/og-default.jpg"
-        json_ld = f'<script type="application/ld+json">{_json_ld_vehicle(a, target)}</script>'
-
-    html = f"""<!DOCTYPE html>
-<html lang="bg">
-<head>
-<meta charset="UTF-8">
-<title>{_esc(title)}</title>
-<meta name="description" content="{_esc(description)}">
-<meta property="og:type" content="article">
-<meta property="og:site_name" content="AutoBid.bg">
-<meta property="og:title" content="{_esc(title)}">
-<meta property="og:description" content="{_esc(description)}">
-<meta property="og:image" content="{_esc(image)}">
-<meta property="og:url" content="{_esc(target)}">
-<meta property="og:locale" content="bg_BG">
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="{_esc(title)}">
-<meta name="twitter:description" content="{_esc(description)}">
-<meta name="twitter:image" content="{_esc(image)}">
-<link rel="canonical" href="{_esc(target)}">
-{json_ld}
-<meta http-equiv="refresh" content="0; url={_esc(target)}">
-</head>
-<body>
-<script>window.location.replace({repr(target)});</script>
-<p>Пренасочване към <a href="{_esc(target)}">{_esc(target)}</a>…</p>
-</body>
-</html>"""
-    return Response(content=html, media_type="text/html; charset=utf-8")
 
 
 # ---- Mount ----
+# Include sub-routers (refactored out of server.py for clarity)
+from routers import seo as _seo_router  # noqa: E402
+from routers import negotiations as _neg_router  # noqa: E402
+
+# Wire up injected deps for the negotiation router
+_neg_router.configure(
+    get_current_user=get_current_user,
+    auction_status=_auction_status,
+    buyer_fee=_buyer_fee,
+    email_won=email_won,
+)
+_neg_router.register_routes(get_current_user)
+
+api.include_router(_seo_router.router)
+api.include_router(_neg_router.router)
+
 app.include_router(api)
 
 app.add_middleware(

@@ -9,8 +9,8 @@ from pydantic import BaseModel, Field, EmailStr
 # ---------- Auth ----------
 class UserRegister(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=6)
-    name: str = Field(min_length=1)
+    password: str = Field(min_length=6, max_length=128)
+    name: str = Field(min_length=1, max_length=80)
 
 
 class UserLogin(BaseModel):
