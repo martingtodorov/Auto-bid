@@ -46,13 +46,15 @@ export default function AuctionDetailPage() {
   const bidStepFor = (price) => {
     const p = Number(price) || 0;
     if (p < 1000) return 50;
-    if (p < 2500) return 100;
-    if (p < 5000) return 150;
+    if (p < 5000) return 100;
     if (p < 10000) return 250;
-    if (p < 20000) return 500;
-    if (p < 50000) return 1000;
-    if (p < 100000) return 2000;
-    return 2500;
+    if (p < 25000) return 500;
+    if (p < 50000) return 750;
+    if (p < 100000) return 1000;
+    if (p < 200000) return 2000;
+    if (p < 500000) return 5000;
+    if (p < 1000000) return 10000;
+    return 25000;
   };
 
   const load = useCallback(async () => {
