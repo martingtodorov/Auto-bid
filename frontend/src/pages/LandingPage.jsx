@@ -49,11 +49,10 @@ export default function LandingPage() {
     <main data-testid="landing-page">
       {/* Hero */}
       <section className="rule-b hero-ambient">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-10 lg:py-16">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-10 lg:py-10">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-14 items-center">
             <div className="lg:col-span-6 fade-up">
-              <div className="overline text-[hsl(var(--accent))]">Автомобилни търгове</div>
-              <h1 className="hero-headline text-5xl sm:text-6xl lg:text-7xl mt-6">
+              <h1 className="hero-headline text-5xl sm:text-6xl lg:text-7xl">
                 Открийте <em>изключителни</em><br />автомобили.
               </h1>
               <p className="mt-6 text-lg text-[hsl(var(--ink-muted))] leading-relaxed max-w-xl">
@@ -72,7 +71,7 @@ export default function LandingPage() {
             <div className="lg:col-span-6 fade-up">
               {hero ? (
                 <Link to={`/auctions/${hero.id}`} className="block group" data-testid="hero-featured-auction">
-                  <div className="aspect-[4/3] overflow-hidden rounded-card border border-[hsl(var(--line))]">
+                  <div className="aspect-[16/9] lg:aspect-[16/10] overflow-hidden rounded-card border border-[hsl(var(--line))]">
                     <img src={hero.images?.[0] || HERO_IMAGE} alt={hero.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
                   </div>
                   <div className="mt-4 flex items-end justify-between gap-4">
@@ -91,7 +90,7 @@ export default function LandingPage() {
                   </div>
                 </Link>
               ) : (
-                <div className="aspect-[4/3] border border-[hsl(var(--line))] bg-[hsl(var(--surface))]" />
+                <div className="aspect-[16/10] border border-[hsl(var(--line))] bg-[hsl(var(--surface))]" />
               )}
             </div>
           </div>
@@ -100,8 +99,8 @@ export default function LandingPage() {
 
       {/* Active Auctions */}
       <section className="rule-b">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-16 lg:py-24">
-          <div className="flex items-end justify-between mb-10">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-16 lg:py-10">
+          <div className="flex items-end justify-between mb-8 lg:mb-6">
             <div>
               <div className="overline text-[hsl(var(--accent))]">Актуални</div>
               <h2 className="font-serif text-3xl lg:text-5xl tracking-tight mt-3">Активни търгове</h2>
