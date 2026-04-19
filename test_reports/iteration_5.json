@@ -1,0 +1,137 @@
+{
+  "summary": "Phase 1 Security Features Testing Complete. Tested: Stripe CMS (admin-only), Moderator role permissions, Audit log, Forgot password flow, 2FA (TOTP), Reactivate auction. Fixed 3 backend endpoints that incorrectly used require_admin instead of require_admin_or_moderator for read-only access. 33/35 backend tests passed, 2 skipped (expected). All frontend UI elements verified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase1_security.py",
+    "/app/test_reports/pytest/pytest_phase1_security.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "GET /api/stripe/public-config correctly returns {mode, publishable_key, enabled} - secrets never exposed",
+    "GET /api/admin/stripe returns masked secrets (sk_t...2345 format) + boolean flags for has_secret_*",
+    "PUT /api/admin/stripe validates key prefixes (sk_test_, sk_live_, pk_test_, pk_live_) - rejects invalid",
+    "Empty secret field in PUT preserves existing value (write-only pattern)",
+    "Audit log entries for stripe.update contain only field NAMES, never values",
+    "POST /api/webhooks/stripe returns {ok:false, reason:webhook_secret_not_configured} when no secret",
+    "POST /api/webhooks/stripe returns 400 for invalid signature",
+    "Moderator role correctly has read-only access to settings, stats, users, audit-log, pending, auctions",
+    "Moderator correctly denied access to PUT /admin/settings (403), GET/PUT /admin/stripe (403), ban/unban users (403)",
+    "Moderator CAN delete comments via DELETE /admin/comments/{id}",
+    "Audit log supports filters: ?action=, ?actor_id=, ?target_id=",
+    "Forgot password returns generic message for both existing and non-existing emails (no enumeration)",
+    "Reset password validates code, marks used=true, rejects reuse",
+    "2FA enable returns {secret, qr_code_data_url, otpauth_uri}",
+    "2FA confirm with valid TOTP activates and returns 8 backup codes (8-char uppercase hex)",
+    "Login with 2FA enabled returns {requires_2fa:true, challenge_token} - no JWT until verified",
+    "2FA verify accepts TOTP (6 digits) or backup code (8 chars)",
+    "Reactivate auction flips sold→live, clears finalized_at, sets new ends_at",
+    "Reactivate rejects live/pending auctions with 400"
+  ],
+  "updated_files": [
+    "/app/backend/server.py (fixed 3 endpoints to use require_admin_or_moderator: /admin/pending, /admin/auctions, /admin/auctions/{id}, /admin/sold)"
+  ],
+  "success_rate": {
+    "backend": "94% (33/35 tests passed, 2 skipped as expected)",
+    "frontend": "100% (all UI elements verified)"
+  },
+  "test_credentials": {
+    "admin": "admin@autobid.bg / admin123",
+    "moderator": "moderator@test.bg / mod12345",
+    "buyer": "reviewbuyer@test.bg / newPass123"
+  },
+  "seed_data_creation": "Created moderator user via PUT /api/admin/users/{id} with role='moderator'",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Phase 1 security features fully tested. 2FA was enabled/disabled during testing - admin account currently has 2FA disabled. Moderator account created: moderator@test.bg / mod12345. Stripe CMS has test keys configured (pk_test_FAKE_EXAMPLE_12345, sk_test_FAKE_EXAMPLE_SECRET_12345). Audit log has entries for stripe.update, comment.delete, auction.reactivate. The BMW M2 Club sport spec auction was reactivated during testing and is now 'live' status.",
+  "features_tested": {
+    "backend_stripe_cms": [
+      "GET /api/stripe/public-config - returns mode, publishable_key, enabled",
+      "GET /api/admin/stripe - admin only, returns masked secrets + booleans",
+      "PUT /api/admin/stripe - validates key prefixes (sk_test_, sk_live_, pk_test_, pk_live_)",
+      "PUT /api/admin/stripe - empty secret preserves existing value",
+      "Mode toggle changes which publishable_key is returned by /public-config",
+      "Audit entry created with action=stripe.update, details contains only field NAMES"
+    ],
+    "backend_stripe_webhook": [
+      "POST /api/webhooks/stripe without webhook_secret returns {ok:false, reason:webhook_secret_not_configured}",
+      "POST /api/webhooks/stripe with wrong signature returns 400"
+    ],
+    "backend_moderator_role": [
+      "PUT /admin/users/{id} can set role='moderator'",
+      "Moderator can GET /admin/settings, /admin/stats, /admin/users, /admin/audit-log, /admin/pending, /admin/auctions",
+      "Moderator CANNOT PUT /admin/settings (403)",
+      "Moderator CANNOT GET or PUT /admin/stripe (403)",
+      "Moderator CANNOT ban/delete users (403)",
+      "Moderator CAN DELETE /admin/comments/{id}"
+    ],
+    "backend_audit_log": [
+      "GET /api/admin/audit-log returns {items, total, offset, limit}",
+      "Supports filter: ?action=stripe.update",
+      "Entries created for: settings.update, stripe.update, comment.delete, auction.reactivate"
+    ],
+    "backend_forgot_password": [
+      "POST /api/auth/forgot-password returns generic ok message (no user enumeration)",
+      "POST /api/auth/reset-password validates code, rejects wrong code"
+    ],
+    "backend_2fa": [
+      "POST /api/auth/2fa/enable returns {secret, qr_code_data_url, otpauth_uri}",
+      "POST /api/auth/2fa/confirm with correct TOTP activates + returns 8 backup_codes",
+      "Login with 2fa_enabled returns {requires_2fa:true, challenge_token}",
+      "POST /api/auth/2fa/disable requires TOTP"
+    ],
+    "backend_reactivate": [
+      "POST /api/admin/auctions/{id}/reactivate?days=5 flips sold→live",
+      "Rejects if status is 'live' or 'pending'",
+      "Creates audit entry with action=auction.reactivate"
+    ],
+    "frontend_login": [
+      "/login has 'Забравена парола?' link [data-testid=login-forgot-link]"
+    ],
+    "frontend_forgot_password": [
+      "/forgot-password page loads [data-testid=forgot-password-page]",
+      "Email input [data-testid=forgot-email]",
+      "Submit button [data-testid=forgot-submit]"
+    ],
+    "frontend_settings_2fa": [
+      "/settings has 2FA section [data-testid=twofa-section]",
+      "Enable button [data-testid=twofa-enable-btn] visible when 2FA disabled"
+    ],
+    "frontend_admin_stripe": [
+      "/admin has Stripe tab [data-testid=tab-stripe]",
+      "Stripe tab shows mode toggle [data-testid=stripe-mode-test/live]",
+      "6 input fields (pub test/live, secret test/live, webhook test/live)",
+      "Save button [data-testid=stripe-save]",
+      "Masked current values visible when set"
+    ],
+    "frontend_admin_audit": [
+      "/admin has Журнал tab [data-testid=tab-audit]",
+      "Audit tab renders table [data-testid=audit-list]",
+      "Action filter [data-testid=audit-action-filter]",
+      "Refresh button [data-testid=audit-refresh]"
+    ],
+    "frontend_moderator_access": [
+      "Moderator can access /admin",
+      "Moderator sees limited tabs (no Stripe, no Settings)",
+      "Moderator can see Audit tab"
+    ]
+  },
+  "bugs_fixed_during_testing": [
+    "GET /api/admin/pending was using require_admin instead of require_admin_or_moderator - FIXED",
+    "GET /api/admin/auctions was using require_admin instead of require_admin_or_moderator - FIXED",
+    "GET /api/admin/auctions/{id} was using require_admin instead of require_admin_or_moderator - FIXED",
+    "GET /api/admin/sold was using require_admin instead of require_admin_or_moderator - FIXED"
+  ],
+  "mocked_apis": {
+    "stripe_preauth": "mock_pi_* tokens used for payment pre-authorization (unchanged)",
+    "resend_email": "Falls back to console log if no API key - OTP codes logged to backend console",
+    "twilio_sms": "Falls back to console log if no credentials"
+  }
+}

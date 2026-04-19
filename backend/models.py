@@ -185,3 +185,37 @@ class SiteSettingsUpdate(BaseModel):
     contacts_content: Optional[str] = None
     fees_content: Optional[str] = None
     how_it_works_content: Optional[str] = None
+
+
+
+# ---------- Stripe (Super-Admin only) ----------
+class StripeSettingsUpdate(BaseModel):
+    """Admin CMS for Stripe keys. Secret + webhook_secret are write-only."""
+    mode: Optional[str] = None  # "test" | "live"
+    stripe_publishable_key_test: Optional[str] = None
+    stripe_publishable_key_live: Optional[str] = None
+    stripe_secret_key_test: Optional[str] = None
+    stripe_secret_key_live: Optional[str] = None
+    stripe_webhook_secret_test: Optional[str] = None
+    stripe_webhook_secret_live: Optional[str] = None
+    stripe_enabled: Optional[bool] = None
+
+
+# ---------- Auth: password reset + 2FA ----------
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=6, max_length=6)
+    new_password: str = Field(min_length=6, max_length=128)
+
+
+class TwoFactorConfirm(BaseModel):
+    code: str = Field(min_length=6, max_length=6)
+
+
+class TwoFactorVerify(BaseModel):
+    challenge_token: str
+    code: str = Field(min_length=6, max_length=8)  # 8 = backup code

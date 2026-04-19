@@ -62,3 +62,65 @@ def mask_vin(vin: str) -> str:
     if len(v) <= 7:
         return "*" * len(v)
     return v[:3] + "*" * (len(v) - 7) + v[-4:]
+
+
+
+# ---------- Audit log ----------
+import uuid as _uuid
+import logging as _logging
+_audit_logger = _logging.getLogger("audit")
+
+
+async def audit_log(db, *, actor_id: str, actor_email: str = "", actor_role: str = "",
+                    action: str, target_type: str = "", target_id: str = "",
+                    details: dict = None, ip: str = ""):
+    """Append an immutable audit entry. Never raises — audit failures must not break flows."""
+    try:
+        doc = {
+            "id": str(_uuid.uuid4()),
+            "at": datetime.now(timezone.utc).isoformat(),
+            "actor_id": actor_id or "",
+            "actor_email": actor_email or "",
+            "actor_role": actor_role or "",
+            "action": action,
+            "target_type": target_type or "",
+            "target_id": target_id or "",
+            "details": details or {},
+            "ip": ip or "",
+        }
+        await db.audit_log.insert_one(doc)
+    except Exception as e:
+        _audit_logger.error("audit_log failed: %s", e)
+
+
+# ---------- Stripe runtime config (selects test/live key from saved settings) ----------
+def stripe_public_config(settings: dict) -> dict:
+    """What's safe to expose to the frontend."""
+    mode = settings.get("stripe_mode") or "test"
+    pk = settings.get(f"stripe_publishable_key_{mode}") or ""
+    return {
+        "mode": mode,
+        "publishable_key": pk,
+        "enabled": bool(settings.get("stripe_enabled") and pk),
+    }
+
+
+def stripe_runtime_config(settings: dict) -> dict:
+    """Server-only: returns the secret + webhook secret for the active mode."""
+    mode = settings.get("stripe_mode") or "test"
+    return {
+        "mode": mode,
+        "publishable_key": settings.get(f"stripe_publishable_key_{mode}") or "",
+        "secret_key": settings.get(f"stripe_secret_key_{mode}") or "",
+        "webhook_secret": settings.get(f"stripe_webhook_secret_{mode}") or "",
+        "enabled": bool(settings.get("stripe_enabled")),
+    }
+
+
+def mask_secret(s: str) -> str:
+    if not s:
+        return ""
+    s = str(s)
+    if len(s) <= 8:
+        return "••••"
+    return f"{s[:4]}…{s[-4:]}"

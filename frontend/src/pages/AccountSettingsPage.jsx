@@ -3,6 +3,7 @@ import { Navigate, Link } from "react-router-dom";
 import { Phone, Bell, Trash2, BookmarkPlus } from "lucide-react";
 import { useAuth, formatError } from "../lib/auth";
 import { api } from "../lib/apiClient";
+import TwoFactorSection from "../components/TwoFactorSection";
 
 export default function AccountSettingsPage() {
   const { user, loading, refresh } = useAuth();
@@ -123,6 +124,8 @@ export default function AccountSettingsPage() {
             </div>
           )}
         </section>
+
+        <TwoFactorSection />
       </div>
     </main>
   );

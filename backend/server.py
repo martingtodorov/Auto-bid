@@ -132,6 +132,15 @@ SETTINGS_DEFAULTS = {
     "contacts_content": "",
     "fees_content": "",
     "how_it_works_content": "",
+    # --- Stripe CMS ---
+    "stripe_mode": "test",
+    "stripe_enabled": False,
+    "stripe_publishable_key_test": "",
+    "stripe_publishable_key_live": "",
+    "stripe_secret_key_test": "",
+    "stripe_secret_key_live": "",
+    "stripe_webhook_secret_test": "",
+    "stripe_webhook_secret_live": "",
 }
 _settings_cache: dict = dict(SETTINGS_DEFAULTS)
 
@@ -1252,6 +1261,15 @@ async def require_admin(user: dict = Depends(get_current_user)):
     return user
 
 
+async def require_admin_or_moderator(user: dict = Depends(get_current_user)):
+    """Moderators have read-only access to settings/CMS, can moderate comments/users.
+    Super-admin has all privileges including Stripe CMS + settings writes.
+    """
+    if user.get("role") not in ("admin", "moderator"):
+        raise HTTPException(status_code=403, detail="Нужни са админ или модератор права")
+    return user
+
+
 # ---- Site Settings (CMS) ----
 @api.get("/settings")
 async def get_public_settings():
@@ -1280,8 +1298,65 @@ async def get_public_settings():
 # moved → routers/admin.py (admin_delete_comment)
 
 
+# ---- Stripe: public config (safe for frontend) + webhook ----
+from helpers import stripe_public_config as _stripe_public_config  # noqa: E402
+from helpers import stripe_runtime_config as _stripe_runtime_config  # noqa: E402
+
+
+@api.get("/stripe/public-config")
+async def stripe_public_config_endpoint():
+    """Used by frontend to init Stripe.js. Secret keys are never exposed."""
+    return _stripe_public_config(_settings())
+
+
+@api.post("/webhooks/stripe")
+async def stripe_webhook(request: Request):
+    """Stripe webhook receiver. Uses dynamic webhook_secret from admin settings.
+    Accepts raw bytes, verifies signature, and logs events. Parsing of specific
+    event types (payment_intent.succeeded etc.) will be wired when real Stripe
+    PaymentIntents replace the current mock.
+    """
+    cfg = _stripe_runtime_config(_settings())
+    sig_header = request.headers.get("stripe-signature", "")
+    body = await request.body()
+    if not cfg.get("webhook_secret"):
+        logger.warning("[stripe_webhook] received but no webhook_secret configured (mode=%s)", cfg.get("mode"))
+        return {"ok": False, "reason": "webhook_secret_not_configured"}
+
+    # Minimal HMAC verification (Stripe-compatible v1 signature)
+    # header format: t=TIMESTAMP,v1=SIGNATURE,v0=...
+    try:
+        import hmac, hashlib
+        parts = dict(p.split("=", 1) for p in sig_header.split(",") if "=" in p)
+        t = parts.get("t", ""); v1 = parts.get("v1", "")
+        signed_payload = f"{t}.{body.decode('utf-8')}".encode("utf-8")
+        expected = hmac.new(cfg["webhook_secret"].encode("utf-8"), signed_payload, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, v1):
+            raise HTTPException(status_code=400, detail="Invalid signature")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("[stripe_webhook] sig verify failed: %s", e)
+        raise HTTPException(status_code=400, detail="Invalid signature format")
+
+    # Persist event for audit / replay
+    try:
+        import json as _json
+        payload = _json.loads(body.decode("utf-8"))
+        await db.stripe_events.insert_one({
+            "id": payload.get("id"),
+            "type": payload.get("type"),
+            "mode": cfg.get("mode"),
+            "received_at": datetime.now(timezone.utc).isoformat(),
+            "data": payload.get("data", {}),
+        })
+    except Exception as e:
+        logger.error("[stripe_webhook] persist failed: %s", e)
+    return {"ok": True, "received": True}
+
+
 @api.get("/admin/pending")
-async def admin_pending(_admin: dict = Depends(require_admin)):
+async def admin_pending(_admin: dict = Depends(require_admin_or_moderator)):
     items = await db.auctions.find({"status": "pending"}, {"_id": 0}).sort("created_at", -1).to_list(200)
     return items
 
@@ -1418,7 +1493,7 @@ async def admin_capture_premium(auction_id: str, _admin: dict = Depends(require_
 
 
 @api.get("/admin/sold")
-async def admin_sold(_admin: dict = Depends(require_admin)):
+async def admin_sold(_admin: dict = Depends(require_admin_or_moderator)):
     items = await db.auctions.find({"status": "sold"}, {"_id": 0}).sort("finalized_at", -1).to_list(500)
     # Enrich with winner info and current premium state
     enriched = []
@@ -1677,7 +1752,7 @@ async def withdraw_listing(auction_id: str, user: dict = Depends(get_current_use
 
 
 @api.get("/admin/auctions")
-async def admin_list_all(q: Optional[str] = None, status: Optional[str] = None, _admin: dict = Depends(require_admin)):
+async def admin_list_all(q: Optional[str] = None, status: Optional[str] = None, _admin: dict = Depends(require_admin_or_moderator)):
     query = {}
     if status:
         query["status"] = status
@@ -1695,7 +1770,7 @@ ADMIN_ALLOWED_STATUSES = {"pending", "live", "ended", "sold", "reserve_not_met",
 
 
 @api.get("/admin/auctions/{auction_id}")
-async def admin_get_auction(auction_id: str, _admin: dict = Depends(require_admin)):
+async def admin_get_auction(auction_id: str, _admin: dict = Depends(require_admin_or_moderator)):
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     if not a:
         raise HTTPException(status_code=404, detail="Обявата не е намерена")
@@ -2421,6 +2496,7 @@ _reviews_router.register_routes()
 # Wire up admin router (CMS + users + stats; lifecycle routes stay in server.py)
 _admin_router.configure(
     require_admin=require_admin,
+    require_admin_or_moderator=require_admin_or_moderator,
     settings_fn=_settings,
     load_settings_cache=_load_settings_cache,
     public_comment=_public_comment,

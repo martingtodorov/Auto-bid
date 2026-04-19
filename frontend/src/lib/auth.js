@@ -25,6 +25,17 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     const { data } = await api.post("/auth/login", { email, password });
+    // If 2FA is enabled, backend returns a challenge instead of a token
+    if (data.requires_2fa) {
+      return { requires_2fa: true, challenge_token: data.challenge_token };
+    }
+    localStorage.setItem("autobid_token", data.token);
+    setUser(data.user);
+    return data.user;
+  };
+
+  const verifyTwoFactor = async (challenge_token, code) => {
+    const { data } = await api.post("/auth/2fa/verify", { challenge_token, code });
     localStorage.setItem("autobid_token", data.token);
     setUser(data.user);
     return data.user;
@@ -43,7 +54,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, refresh }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, refresh, verifyTwoFactor }}>
       {children}
     </AuthContext.Provider>
   );

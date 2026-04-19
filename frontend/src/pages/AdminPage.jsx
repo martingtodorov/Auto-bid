@@ -1,12 +1,14 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Navigate, Link } from "react-router-dom";
-import { Check, X, Clock, AlertCircle, DollarSign, Archive, Ban, Edit3, Trash2, RotateCcw, Search, List, Users, BarChart3, Trash, RefreshCw } from "lucide-react";
+import { Check, X, Clock, AlertCircle, DollarSign, Archive, Ban, Edit3, Trash2, RotateCcw, Search, List, Users, BarChart3, Trash, RefreshCw, CreditCard, ScrollText } from "lucide-react";
 import { useAuth, formatError } from "../lib/auth";
 import { api, formatEUR, formatKM } from "../lib/apiClient";
 import AdminEditModal from "../components/AdminEditModal";
 import AdminUsersTab from "../components/AdminUsersTab";
 import AdminDashboard from "../components/AdminDashboard";
 import AdminSettingsTab from "../components/AdminSettingsTab";
+import AdminStripeTab from "../components/AdminStripeTab";
+import AdminAuditLogTab from "../components/AdminAuditLogTab";
 
 const STATUS_LABELS = {
   pending: "Очаква",
@@ -61,13 +63,13 @@ export default function AdminPage() {
 
   if (loading) return <div className="py-24 text-center">Зареждане…</div>;
   if (!user) return <Navigate to="/login?next=/admin" replace />;
-  if (user.role !== "admin") {
+  if (user.role !== "admin" && user.role !== "moderator") {
     return (
       <main className="py-24" data-testid="admin-denied">
         <div className="max-w-md mx-auto text-center px-6">
           <AlertCircle size={32} className="mx-auto text-[hsl(var(--danger))]" />
           <h1 className="font-serif text-3xl mt-4">Достъпът е ограничен</h1>
-          <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">Тази страница е достъпна само за администратори.</p>
+          <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">Тази страница е достъпна само за администратори и модератори.</p>
           <Link to="/" className="btn btn-primary mt-6 inline-flex">Към началото</Link>
         </div>
       </main>
@@ -143,14 +145,34 @@ export default function AdminPage() {
     finally { setBusy(null); }
   };
 
+  const reactivateListing = async (id, title) => {
+    const daysStr = window.prompt(`Реактивиране на продадена обява "${title || id}" — тя ще стане отново активна.\n\nВъведете колко дни да е отворена (1-60):`, "7");
+    if (!daysStr) return;
+    const days = parseInt(daysStr, 10);
+    if (!Number.isInteger(days) || days < 1 || days > 60) {
+      alert("Невалиден брой дни (1-60).");
+      return;
+    }
+    if (!window.confirm("Сигурни ли сте? Обявата ще се върне в списъка с активни търгове. История на бидовете се запазва.")) return;
+    setErr(""); setBusy(id);
+    try {
+      const { data } = await api.post(`/admin/auctions/${id}/reactivate`, null, { params: { days } });
+      alert(`Обявата е реактивирана. Нов край: ${new Date(data.ends_at).toLocaleString("bg-BG")}`);
+      await Promise.all([loadAll(), loadSold()]);
+    } catch (e) { setErr(formatError(e)); }
+    finally { setBusy(null); }
+  };
+
   const tabs = [
     { k: "dashboard", label: "Начало", icon: BarChart3 },
     { k: "pending", label: `Очакващи (${pending.length})`, icon: Clock },
     { k: "all", label: `Всички обяви (${allListings.length})`, icon: List },
     { k: "users", label: "Потребители", icon: Users },
     { k: "sold", label: `Продадени (${sold.length})`, icon: Archive },
-    { k: "settings", label: "Настройки", icon: Edit3 },
-  ];
+    { k: "stripe", label: "Stripe", icon: CreditCard, adminOnly: true },
+    { k: "audit", label: "Журнал", icon: ScrollText },
+    { k: "settings", label: "Настройки", icon: Edit3, adminOnly: true },
+  ].filter((t) => !t.adminOnly || user?.role === "admin");
 
   return (
     <main data-testid="admin-page">
@@ -345,6 +367,8 @@ export default function AdminPage() {
 
         {tab === "users" && <AdminUsersTab currentUserId={user?.id} />}
         {tab === "settings" && <AdminSettingsTab />}
+        {tab === "stripe" && <AdminStripeTab />}
+        {tab === "audit" && <AdminAuditLogTab />}
 
         {tab === "sold" && (
           <div className="mt-10">
@@ -400,6 +424,9 @@ export default function AdminPage() {
                         )}
                         <button onClick={() => setEditingId(a.id)} className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1" data-testid={`edit-sold-${a.id}`}>
                           <Edit3 size={12} /> Редактирай
+                        </button>
+                        <button onClick={() => reactivateListing(a.id, a.title)} disabled={busy === a.id} className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1" data-testid={`reactivate-sold-${a.id}`}>
+                          <RotateCcw size={12} /> Реактивирай
                         </button>
                         <button onClick={() => hardDeleteListing(a.id, a.title)} disabled={busy === a.id} className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1 !text-[hsl(var(--danger))] !border-[hsl(var(--danger))]/40 hover:!bg-[hsl(var(--danger))] hover:!text-white" data-testid={`delete-sold-${a.id}`}>
                           <Trash size={12} /> Изтрий

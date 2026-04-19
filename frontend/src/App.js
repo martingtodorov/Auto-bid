@@ -10,6 +10,7 @@ import AuctionsPage from "./pages/AuctionsPage";
 import AuctionDetailPage from "./pages/AuctionDetailPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import HowItWorksPage from "./pages/HowItWorksPage";
 import SalesPage from "./pages/SalesPage";
 import SellPage from "./pages/SellPage";
@@ -41,6 +42,7 @@ function App() {
               <Route path="/sell" element={<SellPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/admin" element={<AdminPage />} />
               <Route path="/watchlist" element={<WatchlistPage />} />
