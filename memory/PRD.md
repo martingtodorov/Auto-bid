@@ -81,9 +81,28 @@
 
 ## Backlog / Future tasks
 - **P1** Real Stripe API integration (сега MOCKED — preauth/capture са симулирани)
-- **P2** Рефакторинг на `server.py` (1400+ реда) → APIRouter модули (auctions/admin/auth/users)
-- **P2** Автоматичен status transition cron job (pending → expired reminder, ended → reserve_not_met flow)
+- **P2** "Buy Now" функционалност (фиксирана цена, подобно на BaT Rarities)
+- **P2** Sold Price Tracker (публична статистика за приключили сделки)
+- **P2** Рефакторинг на `server.py` (2500+ реда) → изнасяне на `admin` и `auctions` routes
+- **P3** CAPTCHA при регистрация (hCaptcha/Cloudflare Turnstile)
+- **P3** WAF layer (SQLi/XSS pattern matching)
 - **P3** Email templates estetic upgrade
+
+### Apr 2026 — Buyer → Seller Review/Rating system (DONE)
+- Нова колекция `reviews` — {id, seller_id, buyer_id, buyer_name, auction_id, auction_title, rating 1–5, text, created_at}
+- Endpoints (нов `/app/backend/routers/reviews.py`):
+  - `POST /api/users/{seller_id}/reviews` — само купувачът на `sold` обява; max един отзив на сделка
+  - `GET /api/users/{seller_id}/reviews` → {items, rating:{avg,count}}
+  - `GET /api/users/{seller_id}/rating` → {avg,count}
+  - `GET /api/users/{seller_id}/reviews/eligible/{auction_id}` (auth) — eligible flag + reason
+  - `GET /api/me/reviewable` — неоценените сделки на текущия купувач
+- `/api/users/{id}/profile` вече връща `rating:{avg,count}`
+- Frontend:
+  - `SellerReviews.jsx` + reusable `<StarRating />` компонент (фракционни половинки)
+  - Нов таб „Отзиви" на ProfilePage + rating карта в stats + pill в хедъра
+  - JSON-LD `Person` + `AggregateRating` за SEO (Rich Results)
+  - Интерактивна форма за оставяне на отзив (само за купувачи с неоценени сделки)
+- Testing: 18/18 backend + пълна frontend Playwright сесия 100% ✅ (`iteration_3.json`)
 
 ## 3rd-party integrations status
 - Resend: Configured via env (RESEND_API_KEY), fallback console log
