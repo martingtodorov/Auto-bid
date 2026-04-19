@@ -81,12 +81,21 @@
 
 ## Backlog / Future tasks
 - **P1** Real Stripe API integration (сега MOCKED — preauth/capture са симулирани)
-- **P2** "Buy Now" функционалност (фиксирана цена, подобно на BaT Rarities)
-- **P2** Sold Price Tracker (публична статистика за приключили сделки)
-- **P2** Рефакторинг на `server.py` (2500+ реда) → изнасяне на `admin` и `auctions` routes
+- **P2** „Buy Now" функционалност (фиксирана цена, BaT Rarities style)
+- **P2** „Верифициран продавач" бадж (автоматично при 5+ отзива и средна ≥4.5)
+- **P2** Рефакторинг — изнасяне на **auction lifecycle** admin routes (approve/reject/finalize/capture-premium/remove/restore/extend) + основните /auctions маршрути от `server.py` в модули
 - **P3** CAPTCHA при регистрация (hCaptcha/Cloudflare Turnstile)
 - **P3** WAF layer (SQLi/XSS pattern matching)
 - **P3** Email templates estetic upgrade
+
+### Apr 2026 — Sold Price Tracker + Admin refactor (DONE)
+- **Нов публичен stats endpoint**: `GET /api/stats/sold?days=30|90|365` → total_count, total_volume_eur, avg/median/min/max_price_eur, avg_mileage_km, by_make (top 10), by_body_type, by_month (12м), highest_sale.
+- **Разширен `GET /api/auctions/sold`** с филтри: make, body_type, fuel, year_min/max, price_min/max, q, sort (recent/oldest/price_desc/price_asc), limit, offset. Връща `{items,total,offset,limit}` при употреба на параметри; плосък списък (backwards-compat) при празна заявка.
+- **SalesPage преработена**: KPI панел с window toggle (30/90/365/all), топ марки bar chart, месечна тенденция, highest-sale spotlight, пълен filter bar (q + make + body_type + year_min + price_max + reset), сортиране, pagination.
+- **SEO**: Page meta + BreadcrumbList JSON-LD за архива.
+- **Admin router extraction**: `routers/admin.py` извлича CMS + users + stats маршрутите (settings GET/PUT, comments DELETE, stats, users GET list/single + PUT + ban/unban/DELETE) чрез `configure()` DI pattern. `server.py` намален от 2713 → 2489 реда.
+- **Landing page UI polish**: Hero padding намален (`py-8 lg:py-6` → `py-6 lg:py-3`), headline spacing по-стегнат, hero featured image на десктоп е с `lg:aspect-[16/10]` вместо `4/3` за по-нисък профил.
+- Testing: **40/40 backend + пълен frontend regression = 100%** ✅ (`iteration_4.json`)
 
 ### Apr 2026 — Buyer → Seller Review/Rating system (DONE)
 - Нова колекция `reviews` — {id, seller_id, buyer_id, buyer_name, auction_id, auction_title, rating 1–5, text, created_at}
