@@ -80,13 +80,61 @@
 - comments, watches, vin_requests, saved_searches
 
 ## Backlog / Future tasks
-- **P1** Real Stripe API integration (сега MOCKED — preauth/capture са симулирани)
-- **P2** „Buy Now" функционалност (фиксирана цена, BaT Rarities style)
-- **P2** „Верифициран продавач" бадж (автоматично при 5+ отзива и средна ≥4.5)
-- **P2** Рефакторинг — изнасяне на **auction lifecycle** admin routes (approve/reject/finalize/capture-premium/remove/restore/extend) + основните /auctions маршрути от `server.py` в модули
+- **P1** Реална Stripe интеграция (CMS и webhook готови — остава PaymentIntent preauth/capture на buyer fee)
+- **P2** „Buy Now" функционалност (фиксирана цена)
+- **P2** „Верифициран продавач" бадж (автоматичен при 5+ отзива, средна ≥4.5)
+- **P2** Phase 2 listing hardening — predefined makes + admin CMS, VAT fields, edit reserve pre-launch, preview, duplicate
+- **P2** Phase 2 auction lifecycle — pause/cancel/manual extend/close/featured toggle
+- **P2** Довършване на auctions refactor (основни /auctions + lifecycle admin routes → отделни модули)
 - **P3** CAPTCHA при регистрация (hCaptcha/Cloudflare Turnstile)
 - **P3** WAF layer (SQLi/XSS pattern matching)
-- **P3** Email templates estetic upgrade
+- **P3** Email templates визуален upgrade
+
+### Apr 2026 — Phase 1 Security & Admin (DONE)
+Потребителят поиска 70+ функции в 12 категории; разделихме на фази. Phase 1 фокусира се върху security + admin foundation:
+
+**Stripe CMS в admin:**
+- GET/PUT `/api/admin/stripe` (super-admin only) — publishable, secret, webhook secret + test/live mode + enable toggle
+- Secret-ите никога не се връщат в чист вид; показват се с маска (`sk_t…7890`)
+- PUT валидира prefix-и (`sk_test_`, `pk_live_`, …); празно поле запазва текущата стойност
+- Публичен `GET /api/stripe/public-config` → frontend Stripe.js конфиг
+- `POST /api/webhooks/stripe` — HMAC v1 signature verification с динамичен webhook_secret, logs в `stripe_events`
+
+**Moderator role:**
+- Нов `require_admin_or_moderator` dependency
+- Модератори: read достъп до settings/stats/users/audit, могат да модерират коментари
+- Модератори НЕ могат: settings PUT, stripe CMS, ban/delete на служители
+- AdminPage UI скрива Stripe и Settings tabs за модератори
+
+**Audit log:**
+- Нова колекция `audit_log` + `helpers.audit_log()` helper (non-blocking, never raises)
+- `GET /api/admin/audit-log` с филтри (action/actor_id/target_id) + pagination
+- UI tab „Журнал" в admin panel с таблица и филтър
+- Логвани действия: settings.update, stripe.update, user.ban, comment.delete, auction.reactivate
+- В log-а само field names — никога секретни стойности
+
+**Forgot password (via Resend):**
+- `POST /api/auth/forgot-password` → 6-цифрен код в DB (bcrypt hash, 15min TTL) + красив HTML email
+- Анти-enumeration: еднакъв отговор за съществуващ/несъществуващ user
+- `POST /api/auth/reset-password` — max 5 опита, used=true след успех
+- Нова `/forgot-password` 3-step страница (email → код+нова парола → успех)
+
+**2FA (TOTP):**
+- `pyotp + qrcode` пакети инсталирани
+- `POST /api/auth/2fa/enable` → secret + QR code data URL + provisioning URI
+- `POST /api/auth/2fa/confirm` валидира TOTP → активира + връща 8 backup кода (bcrypt hashed в DB)
+- Login с `totp_enabled=true` връща `{requires_2fa:true, challenge_token}` (не JWT)
+- `POST /api/auth/2fa/verify` приема TOTP или backup code (еднократен)
+- `POST /api/auth/2fa/disable` изисква TOTP
+- UI: `TwoFactorSection` компонент в `/settings` — QR display, secret manual, confirm, backup codes, disable
+- LoginPage 2FA challenge screen
+
+**Reactivate sold auction:**
+- `POST /api/admin/auctions/{id}/reactivate?days=N` — sold/ended/reserve_not_met/withdrawn/removed → live
+- Нов `ends_at = now + days`, `finalized_at` се изчиства, bid история се запазва
+- Бутон „Реактивирай" в admin sold tab
+
+Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped = expected (webhook signature with real Stripe payload).
 
 ### Apr 2026 — Sold Price Tracker + Admin refactor (DONE)
 - **Нов публичен stats endpoint**: `GET /api/stats/sold?days=30|90|365` → total_count, total_volume_eur, avg/median/min/max_price_eur, avg_mileage_km, by_make (top 10), by_body_type, by_month (12м), highest_sale.
