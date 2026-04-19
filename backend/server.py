@@ -301,12 +301,144 @@ async def featured(request: Request):
     return live
 
 @api.get("/auctions/sold")
-async def sold(request: Request):
+async def sold(
+    request: Request,
+    make: Optional[str] = None,
+    body_type: Optional[str] = None,
+    fuel: Optional[str] = None,
+    year_min: Optional[int] = None,
+    year_max: Optional[int] = None,
+    price_min: Optional[float] = None,
+    price_max: Optional[float] = None,
+    q: Optional[str] = None,
+    sort: Optional[str] = Query("recent"),
+    limit: int = 48,
+    offset: int = 0,
+):
     viewer = await get_optional_user(request)
-    items = await db.auctions.find({"status": "sold"}, {"_id": 0}).limit(12).to_list(12)
-    items = [_public_auction(a, viewer) for a in items]
+    query: dict = {"status": "sold"}
+    if make: query["make"] = make
+    if body_type: query["body_type"] = body_type
+    if fuel: query["fuel"] = fuel
+    if year_min or year_max:
+        query["year"] = {}
+        if year_min: query["year"]["$gte"] = year_min
+        if year_max: query["year"]["$lte"] = year_max
+    if price_min or price_max:
+        query["current_bid_eur"] = {}
+        if price_min: query["current_bid_eur"]["$gte"] = price_min
+        if price_max: query["current_bid_eur"]["$lte"] = price_max
+    if q:
+        import re
+        rx = {"$regex": re.escape(q.strip()), "$options": "i"}
+        query["$or"] = [{"title": rx}, {"make": rx}, {"model": rx}, {"description": rx}]
+
+    sort_field, sort_dir = "finalized_at", -1
+    if sort == "price_desc": sort_field, sort_dir = "current_bid_eur", -1
+    elif sort == "price_asc": sort_field, sort_dir = "current_bid_eur", 1
+    elif sort == "oldest": sort_field, sort_dir = "finalized_at", 1
+
+    limit = max(1, min(100, int(limit)))
+    offset = max(0, int(offset))
+
+    total = await db.auctions.count_documents(query)
+    cursor = db.auctions.find(query, {"_id": 0}).sort(sort_field, sort_dir).skip(offset).limit(limit)
+    raw = await cursor.to_list(limit)
+    items = [_public_auction(a, viewer) for a in raw]
     await _enrich_dealer_status(items)
-    return items
+    # Backwards-compat: return plain list when no pagination requested (offset=0 & small query)
+    if offset == 0 and not any([make, body_type, fuel, year_min, year_max, price_min, price_max, q]) and sort == "recent" and limit == 48:
+        return items
+    return {"items": items, "total": total, "offset": offset, "limit": limit}
+
+
+@api.get("/stats/sold")
+async def stats_sold(days: Optional[int] = None):
+    """Public aggregate statistics for sold auctions. Optional `days` window."""
+    match: dict = {"status": "sold"}
+    if days and days > 0:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=int(days))).isoformat()
+        match["finalized_at"] = {"$gte": cutoff}
+
+    pipe = [
+        {"$match": match},
+        {"$group": {
+            "_id": None,
+            "count": {"$sum": 1},
+            "total_eur": {"$sum": "$current_bid_eur"},
+            "avg_eur": {"$avg": "$current_bid_eur"},
+            "max_eur": {"$max": "$current_bid_eur"},
+            "min_eur": {"$min": "$current_bid_eur"},
+            "avg_mileage": {"$avg": "$mileage_km"},
+        }},
+    ]
+    totals_cur = db.auctions.aggregate(pipe)
+    totals_doc = await totals_cur.to_list(1)
+    totals = totals_doc[0] if totals_doc else {}
+    totals.pop("_id", None)
+
+    # Median (fetch prices, compute in Python — small dataset)
+    prices_cur = db.auctions.find(match, {"_id": 0, "current_bid_eur": 1}).sort("current_bid_eur", 1)
+    prices = [float(p["current_bid_eur"]) async for p in prices_cur]
+    median_eur = 0.0
+    if prices:
+        n = len(prices)
+        median_eur = prices[n // 2] if n % 2 else (prices[n // 2 - 1] + prices[n // 2]) / 2
+
+    # By make (top 10)
+    by_make_cur = db.auctions.aggregate([
+        {"$match": match},
+        {"$group": {"_id": "$make", "count": {"$sum": 1}, "avg_eur": {"$avg": "$current_bid_eur"}, "total_eur": {"$sum": "$current_bid_eur"}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 10},
+    ])
+    by_make = [
+        {"make": d["_id"] or "—", "count": d["count"], "avg_eur": round(d["avg_eur"] or 0, 2), "total_eur": round(d["total_eur"] or 0, 2)}
+        async for d in by_make_cur
+    ]
+
+    # By body type
+    by_body_cur = db.auctions.aggregate([
+        {"$match": match},
+        {"$group": {"_id": "$body_type", "count": {"$sum": 1}, "avg_eur": {"$avg": "$current_bid_eur"}}},
+        {"$sort": {"count": -1}},
+    ])
+    by_body = [
+        {"body_type": d["_id"] or "—", "count": d["count"], "avg_eur": round(d["avg_eur"] or 0, 2)}
+        async for d in by_body_cur
+    ]
+
+    # Monthly trend (last 12 months)
+    month_cur = db.auctions.aggregate([
+        {"$match": {**match, "finalized_at": match.get("finalized_at", {"$exists": True})}},
+        {"$addFields": {"fin_month": {"$substr": ["$finalized_at", 0, 7]}}},
+        {"$group": {"_id": "$fin_month", "count": {"$sum": 1}, "avg_eur": {"$avg": "$current_bid_eur"}, "total_eur": {"$sum": "$current_bid_eur"}}},
+        {"$sort": {"_id": -1}},
+        {"$limit": 12},
+    ])
+    by_month = [
+        {"month": d["_id"] or "—", "count": d["count"], "avg_eur": round(d["avg_eur"] or 0, 2), "total_eur": round(d["total_eur"] or 0, 2)}
+        async for d in month_cur
+    ]
+    by_month.reverse()  # chronological
+
+    # Highest sale (single)
+    highest_doc = await db.auctions.find_one(match, {"_id": 0, "id": 1, "title": 1, "current_bid_eur": 1, "images": 1, "year": 1, "make": 1, "model": 1, "finalized_at": 1}, sort=[("current_bid_eur", -1)])
+
+    return {
+        "window_days": days,
+        "total_count": int(totals.get("count", 0) or 0),
+        "total_volume_eur": round(totals.get("total_eur", 0) or 0, 2),
+        "avg_price_eur": round(totals.get("avg_eur", 0) or 0, 2),
+        "median_price_eur": round(median_eur, 2),
+        "min_price_eur": round(totals.get("min_eur", 0) or 0, 2),
+        "max_price_eur": round(totals.get("max_eur", 0) or 0, 2),
+        "avg_mileage_km": round(totals.get("avg_mileage", 0) or 0, 0),
+        "by_make": by_make,
+        "by_body_type": by_body,
+        "by_month": by_month,
+        "highest_sale": highest_doc,
+    }
 
 @api.get("/auctions/facets")
 async def facets():
@@ -1142,53 +1274,10 @@ async def get_public_settings():
     }
 
 
-@api.get("/admin/settings")
-async def admin_get_settings(_admin: dict = Depends(require_admin)):
-    return _settings()
+# moved → routers/admin.py (admin_get_settings, admin_update_settings)
 
 
-@api.put("/admin/settings")
-async def admin_update_settings(payload: SiteSettingsUpdate, _admin: dict = Depends(require_admin)):
-    update = {k: v for k, v in payload.model_dump().items() if v is not None}
-    if not update:
-        return _settings()
-    # Validate numeric ranges
-    if "buyer_fee_pct" in update:
-        pct = float(update["buyer_fee_pct"])
-        if pct < 0 or pct > 25:
-            raise HTTPException(status_code=400, detail="Таксата трябва да е между 0% и 25%")
-    if "buyer_fee_min_eur" in update and float(update["buyer_fee_min_eur"]) < 0:
-        raise HTTPException(status_code=400, detail="Минималната такса не може да е отрицателна")
-    if "buyer_fee_max_eur" in update and float(update["buyer_fee_max_eur"]) < 0:
-        raise HTTPException(status_code=400, detail="Максималната такса не може да е отрицателна")
-
-    update["updated_at"] = datetime.now(timezone.utc).isoformat()
-    await db.site_settings.update_one(
-        {"id": "global"},
-        {"$set": update, "$setOnInsert": {"id": "global"}},
-        upsert=True,
-    )
-    await _load_settings_cache()
-    return _settings()
-
-
-@api.delete("/admin/comments/{comment_id}")
-async def admin_delete_comment_endpoint(comment_id: str, admin: dict = Depends(require_admin)):
-    """Soft-delete a comment. Content is replaced with a moderation notice."""
-    c = await db.comments.find_one({"id": comment_id}, {"_id": 0})
-    if not c:
-        raise HTTPException(status_code=404, detail="Коментарът не е намерен")
-    now = datetime.now(timezone.utc).isoformat()
-    await db.comments.update_one(
-        {"id": comment_id},
-        {"$set": {"deleted": True, "deleted_at": now, "deleted_by": admin["id"]}},
-    )
-    a = await db.auctions.find_one({"id": c["auction_id"]}, {"_id": 0, "seller_id": 1})
-    if a:
-        updated = {**c, "deleted": True, "deleted_at": now, "deleted_by": admin["id"]}
-        public = _public_comment(updated, a)
-        await hub.broadcast(c["auction_id"], {"type": "comment_deleted", "comment": public})
-    return {"ok": True}
+# moved → routers/admin.py (admin_delete_comment)
 
 
 @api.get("/admin/pending")
@@ -1735,136 +1824,11 @@ async def admin_hard_delete_auction(auction_id: str, _admin: dict = Depends(requ
 
 
 # ---- Admin: Dashboard / Stats ----
-@api.get("/admin/stats")
-async def admin_stats(_admin: dict = Depends(require_admin)):
-    """Returns key platform metrics for the admin dashboard."""
-    now = datetime.now(timezone.utc)
-    week_ago = (now - timedelta(days=7)).isoformat()
-    month_ago = (now - timedelta(days=30)).isoformat()
-
-    total_auctions = await db.auctions.count_documents({})
-    pending = await db.auctions.count_documents({"status": "pending"})
-    live_stored = await db.auctions.count_documents({"status": {"$in": ["live", None]}})
-    sold = await db.auctions.count_documents({"status": "sold"})
-    removed = await db.auctions.count_documents({"status": {"$in": ["removed", "rejected", "withdrawn"]}})
-    reserve_not_met = await db.auctions.count_documents({"status": "reserve_not_met"})
-
-    # Users
-    total_users = await db.users.count_documents({})
-    admins = await db.users.count_documents({"role": "admin"})
-    verified_dealers = await db.users.count_documents({"is_verified_dealer": True})
-    new_users_week = await db.users.count_documents({"created_at": {"$gte": week_ago}})
-
-    # Bids
-    total_bids = await db.bids.count_documents({})
-    bids_this_week = await db.bids.count_documents({"created_at": {"$gte": week_ago}})
-
-    # GMV (gross merchandise value) + commission from sold
-    gmv_cursor = db.auctions.aggregate([
-        {"$match": {"status": "sold"}},
-        {"$group": {"_id": None, "gmv": {"$sum": "$current_bid_eur"}, "commission": {"$sum": "$premium_amount_eur"}, "count": {"$sum": 1}}},
-    ])
-    gmv_docs = await gmv_cursor.to_list(1)
-    gmv = float(gmv_docs[0]["gmv"]) if gmv_docs else 0.0
-    commission = float(gmv_docs[0]["commission"]) if gmv_docs else 0.0
-    sold_count = int(gmv_docs[0]["count"]) if gmv_docs else 0
-
-    # Month GMV
-    gmv_month_cursor = db.auctions.aggregate([
-        {"$match": {"status": "sold", "finalized_at": {"$gte": month_ago}}},
-        {"$group": {"_id": None, "gmv": {"$sum": "$current_bid_eur"}, "commission": {"$sum": "$premium_amount_eur"}}},
-    ])
-    gmv_month_docs = await gmv_month_cursor.to_list(1)
-    gmv_month = float(gmv_month_docs[0]["gmv"]) if gmv_month_docs else 0.0
-    commission_month = float(gmv_month_docs[0]["commission"]) if gmv_month_docs else 0.0
-
-    return {
-        "auctions": {
-            "total": total_auctions,
-            "pending": pending,
-            "live": live_stored,
-            "sold": sold,
-            "removed": removed,
-            "reserve_not_met": reserve_not_met,
-        },
-        "users": {
-            "total": total_users,
-            "admins": admins,
-            "verified_dealers": verified_dealers,
-            "new_this_week": new_users_week,
-        },
-        "bids": {
-            "total": total_bids,
-            "this_week": bids_this_week,
-        },
-        "revenue": {
-            "gmv_all_time": gmv,
-            "commission_all_time": commission,
-            "gmv_last_30d": gmv_month,
-            "commission_last_30d": commission_month,
-            "sold_count": sold_count,
-        },
-    }
+# moved → routers/admin.py (admin_stats)
 
 
 # ---- Admin: users ----
-@api.get("/admin/users")
-async def admin_list_users(q: Optional[str] = None, _admin: dict = Depends(require_admin)):
-    query = {}
-    if q:
-        import re
-        rx = {"$regex": re.escape(q.strip()), "$options": "i"}
-        query["$or"] = [{"name": rx}, {"email": rx}, {"phone": rx}]
-    items = await db.users.find(query, {"_id": 0, "password_hash": 0}).sort("created_at", -1).limit(500).to_list(500)
-    return items
-
-
-@api.get("/admin/users/{user_id}")
-async def admin_get_user(user_id: str, _admin: dict = Depends(require_admin)):
-    u = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
-    if not u:
-        raise HTTPException(status_code=404, detail="Потребителят не е намерен")
-    return u
-
-
-@api.put("/admin/users/{user_id}")
-async def admin_update_user(user_id: str, payload: AdminUserUpdate, admin_user: dict = Depends(require_admin)):
-    u = await db.users.find_one({"id": user_id}, {"_id": 0})
-    if not u:
-        raise HTTPException(status_code=404, detail="Потребителят не е намерен")
-    update = {}
-    if payload.name is not None:
-        update["name"] = payload.name.strip()
-    if payload.email is not None:
-        new_email = payload.email.lower().strip()
-        if new_email != u["email"]:
-            existing = await db.users.find_one({"email": new_email, "id": {"$ne": user_id}})
-            if existing:
-                raise HTTPException(status_code=400, detail="Имейлът вече се използва от друг потребител")
-            update["email"] = new_email
-    if payload.phone is not None:
-        phone = payload.phone.strip()
-        if phone and not phone.startswith("+"):
-            raise HTTPException(status_code=400, detail="Телефонът трябва да е в международен формат (+359...)")
-        update["phone"] = phone
-    if payload.is_verified_dealer is not None:
-        update["is_verified_dealer"] = bool(payload.is_verified_dealer)
-    if payload.role is not None:
-        if payload.role not in ("user", "admin"):
-            raise HTTPException(status_code=400, detail="Невалидна роля")
-        # Protect: prevent admin from demoting themselves
-        if user_id == admin_user["id"] and payload.role != "admin":
-            raise HTTPException(status_code=400, detail="Не можете да смените собствената си роля")
-        update["role"] = payload.role
-
-    if update:
-        await db.users.update_one({"id": user_id}, {"$set": update})
-        # Also propagate name to their auctions.seller_name
-        if "name" in update:
-            await db.auctions.update_many({"seller_id": user_id}, {"$set": {"seller_name": update["name"]}})
-
-    fresh = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
-    return {"ok": True, "user": fresh}
+# moved → routers/admin.py (admin_list_users, admin_get_user, admin_update_user)
 
 
 @api.post("/admin/auctions/{auction_id}/extend")
@@ -1901,74 +1865,7 @@ async def admin_extend_auction(
     return {"ok": True, "status": "live", "ends_at": new_ends.isoformat()}
 
 
-@api.post("/admin/users/{user_id}/ban")
-async def admin_ban_user(user_id: str, admin_user: dict = Depends(require_admin)):
-    """Ban a user — blocks login + bidding. Their existing auctions remain visible."""
-    if user_id == admin_user["id"]:
-        raise HTTPException(status_code=400, detail="Не можете да блокирате собствения си акаунт")
-    u = await db.users.find_one({"id": user_id}, {"_id": 0})
-    if not u:
-        raise HTTPException(status_code=404, detail="Потребителят не е намерен")
-    if u.get("role") == "admin":
-        raise HTTPException(status_code=400, detail="Не можете да блокирате друг администратор")
-    now = datetime.now(timezone.utc).isoformat()
-    await db.users.update_one({"id": user_id}, {"$set": {"banned": True, "banned_at": now, "banned_by": admin_user["id"]}})
-    return {"ok": True, "banned": True}
-
-
-@api.post("/admin/users/{user_id}/unban")
-async def admin_unban_user(user_id: str, _admin: dict = Depends(require_admin)):
-    u = await db.users.find_one({"id": user_id}, {"_id": 0})
-    if not u:
-        raise HTTPException(status_code=404, detail="Потребителят не е намерен")
-    await db.users.update_one({"id": user_id}, {"$set": {"banned": False}, "$unset": {"banned_at": "", "banned_by": ""}})
-    return {"ok": True, "banned": False}
-
-
-@api.delete("/admin/users/{user_id}")
-async def admin_delete_user(user_id: str, admin_user: dict = Depends(require_admin)):
-    """Hard-delete a user + cascade: their bids, comments, watches, saved searches, bidding credits.
-    Their auctions are kept (for ledger integrity) but seller_name is anonymized.
-    """
-    if user_id == admin_user["id"]:
-        raise HTTPException(status_code=400, detail="Не можете да изтриете собствения си акаунт")
-    u = await db.users.find_one({"id": user_id}, {"_id": 0})
-    if not u:
-        raise HTTPException(status_code=404, detail="Потребителят не е намерен")
-    if u.get("role") == "admin":
-        raise HTTPException(status_code=400, detail="Не можете да изтриете друг администратор")
-
-    # Cascade
-    bids = await db.bids.delete_many({"user_id": user_id})
-    comments = await db.comments.delete_many({"user_id": user_id})
-    watches = await db.watches.delete_many({"user_id": user_id})
-    saved = await db.saved_searches.delete_many({"user_id": user_id})
-    credits = await db.bidding_credits.delete_many({"user_id": user_id})
-    # Anonymize their auctions (keep for ledger/sales history; platform takes ownership)
-    anon = await db.auctions.update_many(
-        {"seller_id": user_id},
-        {"$set": {"seller_name": "Изтрит потребител", "seller_id": "deleted"}},
-    )
-    # Clear any high-bidder references pointing to this user (ongoing auctions)
-    hb = await db.auctions.update_many(
-        {"high_bidder_id": user_id},
-        {"$set": {"high_bidder_id": None, "high_bidder_name": None}},
-    )
-    # Finally remove the user
-    await db.users.delete_one({"id": user_id})
-    return {
-        "ok": True,
-        "deleted": {
-            "user": 1,
-            "bids": bids.deleted_count,
-            "comments": comments.deleted_count,
-            "watches": watches.deleted_count,
-            "saved_searches": saved.deleted_count,
-            "bidding_credits": credits.deleted_count,
-            "auctions_anonymized": anon.modified_count,
-            "bidder_references_cleared": hb.modified_count,
-        },
-    }
+# moved → routers/admin.py (admin_ban_user, admin_unban_user, admin_delete_user)
 
 
 
@@ -2496,6 +2393,7 @@ from routers import seo as _seo_router  # noqa: E402
 from routers import negotiations as _neg_router  # noqa: E402
 from routers import auth as _auth_router  # noqa: E402
 from routers import reviews as _reviews_router  # noqa: E402
+from routers import admin as _admin_router  # noqa: E402
 
 # Wire up injected deps for the negotiation router
 _neg_router.configure(
@@ -2520,10 +2418,21 @@ _auth_router.register_routes()
 _reviews_router.configure(get_current_user=get_current_user)
 _reviews_router.register_routes()
 
+# Wire up admin router (CMS + users + stats; lifecycle routes stay in server.py)
+_admin_router.configure(
+    require_admin=require_admin,
+    settings_fn=_settings,
+    load_settings_cache=_load_settings_cache,
+    public_comment=_public_comment,
+    hub=hub,
+)
+_admin_router.register_routes()
+
 api.include_router(_seo_router.router)
 api.include_router(_neg_router.router)
 api.include_router(_auth_router.router)
 api.include_router(_reviews_router.router)
+api.include_router(_admin_router.router)
 
 app.include_router(api)
 

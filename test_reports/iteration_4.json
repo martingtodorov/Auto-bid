@@ -1,0 +1,116 @@
+{
+  "summary": "Comprehensive E2E testing of iteration 4 features: Stats Dashboard (GET /api/stats/sold), Enhanced /api/auctions/sold with filters/pagination, Admin routes refactor to routers/admin.py. All 40 backend tests passed. Frontend Sales page verified with all required UI elements.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration4_stats_admin.py",
+    "/app/test_reports/pytest/pytest_iteration4_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "GET /api/stats/sold correctly returns all aggregate fields: total_count, total_volume_eur, avg_price_eur, median_price_eur, min/max_price_eur, avg_mileage_km, by_make[], by_body_type[], by_month[], highest_sale",
+    "Stats endpoint supports ?days=30|90|365 window filter correctly",
+    "Enhanced GET /api/auctions/sold maintains backwards compatibility - returns plain list when no params, paginated object when filters used",
+    "Admin routes successfully moved to routers/admin.py with configure() DI pattern",
+    "Admin settings validation works: buyer_fee_pct 0-25%, negative rejection",
+    "Admin user management: phone must start with +, role restricted to user/admin, cannot demote self",
+    "Admin ban/unban: cannot ban self, cannot ban another admin",
+    "Admin comment soft-delete with WS broadcast working",
+    "Landing page hero has py-6 lg:py-3 padding (tighter margin)",
+    "Landing page hero image has aspect-[4/3] lg:aspect-[16/10] (shorter on desktop)",
+    "Sales page has all required data-testid attributes for testing"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration4_stats_admin.py"
+  ],
+  "success_rate": {
+    "backend": "100% (40/40 tests passed)",
+    "frontend": "100% (all Sales page UI elements verified)"
+  },
+  "test_credentials": {
+    "admin": "admin@autobid.bg / admin123",
+    "review_buyer": "reviewbuyer@test.bg / test12345"
+  },
+  "seed_data_creation": "Test comment created and soft-deleted for admin comment deletion test",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 4 fully tested. New features: (1) GET /api/stats/sold public endpoint with window filter, (2) Enhanced GET /api/auctions/sold with filters (make, body_type, fuel, year_min/max, price_min/max, q, sort, limit, offset) - returns paginated object when params used, plain list otherwise for backwards compat, (3) Admin routes refactored to routers/admin.py (settings, comments delete, stats, users CRUD, ban/unban). Admin auction lifecycle routes remain in server.py. Frontend Sales page at /sales has KPIs, window toggle, charts, filters, sort, pagination. Landing page hero has tighter margin (py-6 lg:py-3) and shorter desktop image (lg:aspect-[16/10]).",
+  "features_tested": {
+    "backend_new": [
+      "GET /api/stats/sold - all-time stats with all aggregate fields",
+      "GET /api/stats/sold?days=30 - 30-day window",
+      "GET /api/stats/sold?days=90 - 90-day window",
+      "GET /api/stats/sold?days=365 - 365-day window",
+      "GET /api/auctions/sold - backwards compat plain list",
+      "GET /api/auctions/sold?make=BMW - paginated object with filter",
+      "GET /api/auctions/sold?body_type=Купе - body type filter",
+      "GET /api/auctions/sold?year_min=2015 - year filter",
+      "GET /api/auctions/sold?price_max=20000 - price filter",
+      "GET /api/auctions/sold?q=BMW - search query",
+      "GET /api/auctions/sold?sort=price_desc - sort options",
+      "GET /api/auctions/sold with pagination (offset/limit)"
+    ],
+    "backend_refactored_admin": [
+      "GET /api/admin/settings - returns all settings",
+      "PUT /api/admin/settings - valid fee update",
+      "PUT /api/admin/settings - rejects fee > 25%",
+      "PUT /api/admin/settings - rejects negative fee",
+      "GET /api/admin/stats - platform KPIs",
+      "GET /api/admin/users - user list",
+      "GET /api/admin/users?q=admin - search filter",
+      "GET /api/admin/users/{id} - user details",
+      "PUT /api/admin/users/{id} - phone validation (must start with +)",
+      "PUT /api/admin/users/{id} - invalid role rejection",
+      "PUT /api/admin/users/{admin_id} - cannot demote self",
+      "POST /api/admin/users/{admin_id}/ban - cannot ban self",
+      "POST /api/admin/users/{id}/ban - ban user",
+      "POST /api/admin/users/{id}/unban - unban user",
+      "DELETE /api/admin/comments/{id} - soft-delete with WS broadcast"
+    ],
+    "backend_regression_admin_lifecycle": [
+      "GET /api/admin/pending - pending auctions",
+      "GET /api/admin/auctions - all auctions",
+      "GET /api/admin/auctions?status=sold - filter by status",
+      "GET /api/admin/sold - sold auctions with winner info",
+      "GET /api/admin/auctions/{id} - auction details"
+    ],
+    "backend_regression_other": [
+      "GET /api/users/{seller_id}/reviews - reviews with rating",
+      "GET /api/users/{seller_id}/rating - rating endpoint",
+      "POST /api/auth/login - authentication",
+      "GET /api/auth/me - user info",
+      "GET /api/auctions - auction list",
+      "GET /api/auctions/{id} - auction detail"
+    ],
+    "frontend_sales_page": [
+      "Sales page loads [data-testid=sales-page]",
+      "KPIs section with 4 metrics",
+      "Window toggle [data-testid=stats-window-toggle] with 30/90/365/all options",
+      "Top makes bar chart [data-testid=chart-by-make]",
+      "Monthly trend chart [data-testid=chart-monthly]",
+      "Highest sale card [data-testid=highest-sale-card]",
+      "Filter bar [data-testid=sales-filters] with make/body/year_min/price_max/reset",
+      "Sort dropdown [data-testid=sales-sort] with recent/oldest/price_desc/price_asc",
+      "Sales grid [data-testid=sales-grid]",
+      "Pagination [data-testid=sales-pagination] (hidden when total <= 24)"
+    ],
+    "frontend_landing_page": [
+      "Hero section py-6 lg:py-3 padding (tighter margin)",
+      "Hero image aspect-[4/3] lg:aspect-[16/10] (shorter on desktop)",
+      "Hero CTA buttons [data-testid=hero-cta-browse/sell]",
+      "Active auctions grid [data-testid=landing-auctions-grid]"
+    ]
+  },
+  "mocked_apis": {
+    "stripe_preauth": "mock_pi_* tokens used for payment pre-authorization (unchanged)",
+    "resend_email": "Falls back to console log if no API key",
+    "twilio_sms": "Falls back to console log if no credentials"
+  }
+}

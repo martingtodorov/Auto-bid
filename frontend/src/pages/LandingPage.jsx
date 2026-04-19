@@ -49,10 +49,10 @@ export default function LandingPage() {
     <main data-testid="landing-page">
       {/* Hero */}
       <section className="rule-b hero-ambient">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-8 lg:py-6">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-3">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-12 items-center">
             <div className="lg:col-span-6 fade-up">
-              <h1 className="hero-headline text-5xl sm:text-6xl lg:text-[64px] lg:leading-[1.05] mt-0">
+              <h1 className="hero-headline text-5xl sm:text-6xl lg:text-[60px] lg:leading-[1.05] mt-0">
                 Открийте <em>изключителни</em><br />автомобили.
               </h1>
               <p className="mt-5 text-base lg:text-lg text-[hsl(var(--ink-muted))] leading-relaxed max-w-xl">
@@ -71,7 +71,7 @@ export default function LandingPage() {
             <div className="lg:col-span-6 fade-up">
               {hero ? (
                 <Link to={`/auctions/${hero.id}`} className="block group" data-testid="hero-featured-auction">
-                  <div className="aspect-[4/3] overflow-hidden rounded-card border border-[hsl(var(--line))]">
+                  <div className="aspect-[4/3] lg:aspect-[16/10] overflow-hidden rounded-card border border-[hsl(var(--line))]">
                     <img src={hero.images?.[0] || HERO_IMAGE} alt={hero.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
                   </div>
                   <div className="mt-3 flex items-end justify-between gap-4">
@@ -90,7 +90,7 @@ export default function LandingPage() {
                   </div>
                 </Link>
               ) : (
-                <div className="aspect-[4/3] border border-[hsl(var(--line))] bg-[hsl(var(--surface))]" />
+                <div className="aspect-[4/3] lg:aspect-[16/10] border border-[hsl(var(--line))] bg-[hsl(var(--surface))]" />
               )}
             </div>
           </div>
