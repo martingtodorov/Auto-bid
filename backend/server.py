@@ -2073,6 +2073,13 @@ async def public_profile(user_id: str):
     active_pub = [_public_auction(a) for a in active]
     total_sales = sum(float(a.get("current_bid_eur", 0)) for a in listings_sold)
     total_bought = sum(float(a.get("current_bid_eur", 0)) for a in bought)
+
+    # Aggregate buyer → seller rating (for AggregateRating JSON-LD on profile page)
+    rating_cur = db.reviews.find({"seller_id": user_id}, {"_id": 0, "rating": 1})
+    rating_vals = [int(r["rating"]) async for r in rating_cur]
+    rating_count = len(rating_vals)
+    rating_avg = round(sum(rating_vals) / rating_count, 2) if rating_count else 0.0
+
     return {
         "user": {"id": u["id"], "name": u["name"], "role": u.get("role", "user"), "member_since": u["created_at"]},
         "stats": {
@@ -2082,6 +2089,7 @@ async def public_profile(user_id: str):
             "purchases_total_eur": total_bought,
             "active_count": len(active_pub),
         },
+        "rating": {"avg": rating_avg, "count": rating_count},
         "listings_sold": listings_sold,
         "purchases": bought,
         "active_listings": active_pub,
@@ -2487,6 +2495,7 @@ async def reseed():
 from routers import seo as _seo_router  # noqa: E402
 from routers import negotiations as _neg_router  # noqa: E402
 from routers import auth as _auth_router  # noqa: E402
+from routers import reviews as _reviews_router  # noqa: E402
 
 # Wire up injected deps for the negotiation router
 _neg_router.configure(
@@ -2507,9 +2516,14 @@ _auth_router.configure(
 )
 _auth_router.register_routes()
 
+# Wire up reviews router
+_reviews_router.configure(get_current_user=get_current_user)
+_reviews_router.register_routes()
+
 api.include_router(_seo_router.router)
 api.include_router(_neg_router.router)
 api.include_router(_auth_router.router)
+api.include_router(_reviews_router.router)
 
 app.include_router(api)
 

@@ -47,13 +47,13 @@ export default function Nav() {
           </nav>
 
           <form onSubmit={doSearch} className="hidden lg:flex items-center flex-1 max-w-[220px] relative">
-            <Search size={14} className="absolute left-3 text-[hsl(var(--ink-muted))]" />
+            <Search size={14} className="absolute left-3 text-[hsl(var(--accent))]" />
             <input
               type="text"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Търси автомобил…"
-              className="w-full border border-[hsl(var(--line))] h-9 pl-9 pr-3 text-sm bg-[hsl(var(--surface))]"
+              className="w-full border border-[hsl(var(--accent))]/60 hover:border-[hsl(var(--accent))] focus:border-[hsl(var(--accent))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--accent))]/20 h-9 pl-9 pr-3 text-sm bg-[hsl(var(--surface))] transition-colors"
               data-testid="nav-search-input"
             />
           </form>
@@ -93,13 +93,13 @@ export default function Nav() {
         <div className="md:hidden rule-t">
           <div className="max-w-[1440px] mx-auto px-4 py-4 space-y-3">
             <form onSubmit={(e) => { doSearch(e); setOpen(false); }} className="relative" data-testid="mobile-search-form">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[hsl(var(--ink-muted))]" />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[hsl(var(--accent))]" />
               <input
                 type="text"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Търси автомобил…"
-                className="w-full border border-[hsl(var(--line))] h-10 pl-9 pr-3 text-sm bg-[hsl(var(--surface))]"
+                className="w-full border border-[hsl(var(--accent))]/60 focus:border-[hsl(var(--accent))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--accent))]/20 h-10 pl-9 pr-3 text-sm bg-[hsl(var(--surface))]"
                 data-testid="mobile-search-input"
               />
             </form>
