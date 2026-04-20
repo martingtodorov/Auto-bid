@@ -126,7 +126,47 @@ export default function AccountSettingsPage() {
         </section>
 
         <TwoFactorSection />
+
+        <DangerZone />
       </div>
     </main>
+  );
+}
+
+function DangerZone() {
+  const { user, logout } = useAuth();
+  const [confirmText, setConfirmText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const PHRASE = "ИЗТРИЙ";
+
+  const onDelete = async () => {
+    if (confirmText !== PHRASE) { setErr(`Въведете „${PHRASE}" за потвърждение.`); return; }
+    if (!window.confirm("Това действие е необратимо. Продължаване?")) return;
+    setLoading(true); setErr("");
+    try {
+      await api.delete("/auth/me");
+      logout();
+      window.location.href = "/";
+    } catch (e) { setErr(formatError(e)); }
+    finally { setLoading(false); }
+  };
+
+  if (!user) return null;
+  return (
+    <section className="mt-8 rounded-card border-2 border-[hsl(var(--danger))]/40 bg-white p-6 lg:p-8" data-testid="danger-zone">
+      <h2 className="font-serif text-2xl text-[hsl(var(--danger))]">Изтриване на акаунт (GDPR)</h2>
+      <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">
+        Правото ви на изтриване по GDPR. Ще премахнем вашите бидове, коментари, любими, запазени търсения, VIN заявки и отзиви. Вашите предишни обяви остават в историята на платформата като анонимизирани записи за целите на счетоводни/правни задължения.
+      </p>
+      <div className="mt-5">
+        <label className="text-xs text-[hsl(var(--ink-muted))] uppercase tracking-wider">За потвърждение въведете „{PHRASE}"</label>
+        <input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} className="mt-1 w-full max-w-xs border border-[hsl(var(--line))] h-11 px-3 font-mono" data-testid="delete-account-confirm" />
+      </div>
+      {err && <p className="mt-3 text-sm text-[hsl(var(--danger))]" data-testid="delete-account-error">{err}</p>}
+      <button onClick={onDelete} disabled={loading || confirmText !== PHRASE} className="mt-4 px-5 py-2.5 rounded-card bg-[hsl(var(--danger))] text-white text-sm disabled:opacity-50" data-testid="delete-account-btn">
+        {loading ? "Изтриване…" : "Изтрий моя акаунт завинаги"}
+      </button>
+    </section>
   );
 }

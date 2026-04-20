@@ -198,6 +198,9 @@ class SiteSettingsUpdate(BaseModel):
     buyer_fee_pct: Optional[float] = None
     buyer_fee_min_eur: Optional[float] = None
     buyer_fee_max_eur: Optional[float] = None
+    og_image_url: Optional[str] = None            # Phase 5: homepage OG image
+    maintenance_mode: Optional[bool] = None       # Phase 5: maintenance toggle
+    maintenance_message: Optional[str] = None
     seo_title: Optional[str] = None
     seo_description: Optional[str] = None
     google_site_verification: Optional[str] = None
@@ -242,3 +245,24 @@ class TwoFactorConfirm(BaseModel):
 class TwoFactorVerify(BaseModel):
     challenge_token: str
     code: str = Field(min_length=6, max_length=8)  # 8 = backup code
+
+
+# ---------- Phase 3 moderation ----------
+class InvalidateBidRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class BlockBidderRequest(BaseModel):
+    user_id: str
+    reason: Optional[str] = Field(default=None, max_length=500)
+
+
+class InternalNote(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+# ---------- Phase 4 payments ----------
+class BuyerFeeUpdate(BaseModel):
+    status: str  # "unpaid" | "paid" | "waived" | "refunded"
+    note: Optional[str] = Field(default=None, max_length=500)
+

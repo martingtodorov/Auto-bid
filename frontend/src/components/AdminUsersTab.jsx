@@ -1,13 +1,15 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { Search, Edit3, Shield, User as UserIcon, Check, X, Ban, RotateCcw, Trash2 } from "lucide-react";
+import { Search, Edit3, Shield, User as UserIcon, Check, X, Ban, RotateCcw, Trash2, UserCog } from "lucide-react";
 import { api } from "../lib/apiClient";
 import { formatError } from "../lib/auth";
+import AdminUserDetailModal from "./AdminUserDetailModal";
 
 export default function AdminUsersTab({ currentUserId }) {
   const [items, setItems] = useState([]);
   const [q, setQ] = useState("");
   const [err, setErr] = useState("");
   const [editing, setEditing] = useState(null);
+  const [moderationUserId, setModerationUserId] = useState(null);
   const [busyId, setBusyId] = useState(null);
 
   const load = useCallback(async () => {
@@ -109,6 +111,9 @@ export default function AdminUsersTab({ currentUserId }) {
                 )}
               </div>
               <div className="flex flex-wrap justify-end gap-1.5">
+                <button onClick={() => setModerationUserId(u.id)} className="btn btn-secondary !py-1.5 !px-2.5 text-xs flex items-center gap-1 !border-[hsl(var(--accent))] !text-[hsl(var(--accent))]" data-testid={`moderate-user-${u.id}`} title="Модерация">
+                  <UserCog size={12} /> Модерация
+                </button>
                 <button onClick={() => setEditing(u)} className="btn btn-secondary !py-1.5 !px-2.5 text-xs flex items-center gap-1" data-testid={`edit-user-${u.id}`}>
                   <Edit3 size={12} /> Редакт.
                 </button>
@@ -146,6 +151,13 @@ export default function AdminUsersTab({ currentUserId }) {
           currentUserId={currentUserId}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); load(); }}
+        />
+      )}
+      {moderationUserId && (
+        <AdminUserDetailModal
+          userId={moderationUserId}
+          onClose={() => setModerationUserId(null)}
+          onChanged={load}
         />
       )}
     </div>

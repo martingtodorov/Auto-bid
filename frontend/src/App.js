@@ -5,6 +5,8 @@ import { AuthProvider } from "./lib/auth";
 import Nav from "./components/Nav";
 import LiveTicker from "./components/LiveTicker";
 import Footer from "./components/Footer";
+import CookieConsentBanner from "./components/CookieConsentBanner";
+import MaintenanceBanner from "./components/MaintenanceBanner";
 import LandingPage from "./pages/LandingPage";
 import AuctionsPage from "./pages/AuctionsPage";
 import AuctionDetailPage from "./pages/AuctionDetailPage";
@@ -30,6 +32,7 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <div className="min-h-screen flex flex-col bg-white">
+          <MaintenanceBanner />
           <LiveTicker />
           <Nav />
           <div className="flex-1">
@@ -57,6 +60,7 @@ function App() {
             </Routes>
           </div>
           <Footer />
+          <CookieConsentBanner />
         </div>
       </AuthProvider>
     </BrowserRouter>

@@ -254,3 +254,30 @@ def register_routes():
         u = _sanitize(user)
         u["totp_enabled"] = bool(user.get("totp_enabled"))
         return u
+
+    @router.delete("/me")
+    async def delete_me(user: dict = Depends(_get_current_user)):
+        """GDPR right-to-erasure — user deletes own account and cascades data.
+        Keeps auctions as ledger records (seller anonymized). Clears bids/comments/watches/saved searches/credits/VIN requests/reviews.
+        """
+        uid = user["id"]
+        bids = await db.bids.delete_many({"user_id": uid})
+        comments = await db.comments.delete_many({"user_id": uid})
+        watches = await db.watches.delete_many({"user_id": uid})
+        saved = await db.saved_searches.delete_many({"user_id": uid})
+        credits = await db.bidding_credits.delete_many({"user_id": uid})
+        vins = await db.vin_requests.delete_many({"user_id": uid})
+        reviews = await db.reviews.delete_many({"buyer_id": uid})
+        notes = await db.user_notes.delete_many({"user_id": uid})
+        # Anonymize their auctions (legal/ledger)
+        await db.auctions.update_many({"seller_id": uid}, {"$set": {"seller_name": "Изтрит потребител", "seller_id": "deleted"}})
+        await db.auctions.update_many({"high_bidder_id": uid}, {"$set": {"high_bidder_id": None, "high_bidder_name": None}})
+        await db.users.delete_one({"id": uid})
+        return {
+            "ok": True,
+            "deleted": {
+                "bids": bids.deleted_count, "comments": comments.deleted_count, "watches": watches.deleted_count,
+                "saved_searches": saved.deleted_count, "credits": credits.deleted_count,
+                "vin_requests": vins.deleted_count, "reviews": reviews.deleted_count, "notes": notes.deleted_count,
+            },
+        }

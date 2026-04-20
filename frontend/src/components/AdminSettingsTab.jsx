@@ -36,6 +36,9 @@ export default function AdminSettingsTab() {
         contacts_content: data.contacts_content ?? "",
         fees_content: data.fees_content ?? "",
         how_it_works_content: data.how_it_works_content ?? "",
+        og_image_url: data.og_image_url ?? "",
+        maintenance_mode: !!data.maintenance_mode,
+        maintenance_message: data.maintenance_message ?? "",
       });
     } catch (e) { setErr(formatError(e)); }
   };
@@ -57,6 +60,9 @@ export default function AdminSettingsTab() {
         contacts_content: form.contacts_content,
         fees_content: form.fees_content,
         how_it_works_content: form.how_it_works_content,
+        og_image_url: form.og_image_url,
+        maintenance_mode: !!form.maintenance_mode,
+        maintenance_message: form.maintenance_message,
       };
       await api.put("/admin/settings", payload);
       await refreshSettings();
@@ -113,6 +119,44 @@ export default function AdminSettingsTab() {
               onChange={(e) => set("seo_description", e.target.value)}
               maxLength={320}
               className="w-full border border-[hsl(var(--line))] p-3 text-sm" />
+          </Field>
+          <Field label="Социална картинка (OG image URL)" testid="seo-og-image" span={2}>
+            <input
+              type="url"
+              value={form.og_image_url}
+              onChange={(e) => set("og_image_url", e.target.value)}
+              placeholder="https://autobids.bg/brand/og.jpg"
+              className="w-full border border-[hsl(var(--line))] h-11 px-3 text-sm font-mono"
+              data-testid="seo-og-image-input"
+            />
+            {form.og_image_url && (
+              <div className="mt-3 aspect-[1200/630] w-full max-w-md overflow-hidden rounded-card border border-[hsl(var(--line))] bg-[hsl(var(--surface))]">
+                <img src={form.og_image_url} alt="OG preview" className="w-full h-full object-cover" />
+              </div>
+            )}
+            <p className="mt-2 text-xs text-[hsl(var(--ink-muted))]">Статична картинка за социално споделяне на началната страница. Обявите автоматично ползват снимка на автомобила.</p>
+          </Field>
+        </div>
+      </section>
+
+      {/* Maintenance mode */}
+      <section className="rounded-card border border-amber-300 bg-amber-50 p-6" data-testid="maintenance-section">
+        <h2 className="font-serif text-2xl text-amber-900">Режим на поддръжка</h2>
+        <p className="mt-2 text-sm text-amber-800">Когато е включен, сайтът продължава да се вижда, но записите (подаване, наддаване, коментари) се блокират с 503.</p>
+        <div className="mt-5 space-y-4">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" checked={!!form.maintenance_mode} onChange={(e) => set("maintenance_mode", e.target.checked)} className="h-4 w-4" data-testid="maintenance-toggle" />
+            <span className="text-sm font-medium">Активирай режим на поддръжка</span>
+          </label>
+          <Field label="Съобщение към посетителите" testid="maintenance-message">
+            <textarea
+              rows={2}
+              value={form.maintenance_message}
+              onChange={(e) => set("maintenance_message", e.target.value)}
+              maxLength={400}
+              className="w-full border border-amber-300 p-3 text-sm bg-white"
+              data-testid="maintenance-message-input"
+            />
           </Field>
         </div>
       </section>

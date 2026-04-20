@@ -20,7 +20,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from deps import db
-from models import SiteSettingsUpdate, AdminUserUpdate, StripeSettingsUpdate, MakeCreate, CancelReason
+from models import SiteSettingsUpdate, AdminUserUpdate, StripeSettingsUpdate, MakeCreate, CancelReason, InvalidateBidRequest, BlockBidderRequest, InternalNote, BuyerFeeUpdate
 from helpers import audit_log, mask_secret, stripe_public_config, stripe_runtime_config
 
 router = APIRouter()
@@ -515,4 +515,210 @@ def register_routes():
                         action="auction.featured_toggle", target_type="auction", target_id=auction_id,
                         details={"featured": new_val}, ip=request.client.host if request.client else "")
         return {"ok": True, "featured": new_val}
+
+
+    # ============================================================
+    # Phase 3 — Bid & bidder moderation
+    # ============================================================
+    @router.get("/admin/auctions/{auction_id}/bids")
+    async def admin_bid_history(auction_id: str, _admin: dict = Depends(_require_admin_or_moderator)):
+        items = await db.bids.find({"auction_id": auction_id}, {"_id": 0}).sort("created_at", -1).to_list(500)
+        # Enrich blocked status per user
+        blocked_ids = set()
+        async for b in db.bid_blocks.find({"auction_id": auction_id}, {"_id": 0, "user_id": 1}):
+            blocked_ids.add(b["user_id"])
+        for it in items:
+            it["is_blocked_on_auction"] = it["user_id"] in blocked_ids
+        return items
+
+    @router.post("/admin/bids/{bid_id}/invalidate")
+    async def admin_invalidate_bid(bid_id: str, payload: InvalidateBidRequest, request: Request, admin: dict = Depends(_require_admin)):
+        b = await db.bids.find_one({"id": bid_id}, {"_id": 0})
+        if not b:
+            raise HTTPException(status_code=404, detail="Бидът не е намерен")
+        if b.get("invalidated"):
+            raise HTTPException(status_code=400, detail="Бидът вече е инвалидиран")
+        now = datetime.now(timezone.utc).isoformat()
+        await db.bids.update_one({"id": bid_id}, {"$set": {
+            "invalidated": True, "invalidated_reason": payload.reason.strip(),
+            "invalidated_by": admin["id"], "invalidated_at": now,
+        }})
+        # Re-derive auction's high bid from remaining valid bids
+        auction_id = b["auction_id"]
+        top = await db.bids.find({"auction_id": auction_id, "invalidated": {"$ne": True}}, {"_id": 0}).sort("amount_eur", -1).limit(1).to_list(1)
+        a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+        if top:
+            t = top[0]
+            await db.auctions.update_one({"id": auction_id}, {"$set": {
+                "current_bid_eur": t["amount_eur"], "high_bidder_id": t["user_id"], "high_bidder_name": t["user_name"],
+            }})
+        elif a:
+            # Fallback to starting bid
+            await db.auctions.update_one({"id": auction_id}, {"$set": {
+                "current_bid_eur": a.get("starting_bid_eur", 0), "high_bidder_id": None, "high_bidder_name": None,
+            }})
+        await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
+                        action="bid.invalidate", target_type="bid", target_id=bid_id,
+                        details={"auction_id": auction_id, "reason": payload.reason.strip()[:200]},
+                        ip=request.client.host if request.client else "")
+        return {"ok": True}
+
+    @router.post("/admin/auctions/{auction_id}/block-bidder")
+    async def admin_block_bidder(auction_id: str, payload: BlockBidderRequest, request: Request, admin: dict = Depends(_require_admin)):
+        existing = await db.bid_blocks.find_one({"auction_id": auction_id, "user_id": payload.user_id}, {"_id": 0, "id": 1})
+        if existing:
+            return {"ok": True, "already_blocked": True}
+        doc = {
+            "id": __import__("uuid").uuid4().hex,
+            "auction_id": auction_id,
+            "user_id": payload.user_id,
+            "reason": (payload.reason or "").strip(),
+            "by": admin["id"],
+            "at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.bid_blocks.insert_one(doc)
+        await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
+                        action="bidder.block", target_type="user", target_id=payload.user_id,
+                        details={"auction_id": auction_id, "reason": (payload.reason or "")[:200]},
+                        ip=request.client.host if request.client else "")
+        return {"ok": True}
+
+    @router.delete("/admin/auctions/{auction_id}/block-bidder/{user_id}")
+    async def admin_unblock_bidder(auction_id: str, user_id: str, request: Request, admin: dict = Depends(_require_admin)):
+        res = await db.bid_blocks.delete_one({"auction_id": auction_id, "user_id": user_id})
+        await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
+                        action="bidder.unblock", target_type="user", target_id=user_id,
+                        details={"auction_id": auction_id}, ip=request.client.host if request.client else "")
+        return {"ok": True, "removed": res.deleted_count}
+
+    # ============================================================
+    # Phase 3 — User moderation (suspend/verify/notes/vin-log/resend-verify)
+    # ============================================================
+    @router.post("/admin/users/{user_id}/suspend")
+    async def admin_suspend_user(user_id: str, request: Request, admin: dict = Depends(_require_admin)):
+        if user_id == admin["id"]:
+            raise HTTPException(status_code=400, detail="Не можете да спрете собствения си акаунт")
+        u = await db.users.find_one({"id": user_id}, {"_id": 0})
+        if not u:
+            raise HTTPException(status_code=404, detail="Потребителят не е намерен")
+        if u.get("role") in ("admin", "moderator"):
+            raise HTTPException(status_code=400, detail="Не можете да спирате друг служител")
+        await db.users.update_one({"id": user_id}, {"$set": {"suspended": True, "suspended_at": datetime.now(timezone.utc).isoformat()}})
+        await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
+                        action="user.suspend", target_type="user", target_id=user_id, details={},
+                        ip=request.client.host if request.client else "")
+        return {"ok": True, "suspended": True}
+
+    @router.post("/admin/users/{user_id}/unsuspend")
+    async def admin_unsuspend_user(user_id: str, request: Request, admin: dict = Depends(_require_admin)):
+        await db.users.update_one({"id": user_id}, {"$set": {"suspended": False}, "$unset": {"suspended_at": ""}})
+        await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
+                        action="user.unsuspend", target_type="user", target_id=user_id, details={})
+        return {"ok": True, "suspended": False}
+
+    @router.post("/admin/users/{user_id}/verify-seller")
+    async def admin_verify_seller(user_id: str, request: Request, admin: dict = Depends(_require_admin)):
+        await db.users.update_one({"id": user_id}, {"$set": {"is_verified_dealer": True, "verified_at": datetime.now(timezone.utc).isoformat(), "verified_by": admin["id"]}})
+        await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
+                        action="user.verify_seller", target_type="user", target_id=user_id, details={},
+                        ip=request.client.host if request.client else "")
+        return {"ok": True, "is_verified_dealer": True}
+
+    @router.post("/admin/users/{user_id}/unverify-seller")
+    async def admin_unverify_seller(user_id: str, request: Request, admin: dict = Depends(_require_admin)):
+        await db.users.update_one({"id": user_id}, {"$set": {"is_verified_dealer": False}})
+        await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
+                        action="user.unverify_seller", target_type="user", target_id=user_id, details={})
+        return {"ok": True, "is_verified_dealer": False}
+
+    @router.get("/admin/users/{user_id}/notes")
+    async def admin_list_notes(user_id: str, _admin: dict = Depends(_require_admin_or_moderator)):
+        items = await db.user_notes.find({"user_id": user_id}, {"_id": 0}).sort("at", -1).limit(200).to_list(200)
+        return items
+
+    @router.post("/admin/users/{user_id}/notes")
+    async def admin_add_note(user_id: str, payload: InternalNote, admin: dict = Depends(_require_admin_or_moderator)):
+        doc = {
+            "id": __import__("uuid").uuid4().hex,
+            "user_id": user_id,
+            "text": payload.text.strip(),
+            "author_id": admin["id"],
+            "author_name": admin.get("name", ""),
+            "author_role": admin.get("role", ""),
+            "at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.user_notes.insert_one(doc)
+        doc.pop("_id", None)
+        return doc
+
+    @router.delete("/admin/users/{user_id}/notes/{note_id}")
+    async def admin_delete_note(user_id: str, note_id: str, admin: dict = Depends(_require_admin_or_moderator)):
+        await db.user_notes.delete_one({"id": note_id, "user_id": user_id})
+        return {"ok": True}
+
+    @router.get("/admin/users/{user_id}/vin-requests")
+    async def admin_user_vin_requests(user_id: str, _admin: dict = Depends(_require_admin_or_moderator)):
+        items = await db.vin_requests.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1).limit(200).to_list(200)
+        return items
+
+    @router.get("/admin/vin-requests")
+    async def admin_vin_requests(auction_id: Optional[str] = None, _admin: dict = Depends(_require_admin_or_moderator)):
+        q = {}
+        if auction_id:
+            q["auction_id"] = auction_id
+        items = await db.vin_requests.find(q, {"_id": 0}).sort("created_at", -1).limit(500).to_list(500)
+        return items
+
+    @router.post("/admin/users/{user_id}/resend-verification")
+    async def admin_resend_verification(user_id: str, admin: dict = Depends(_require_admin)):
+        """Placeholder hook — sends a fresh Resend email. Real verify-link flow will come when we add email verification."""
+        u = await db.users.find_one({"id": user_id}, {"_id": 0})
+        if not u:
+            raise HTTPException(status_code=404, detail="Потребителят не е намерен")
+        try:
+            from emails import send_email, _shell
+            html = _shell(
+                "Потвърдете акаунта си",
+                f"<p>Здравейте {u.get('name','')},</p><p>Admin екипът ви подсеща да потвърдите своя акаунт в autobids.bg. Моля, влезте в профила си и актуализирайте данните за контакт, ако е необходимо.</p>",
+            )
+            await send_email(u["email"], "autobids.bg — напомняне за акаунта", html)
+            await db.users.update_one({"id": user_id}, {"$set": {"verification_sent_at": datetime.now(timezone.utc).isoformat()}})
+        except Exception as e:
+            logger.error("resend_verification failed: %s", e)
+            raise HTTPException(status_code=500, detail="Неуспешно изпращане")
+        await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
+                        action="user.resend_verification", target_type="user", target_id=user_id, details={})
+        return {"ok": True}
+
+    # ============================================================
+    # Phase 4 — Buyer fee status + Stripe events
+    # ============================================================
+    @router.get("/admin/auctions/{auction_id}/buyer-fee")
+    async def admin_get_buyer_fee(auction_id: str, _admin: dict = Depends(_require_admin_or_moderator)):
+        a = await db.auctions.find_one({"id": auction_id}, {"_id": 0, "id": 1, "title": 1, "current_bid_eur": 1, "status": 1, "high_bidder_id": 1, "high_bidder_name": 1, "buyer_fee_status": 1, "buyer_fee_note": 1, "buyer_fee_updated_at": 1, "premium_amount_eur": 1})
+        if not a:
+            raise HTTPException(status_code=404, detail="Обявата не е намерена")
+        a.setdefault("buyer_fee_status", "unpaid")
+        return a
+
+    @router.put("/admin/auctions/{auction_id}/buyer-fee")
+    async def admin_update_buyer_fee(auction_id: str, payload: BuyerFeeUpdate, request: Request, admin: dict = Depends(_require_admin)):
+        if payload.status not in ("unpaid", "paid", "waived", "refunded"):
+            raise HTTPException(status_code=400, detail="Невалиден статус")
+        now = datetime.now(timezone.utc).isoformat()
+        await db.auctions.update_one({"id": auction_id}, {"$set": {
+            "buyer_fee_status": payload.status, "buyer_fee_note": (payload.note or "").strip(),
+            "buyer_fee_updated_at": now, "buyer_fee_updated_by": admin["id"],
+        }})
+        await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
+                        action="buyer_fee.update", target_type="auction", target_id=auction_id,
+                        details={"status": payload.status}, ip=request.client.host if request.client else "")
+        return {"ok": True, "status": payload.status}
+
+    @router.get("/admin/stripe/events")
+    async def admin_stripe_events(limit: int = 100, _admin: dict = Depends(_require_admin)):
+        """Returns recent Stripe webhook events (from stripe_events collection)."""
+        limit = max(1, min(500, int(limit)))
+        items = await db.stripe_events.find({}, {"_id": 0}).sort("received_at", -1).limit(limit).to_list(limit)
+        return {"items": items, "total": await db.stripe_events.count_documents({})}
 

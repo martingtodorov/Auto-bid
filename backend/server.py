@@ -141,6 +141,10 @@ SETTINGS_DEFAULTS = {
     "stripe_secret_key_live": "",
     "stripe_webhook_secret_test": "",
     "stripe_webhook_secret_live": "",
+    # --- Phase 5 ---
+    "og_image_url": "",
+    "maintenance_mode": False,
+    "maintenance_message": "AutoBids.bg се обновява. Моля, върнете се след малко.",
 }
 _settings_cache: dict = dict(SETTINGS_DEFAULTS)
 
@@ -476,7 +480,13 @@ async def get_auction(auction_id: str, request: Request):
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     if not a:
         raise HTTPException(status_code=404, detail="Търгът не е намерен")
+    # Phase 4: views counter (increment once per request; bots included is ok for MVP)
+    try:
+        await db.auctions.update_one({"id": auction_id}, {"$inc": {"views_count": 1}})
+    except Exception:
+        pass
     public = _public_auction(a, viewer)
+    public["views_count"] = int(a.get("views_count") or 0) + 1
     # Enrich with seller verified status (platform listings are considered verified)
     seller_id = a.get("seller_id")
     if seller_id == "platform":
@@ -1123,6 +1133,13 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
     if a.get("seller_id") == user["id"]:
         raise HTTPException(status_code=400, detail="Не можете да наддавате за собствен автомобил")
 
+    # Phase 3: platform suspension or per-auction bid block?
+    if user.get("suspended"):
+        raise HTTPException(status_code=403, detail="Акаунтът е временно спрян от наддаване. Свържете се с поддръжка.")
+    blk = await db.bid_blocks.find_one({"auction_id": auction_id, "user_id": user["id"]}, {"_id": 0, "id": 1})
+    if blk:
+        raise HTTPException(status_code=403, detail="Не можете да наддавате за тази обява — достъпът е ограничен.")
+
     current = float(a["current_bid_eur"])
     step = _bid_step(current)
     min_next = current + step
@@ -1193,6 +1210,7 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
     await db.bids.insert_one(bid_doc)
 
     ends_at = datetime.fromisoformat(a["ends_at"])
+    triggered_extension = (ends_at - now).total_seconds() < 120
     update = {
         "current_bid_eur": amount,
         "bid_count": int(a.get("bid_count", 0)) + 1,
@@ -1200,9 +1218,12 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
         "high_bidder_name": user["name"],
     }
     # Hard anti-sniping: any bid in the final 2 min resets the clock to 2 min from now.
-    if (ends_at - now).total_seconds() < 120:
+    if triggered_extension:
         update["ends_at"] = (now + timedelta(minutes=2)).isoformat()
     await db.auctions.update_one({"id": auction_id}, {"$set": update})
+    # Flag the bid for audit (Phase 3)
+    if triggered_extension:
+        await db.bids.update_one({"id": bid_id}, {"$set": {"triggered_extension": True}})
 
     public_bid = {k: v for k, v in bid_doc.items() if k != "_id"}
     await hub.broadcast(auction_id, {
@@ -1362,6 +1383,9 @@ async def get_public_settings():
         "contacts_content": s.get("contacts_content"),
         "fees_content": s.get("fees_content"),
         "how_it_works_content": s.get("how_it_works_content"),
+        "og_image_url": s.get("og_image_url") or "",
+        "maintenance_mode": bool(s.get("maintenance_mode")),
+        "maintenance_message": s.get("maintenance_message") or "",
     }
 
 
@@ -2635,6 +2659,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ---- Maintenance mode middleware ----
+@app.middleware("http")
+async def maintenance_mode_middleware(request: Request, call_next):
+    """If maintenance_mode is on, block all write requests except admin + public reads of essentials."""
+    s = _settings()
+    if not s.get("maintenance_mode"):
+        return await call_next(request)
+    method = request.method.upper()
+    path = request.url.path or ""
+    if method in ("GET", "HEAD", "OPTIONS"):
+        return await call_next(request)
+    if any(path.startswith(p) for p in ("/api/admin", "/api/auth")):
+        return await call_next(request)
+    # Block writes
+    from fastapi.responses import JSONResponse
+    return JSONResponse({"detail": s.get("maintenance_message") or "Поддръжка"}, status_code=503)
 
 
 # ---- Security headers middleware ----

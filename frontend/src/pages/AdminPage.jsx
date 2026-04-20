@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Navigate, Link } from "react-router-dom";
-import { Check, X, Clock, AlertCircle, DollarSign, Archive, Ban, Edit3, Trash2, RotateCcw, Search, List, Users, BarChart3, Trash, RefreshCw, CreditCard, ScrollText, Tag, Pause, Play, Star, StarOff, Copy, XCircle } from "lucide-react";
+import { Check, X, Clock, AlertCircle, DollarSign, Archive, Ban, Edit3, Trash2, RotateCcw, Search, List, Users, BarChart3, Trash, RefreshCw, CreditCard, ScrollText, Tag, Pause, Play, Star, StarOff, Copy, XCircle, Gavel } from "lucide-react";
 import { useAuth, formatError } from "../lib/auth";
 import { api, formatEUR, formatKM } from "../lib/apiClient";
 import AdminEditModal from "../components/AdminEditModal";
@@ -10,6 +10,7 @@ import AdminSettingsTab from "../components/AdminSettingsTab";
 import AdminStripeTab from "../components/AdminStripeTab";
 import AdminAuditLogTab from "../components/AdminAuditLogTab";
 import AdminMakesTab from "../components/AdminMakesTab";
+import AdminBidHistoryModal from "../components/AdminBidHistoryModal";
 
 const STATUS_LABELS = {
   pending: "Очаква",
@@ -35,6 +36,7 @@ export default function AdminPage() {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(null);
   const [editingId, setEditingId] = useState(null);
+  const [bidsForAuction, setBidsForAuction] = useState(null); // {id, title}
 
   const loadPending = useCallback(async () => {
     try { const { data } = await api.get("/admin/pending"); setPending(data); }
@@ -393,6 +395,9 @@ export default function AdminPage() {
                           <RefreshCw size={12} /> Поднови
                         </button>
                       )}
+                      <button onClick={() => setBidsForAuction({ id: a.id, title: a.title })} disabled={busy === a.id} className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1" data-testid={`bids-${a.id}`} title="История на бидовете">
+                        <Gavel size={12} /> Бидове ({a.bid_count || 0})
+                      </button>
                       {/* Phase 2 lifecycle */}
                       <button onClick={() => toggleFeatured(a.id)} disabled={busy === a.id} className={`btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1 ${a.featured ? "!border-amber-500 !text-amber-600" : ""}`} data-testid={`featured-${a.id}`} title={a.featured ? "Премахни от препоръчани" : "Добави към препоръчани"}>
                         {a.featured ? <><StarOff size={12} /> Без промо</> : <><Star size={12} /> Промо</>}
@@ -533,6 +538,13 @@ export default function AdminPage() {
           auctionId={editingId}
           onClose={() => setEditingId(null)}
           onSaved={() => { loadPending(); loadSold(); loadAll(); }}
+        />
+      )}
+      {bidsForAuction && (
+        <AdminBidHistoryModal
+          auctionId={bidsForAuction.id}
+          auctionTitle={bidsForAuction.title}
+          onClose={() => setBidsForAuction(null)}
         />
       )}
     </main>
