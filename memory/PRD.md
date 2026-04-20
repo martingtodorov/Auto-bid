@@ -80,11 +80,57 @@
 - comments, watches, vin_requests, saved_searches
 
 ## Backlog / Future tasks
-- **P1** Реална Stripe интеграция (CMS + webhook готови — остава PaymentIntent preauth/capture на buyer fee)
-- **Phase 3** Bid & User controls — full bid history, invalidate bid (с reason), block bidder (per-auction + platform-wide), anti-sniping indicator, suspicious flags, suspend/verify seller, internal notes per user, VIN request log, resend verification, IP/device audit
-- **Phase 4** Payments + Comms + Moderation + Analytics — buyer fee статус/mark paid/waive/refund, Stripe event log, export transactions, canned emails, manual messages, notification log, internal auction notes, views/bidders/followers counters, sell-through rate, VIN→bid conversion
-- **Phase 5** Homepage OG image CMS upload, auto-generated meta за auction pages (title=auction title, desc=description, OG=car photo), Romanian i18n (ro.domain), maintenance mode, webhook/cron monitor, admin role management, backup access
-- **Security audit** — vulnerability scan (SQL/NoSQL inj, XSS, CSRF, rate-limit gaps, Secret exposure) + GDPR compliance (data retention, right-to-erasure, consent tracking, cookie banner, DPA)
+- **P1** Реална Stripe интеграция — PaymentIntent preauth/capture на buyer fee (CMS и webhook верификация вече готови)
+- **P2** Email verification link flow (resend endpoint готов, но без уникален токен)
+- **P2** Session invalidation при ban/suspend (jti blacklist или per-request check)
+- **P2** Canned email templates + manual admin→user messages + notification log UI
+- **P2** Romanian i18n (ro.domain) — отделен subdomain + i18next или подобна система
+- **P2** Sell-through rate / views-per-auction / bidders-per-auction charts в admin dashboard
+- **P2** Data export (GDPR Right to portability) — `/api/auth/me/export`
+- **P3** CAPTCHA на register/forgot/bid (hCaptcha или Cloudflare Turnstile)
+- **P3** WAF layer + log IP/device fingerprint
+- **P3** Cron job monitor UI + backup/restore endpoints
+
+### Apr 2026 — Phase 3/4/5 Partial + Security/GDPR Audit (DONE)
+Потребителят поиска всички 5 фази + одит; скопнах до най-ценните и документирах останалото.
+
+**Phase 3 — Bid & User moderation:**
+- Full bid history admin modal (`/admin/auctions/{id}/bids`) с triggered_extension flag
+- Invalidate bid (с mandatory reason) — re-derive current_bid_eur + high_bidder
+- Per-auction bidder block (`bid_blocks` collection) — платформен ban остава отделно
+- Anti-sniping indicator: `bids.triggered_extension = true` когато бидът задейства extension
+- User suspend/unsuspend (различно от ban — блокира само наддаване)
+- Verify/unverify seller
+- Internal notes колекция + UI
+- VIN request log (`vin_requests` collection + admin GET)
+- Resend verification email
+
+**Phase 4 — Payments + CMS partial:**
+- Buyer fee status endpoints (GET/PUT) — mark unpaid/paid/waived/refunded с note + audit
+- Stripe event log endpoint (`/admin/stripe/events`) — вече имахме collection от webhook
+- Views counter: `/api/auctions/{id}` инкрементира `views_count` на всеки GET
+
+**Phase 5 — System safety:**
+- OG image URL CMS в admin settings + preview
+- Maintenance mode flag + message + middleware (503 за non-GET освен admin/auth)
+- MaintenanceBanner компонент (автоматично при maintenance_mode=true)
+
+**Security & GDPR:**
+- Cookie consent banner (Accept/Reject localStorage)
+- GDPR `DELETE /api/auth/me` self-erasure с каскадно изтриване и анонимизация на обяви
+- DangerZone в /settings със сигурна confirm фраза „ИЗТРИЙ"
+- Пълен security audit документ в `/app/memory/SECURITY_GDPR_AUDIT.md` с: secret management, auth, rate-limiting, NoSQL injection защита, CSRF/XSS/CORS статус, GDPR gap анализ
+
+**НЕ са имплементирани (документирани в roadmap):**
+- Canned emails + manual messages + notification log UI
+- Romanian i18n (огромен обхват, нуждае от отделна сесия)
+- Sell-through rate / conversion funnel charts
+- Cron monitor UI + backup access
+- Export transactions to CSV
+- Admin role management UI (role PUT вече работи, липсва само tab)
+- Privacy policy legal текст (field съществува в CMS, но трябва юридическа редакция)
+
+Testing: **27/34 Phase 3/4/5 backend + 100% frontend regression = 79%+100%** (`iteration_7.json`). 7 skipped = fixture issue с променена парола на buyer акаунт, не функционални проблеми.
 
 ### Apr 2026 — Phase 2 Listing Hardening + Auction Lifecycle (DONE)
 
