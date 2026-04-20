@@ -26,8 +26,8 @@ export default function SalesPage() {
   // SEO
   useEffect(() => {
     setPageMeta({
-      title: "Архив продажби и пазарни статистики — AutoBid.bg",
-      description: "Реални цени на продадени автомобили в AutoBid.bg. Средни цени по марка, месечни тенденции и публичен архив на приключилите сделки.",
+      title: "Архив продажби и пазарни статистики — autobids.bg",
+      description: "Реални цени на продадени автомобили в autobids.bg. Средни цени по марка, месечни тенденции и публичен архив на приключилите сделки.",
       url: window.location.href,
       jsonLd: combineJsonLd(buildBreadcrumbs([
         { name: "Начало", url: window.location.origin },

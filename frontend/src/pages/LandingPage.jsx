@@ -56,7 +56,7 @@ export default function LandingPage() {
                 Открийте <em>изключителни</em><br />автомобили.
               </h1>
               <p className="mt-5 text-base lg:text-lg text-[hsl(var(--ink-muted))] leading-relaxed max-w-xl">
-                AutoBid.bg е платформа за онлайн търгове — всеки автомобил е внимателно подбран, документиран и представен от нашия екип.
+                autobids.bg е платформа за онлайн търгове — всеки автомобил е внимателно подбран, документиран и представен от нашия екип.
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
                 <Link to="/auctions" className="btn btn-primary !px-10" data-testid="hero-cta-browse">

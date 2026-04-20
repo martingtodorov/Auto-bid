@@ -1,4 +1,4 @@
-# AutoBid.bg — PRD (Product Requirements Document)
+# autobids.bg — PRD (Product Requirements Document)
 
 ## Original problem statement
 Създаване на landing страница и пълно функционално приложение за автомобилни аукциони (подобно на Cars and Bids / Bring a Trailer) на български език. Включва: класически/модерен дизайн, реално наддаване с база данни (FastAPI + MongoDB), потребителски профили, админ панел, WebSocket live bidding, Stripe pre-auth (2%), email/SMS нотификации (Resend, Twilio), и маскиране на VIN номера.
@@ -16,7 +16,7 @@
 ### Earlier iterations
 - Класически/модерен дизайн (Manrope + зелен акцент)
 - JWT auth, register/login
-- Admin seed account (admin@autobid.bg / admin123)
+- Admin seed account (admin@autobids.bg / admin123)
 - WebSocket live bidding
 - 2% Buyer's premium с mock Stripe pre-authorization
 - Base64 качване на снимки в SellPage

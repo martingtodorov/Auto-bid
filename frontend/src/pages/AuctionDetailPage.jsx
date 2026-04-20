@@ -128,7 +128,7 @@ export default function AuctionDetailPage() {
     ]);
     const vehicle = buildVehicleJsonLd(a, url);
     setPageMeta({
-      title: `${a.title} — AutoBid.bg`,
+      title: `${a.title} — autobids.bg`,
       description: a.description,
       image: a.images?.[0],
       url,
@@ -701,7 +701,7 @@ function ShareButton({ auctionId, title }) {
   const shareUrl = `${window.location.origin}/api/share/auction/${auctionId}`;
 
   const share = async () => {
-    const data = { title: title || "AutoBid.bg", url: shareUrl };
+    const data = { title: title || "autobids.bg", url: shareUrl };
     try {
       if (navigator.share) {
         await navigator.share(data);

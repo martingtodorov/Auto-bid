@@ -26,9 +26,9 @@ const ensureLink = (rel, href, extra = {}) => {
 };
 
 const DEFAULT = {
-  title: "AutoBid.bg — Онлайн търгове за автомобили в България",
+  title: "autobids.bg — Онлайн търгове за автомобили в България",
   description:
-    "AutoBid.bg — най-добрите автомобили на търг в България. Прозрачно наддаване, редакционен преглед, 60+ снимки и защита на купувача.",
+    "autobids.bg — най-добрите автомобили на търг в България. Прозрачно наддаване, редакционен преглед, 60+ снимки и защита на купувача.",
   image: `${window.location.origin}/og-default.jpg`,
   url: window.location.origin,
 };

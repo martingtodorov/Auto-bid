@@ -17,7 +17,7 @@ import uuid
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
 # Test data
-ADMIN_EMAIL = "admin@autobid.bg"
+ADMIN_EMAIL = "admin@autobids.bg"
 ADMIN_PASSWORD = "admin123"
 ADMIN_ID = "2cf85891-68fd-4c9e-8f79-87e704ba6314"
 SOLD_AUCTION_ID = "c049f61a-7c0b-4cf5-994f-387776bb2403"
@@ -287,7 +287,7 @@ class TestRegressionAuth:
         assert "token" in data, "Response should have token"
         assert "user" in data, "Response should have user"
         
-        print(f"✓ Login works: admin@autobid.bg")
+        print(f"✓ Login works: admin@autobids.bg")
     
     def test_me_endpoint_works(self, admin_client):
         """GET /api/auth/me still works"""

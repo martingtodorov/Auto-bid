@@ -11,8 +11,8 @@ export default function FeesPage() {
   const min = settings?.buyer_fee_min_eur ?? 150;
   const max = settings?.buyer_fee_max_eur ?? 4000;
   useInfoPageSeo({
-    title: "Такси и комисионни — AutoBid.bg",
-    description: `AutoBid.bg: ${pct}% buyer's premium (мин. €${min}, макс. €${max}). Безплатно за продавачите — без скрити такси.`,
+    title: "Такси и комисионни — autobids.bg",
+    description: `autobids.bg: ${pct}% buyer's premium (мин. €${min}, макс. €${max}). Безплатно за продавачите — без скрити такси.`,
     path: "/fees",
     crumb: "Такси",
   });

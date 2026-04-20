@@ -93,7 +93,7 @@ def register_routes():
         if not user or not _verify_password(payload.password, user["password_hash"]):
             raise HTTPException(status_code=401, detail="Грешен имейл или парола")
         if user.get("banned"):
-            raise HTTPException(status_code=403, detail="Акаунтът е блокиран. За въпроси: contact@autobid.bg")
+            raise HTTPException(status_code=403, detail="Акаунтът е блокиран. За въпроси: contact@autobids.bg")
 
         # 2FA challenge flow — issue a short-lived challenge token instead of JWT
         if user.get("totp_enabled"):
@@ -154,7 +154,7 @@ def register_routes():
         if user.get("totp_enabled"):
             raise HTTPException(status_code=400, detail="2FA вече е активирано")
         secret = pyotp.random_base32()
-        uri = pyotp.totp.TOTP(secret).provisioning_uri(name=user["email"], issuer_name="AutoBid.bg")
+        uri = pyotp.totp.TOTP(secret).provisioning_uri(name=user["email"], issuer_name="autobids.bg")
         # Save provisional (not enabled) secret
         await db.users.update_one({"id": user["id"]}, {"$set": {"totp_secret": secret, "totp_enabled": False}})
         # Generate QR PNG as data URL
@@ -217,13 +217,13 @@ def register_routes():
                 "Нулиране на парола",
                 f"""
                 <p style="margin:0 0 16px 0;">Здравейте {user.get('name') or ''},</p>
-                <p style="margin:0 0 16px 0;">Получихме заявка за нулиране на паролата за вашия AutoBid.bg акаунт.</p>
+                <p style="margin:0 0 16px 0;">Получихме заявка за нулиране на паролата за вашия autobids.bg акаунт.</p>
                 <p style="margin:0 0 8px 0;">Вашият код за потвърждение (валиден {OTP_TTL_MIN} минути):</p>
                 <div style="font-family:'Courier New',monospace;font-size:32px;letter-spacing:8px;background:#f6f7f8;padding:18px;text-align:center;border-radius:10px;border:1px solid #e5e7eb;margin:16px 0;"><strong>{code}</strong></div>
                 <p style="color:#6b7280;font-size:13px;margin:24px 0 0 0;">Ако не сте правили такава заявка, можете спокойно да игнорирате това съобщение — паролата ви няма да бъде променена.</p>
                 """,
             )
-            await send_email(email, "AutoBid.bg — Код за нулиране на парола", html)
+            await send_email(email, "autobids.bg — Код за нулиране на парола", html)
         return {"ok": True, "message": f"Ако акаунтът съществува, код е изпратен на {email}. Проверете пощата си."}
 
     @router.post("/reset-password")

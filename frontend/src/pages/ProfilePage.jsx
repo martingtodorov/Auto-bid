@@ -32,10 +32,10 @@ export default function ProfilePage() {
     const { user, stats, rating } = data;
     const count = rating?.count ?? 0;
     const avg = rating?.avg ?? 0;
-    const title = `${user.name} — Профил на ${user.role === "admin" ? "AutoBid екип" : "продавач"} | AutoBid.bg`;
+    const title = `${user.name} — Профил на ${user.role === "admin" ? "autobids екип" : "продавач"} | autobids.bg`;
     const desc = count > 0
-      ? `${user.name} — ${avg.toFixed(1)}/5 (${count} отзива), ${stats.sales_count} продажби в AutoBid.bg. Виж активни обяви и история на сделките.`
-      : `${user.name} — ${stats.sales_count} продажби, ${stats.purchases_count} покупки в AutoBid.bg. Профил и история на сделките.`;
+      ? `${user.name} — ${avg.toFixed(1)}/5 (${count} отзива), ${stats.sales_count} продажби в autobids.bg. Виж активни обяви и история на сделките.`
+      : `${user.name} — ${stats.sales_count} продажби, ${stats.purchases_count} покупки в autobids.bg. Профил и история на сделките.`;
     const url = window.location.href;
     const personLd = {
       "@context": "https://schema.org",
@@ -87,7 +87,7 @@ export default function ProfilePage() {
               {user.name.charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-[260px]">
-              <div className="overline text-[hsl(var(--accent))]">{user.role === "admin" ? "AutoBid.bg екип" : "Член на общността"}</div>
+              <div className="overline text-[hsl(var(--accent))]">{user.role === "admin" ? "autobids.bg екип" : "Член на общността"}</div>
               <h1 className="font-serif text-4xl lg:text-5xl tracking-tight mt-3">{user.name}</h1>
               <div className="mt-3 text-sm text-[hsl(var(--ink-muted))] flex items-center gap-4 flex-wrap">
                 <span className="flex items-center gap-1.5"><Calendar size={13} /> Член от {memberYear}</span>

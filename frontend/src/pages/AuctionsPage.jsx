@@ -29,8 +29,8 @@ export default function AuctionsPage() {
 
   useEffect(() => {
     setPageMeta({
-      title: "Всички търгове — AutoBid.bg",
-      description: "Разгледайте всички активни автомобилни търгове в AutoBid.bg — филтрирайте по марка, година, регион, гориво и цена.",
+      title: "Всички търгове — autobids.bg",
+      description: "Разгледайте всички активни автомобилни търгове в autobids.bg — филтрирайте по марка, година, регион, гориво и цена.",
       url: window.location.href,
       jsonLd: buildBreadcrumbs([
         { name: "Начало", url: window.location.origin + "/" },

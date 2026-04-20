@@ -10,8 +10,8 @@ export default function HowItWorksPage() {
   const settings = useSiteSettings();
   const custom = settings?.how_it_works_content?.trim();
   useInfoPageSeo({
-    title: "Как работи — AutoBid.bg",
-    description: "Как работят онлайн търговете за автомобили в AutoBid.bg — от подаване на обява до финализиране на сделката.",
+    title: "Как работи — autobids.bg",
+    description: "Как работят онлайн търговете за автомобили в autobids.bg — от подаване на обява до финализиране на сделката.",
     path: "/how-it-works",
     crumb: "Как работи",
   });
@@ -35,7 +35,7 @@ function DefaultHowItWorks({ pct }) {
             Наддаване, както<br/><em>трябва да бъде.</em>
           </h1>
           <p className="mt-8 text-lg text-[hsl(var(--ink-muted))] max-w-2xl mx-auto leading-relaxed">
-            AutoBid.bg съчетава редакционния подход на американския Bring a Trailer с българската автомобилна общност.
+            autobids.bg съчетава редакционния подход на американския Bring a Trailer с българската автомобилна общност.
           </p>
         </div>
       </section>

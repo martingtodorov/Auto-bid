@@ -28,7 +28,7 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
 # ---- App ----
-app = FastAPI(title="AutoBid.bg API")
+app = FastAPI(title="autobids.bg API")
 api = APIRouter(prefix="/api")
 
 # ---- Rate limiter (slowapi) ----
@@ -88,7 +88,7 @@ async def get_current_user(request: Request) -> dict:
         if not user:
             raise HTTPException(status_code=401, detail="Потребителят не е намерен")
         if user.get("banned"):
-            raise HTTPException(status_code=403, detail="Акаунтът е блокиран. За въпроси: contact@autobid.bg")
+            raise HTTPException(status_code=403, detail="Акаунтът е блокиран. За въпроси: contact@autobids.bg")
         return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Сесията е изтекла")
@@ -122,8 +122,8 @@ SETTINGS_DEFAULTS = {
     "buyer_fee_pct": 2.0,
     "buyer_fee_min_eur": 150.0,
     "buyer_fee_max_eur": 4000.0,
-    "seo_title": "AutoBid.bg — Автомобилни търгове",
-    "seo_description": "AutoBid.bg е платформа за онлайн търгове на автомобили в България. Всеки автомобил е внимателно подбран, документиран и представен от нашия екип.",
+    "seo_title": "autobids.bg — Автомобилни търгове",
+    "seo_description": "autobids.bg е платформа за онлайн търгове на автомобили в България. Всеки автомобил е внимателно подбран, документиран и представен от нашия екип.",
     "google_site_verification": "",
     "bing_site_verification": "",
     "google_analytics_id": "",
@@ -1170,7 +1170,7 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
             ).to_list(500)
             mins = max(1, int(seconds_left // 60))
             app_url = os.environ.get("APP_URL", "")
-            body = f"AutoBid.bg: Нова наддавка €{int(amount):,} за {a['title'][:50]}. Остават {mins}м. {app_url}/auctions/{auction_id}"
+            body = f"autobids.bg: Нова наддавка €{int(amount):,} за {a['title'][:50]}. Остават {mins}м. {app_url}/auctions/{auction_id}"
             for r in recipients:
                 if r.get("phone"):
                     try:
@@ -2289,7 +2289,7 @@ async def seed():
             **a,
             "id": str(uuid.uuid4()),
             "seller_id": "platform",
-            "seller_name": "AutoBid.bg",
+            "seller_name": "autobids.bg",
             "current_bid_eur": float(current_bid),
             "starting_bid_eur": float(a["starting_bid_eur"]),
             "bid_count": bids_n,
@@ -2308,7 +2308,7 @@ async def seed():
             **a,
             "id": str(uuid.uuid4()),
             "seller_id": "platform",
-            "seller_name": "AutoBid.bg",
+            "seller_name": "autobids.bg",
             "starting_bid_eur": float(sold_price) * 0.7,
             "current_bid_eur": float(sold_price),
             "bid_count": 40,
@@ -2320,7 +2320,7 @@ async def seed():
         await db.auctions.insert_one(doc)
 
 async def seed_admin():
-    email = os.environ.get("ADMIN_EMAIL", "admin@autobid.bg")
+    email = os.environ.get("ADMIN_EMAIL", "admin@autobids.bg")
     password = os.environ.get("ADMIN_PASSWORD", "admin123")
     existing = await db.users.find_one({"email": email})
     if existing is None:

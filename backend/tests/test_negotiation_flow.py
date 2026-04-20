@@ -1,5 +1,5 @@
 """
-Backend tests for AutoBid.bg Negotiation Flow and Related Features
+Backend tests for autobids.bg Negotiation Flow and Related Features
 Tests:
 - Admin settings (buyer_fee_pct, SEO, content fields)
 - Variable bid steps and buyer fee calculation
@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
 # Test credentials
-ADMIN_EMAIL = "admin@autobid.bg"
+ADMIN_EMAIL = "admin@autobids.bg"
 ADMIN_PASSWORD = "admin123"
 
 

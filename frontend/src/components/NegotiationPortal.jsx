@@ -112,7 +112,7 @@ export default function NegotiationPortal({ auctionId, auction }) {
           <div className="overline text-[hsl(var(--accent))]">След-аукционни преговори</div>
           <h3 className="font-serif text-2xl mt-2">Резервът не беше достигнат</h3>
           <p className="mt-2 text-sm text-[hsl(var(--ink-muted))] max-w-xl">
-            Имате 72 часа в общ прозорец (3 × 24 ч), за да договорите директна сделка. AutoBid.bg остава във фонов режим — таксата на купувача се прилага, ако сделката приключи успешно.
+            Имате 72 часа в общ прозорец (3 × 24 ч), за да договорите директна сделка. autobids.bg остава във фонов режим — таксата на купувача се прилага, ако сделката приключи успешно.
           </p>
         </div>
         <div className="text-right">
