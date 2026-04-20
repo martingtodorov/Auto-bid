@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { useAuth, formatError } from "../lib/auth";
 import { api } from "../lib/apiClient";
 import ImageUploader from "../components/ImageUploader";
-import { CAR_MAKES } from "../lib/makes";
 
 const FUELS = ["Бензин", "Дизел", "Хибриден", "Електрически", "Газ/Бензин"];
 const TRANSMISSIONS = ["Автоматична", "Ръчна"];
@@ -40,6 +39,10 @@ const emptyForm = (user) => ({
   images_bumper: [],
   images_interior: [],
   starting_bid_eur: 5000, reserve_eur: "",
+  no_reserve: false,
+  vat_status: "exempt",         // "exempt" | "vat_inclusive"
+  price_net_eur: "",
+  price_gross_eur: "",
   duration_days: 10,
 });
 
@@ -87,6 +90,15 @@ export default function SellPage() {
 
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
 
+  // Load dynamic makes list (admin CMS controlled; falls back gracefully)
+  const [makes, setMakes] = useState([]);
+  useEffect(() => {
+    api.get("/makes").then((r) => setMakes(Array.isArray(r.data) ? r.data : [])).catch(() => setMakes([]));
+  }, []);
+
+  // Preview modal
+  const [showPreview, setShowPreview] = useState(false);
+
   const submit = async (e) => {
     e.preventDefault();
     if (!user) return navigate("/login?next=/sell");
@@ -126,7 +138,11 @@ export default function SellPage() {
         power_hp: Number(form.power_hp),
         engine_cc: Number(form.engine_cc),
         starting_bid_eur: Number(form.starting_bid_eur),
-        reserve_eur: form.reserve_eur ? Number(form.reserve_eur) : null,
+        reserve_eur: (form.no_reserve || !form.reserve_eur) ? null : Number(form.reserve_eur),
+        no_reserve: !!form.no_reserve,
+        vat_status: form.vat_status || "exempt",
+        price_net_eur: form.vat_status === "vat_inclusive" && form.price_net_eur ? Number(form.price_net_eur) : null,
+        price_gross_eur: form.vat_status === "vat_inclusive" && form.price_gross_eur ? Number(form.price_gross_eur) : null,
         duration_days: Number(form.duration_days),
         contact_email: form.contact_email.trim(),
         contact_phone: form.contact_phone.trim(),
@@ -238,10 +254,10 @@ export default function SellPage() {
               <input required value={form.title} onChange={(e) => set("title", e.target.value)} className={inputCls} placeholder="Напр. Audi RS6 Avant Performance — Nardo Grey" data-testid="sell-title" />
             </Field>
             <Field label="Марка">
-              <input required list="car-makes" value={form.make} onChange={(e) => set("make", e.target.value)} className={inputCls} placeholder="напр. BMW" data-testid="sell-make" />
-              <datalist id="car-makes">
-                {CAR_MAKES.map((m) => <option key={m} value={m} />)}
-              </datalist>
+              <select required value={form.make} onChange={(e) => set("make", e.target.value)} className={inputCls} data-testid="sell-make">
+                <option value="" disabled>— изберете марка —</option>
+                {makes.map((m) => <option key={m.id || m.name} value={m.name}>{m.name}</option>)}
+              </select>
             </Field>
             <Field label="Модел">
               <input required value={form.model} onChange={(e) => set("model", e.target.value)} className={inputCls} data-testid="sell-model" />
@@ -288,7 +304,35 @@ export default function SellPage() {
               <input type="number" required value={form.starting_bid_eur} onChange={(e) => set("starting_bid_eur", e.target.value)} className={inputCls} data-testid="sell-starting-bid" />
             </Field>
             <Field label="Резервна цена (EUR, незадължителна)">
-              <input type="number" value={form.reserve_eur} onChange={(e) => set("reserve_eur", e.target.value)} className={inputCls} />
+              <input type="number" value={form.reserve_eur} disabled={form.no_reserve} onChange={(e) => set("reserve_eur", e.target.value)} className={`${inputCls} ${form.no_reserve ? "opacity-50" : ""}`} data-testid="sell-reserve" />
+              <label className="mt-2 flex items-center gap-2 text-xs text-[hsl(var(--ink-muted))] cursor-pointer">
+                <input type="checkbox" checked={!!form.no_reserve} onChange={(e) => set("no_reserve", e.target.checked)} data-testid="sell-no-reserve" />
+                Без резервна цена (no-reserve — продава се на най-високия бид)
+              </label>
+            </Field>
+            <Field label="ДДС статус" span={2}>
+              <div className="rounded-card border border-[hsl(var(--line))] bg-[hsl(var(--surface))] p-4">
+                <div className="flex gap-3 flex-wrap" data-testid="sell-vat-status">
+                  {[{ v: "exempt", l: "Освободена от ДДС" }, { v: "vat_inclusive", l: "Неосвободена от ДДС" }].map((o) => (
+                    <label key={o.v} className={`flex items-center gap-2 px-4 py-2 rounded-card border cursor-pointer text-sm ${form.vat_status === o.v ? "border-[hsl(var(--accent))] bg-white" : "border-[hsl(var(--line))] bg-white"}`} data-testid={`sell-vat-${o.v}`}>
+                      <input type="radio" name="vat_status" checked={form.vat_status === o.v} onChange={() => set("vat_status", o.v)} />
+                      {o.l}
+                    </label>
+                  ))}
+                </div>
+                {form.vat_status === "vat_inclusive" && (
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="sell-vat-prices">
+                    <div>
+                      <label className="overline text-[hsl(var(--ink-muted))] block mb-1.5">Нето цена (EUR, без ДДС)</label>
+                      <input type="number" required value={form.price_net_eur} onChange={(e) => set("price_net_eur", e.target.value)} className={inputCls} data-testid="sell-price-net" />
+                    </div>
+                    <div>
+                      <label className="overline text-[hsl(var(--ink-muted))] block mb-1.5">Бруто цена (EUR, с ДДС)</label>
+                      <input type="number" required value={form.price_gross_eur} onChange={(e) => set("price_gross_eur", e.target.value)} className={inputCls} data-testid="sell-price-gross" />
+                    </div>
+                  </div>
+                )}
+              </div>
             </Field>
             <Field label="VIN номер (незадължителен, видим само на наддавачи)" span={2}>
               <input value={form.vin} onChange={(e) => set("vin", e.target.value.toUpperCase())} className={inputCls} maxLength={17} placeholder="напр. WAUZZZ4H9CN045678" data-testid="sell-vin" />
@@ -379,11 +423,56 @@ export default function SellPage() {
               >
                 {loading ? "Изпращане…" : "Подай за одобрение"}
               </button>
+              <button
+                type="button"
+                onClick={() => setShowPreview(true)}
+                disabled={!form.title || !form.make || !form.model}
+                className="btn btn-secondary w-full sm:w-auto !h-14 sm:!h-auto !text-base sm:!text-sm !px-8 sm:!px-6"
+                data-testid="sell-preview-btn"
+              >
+                Преглед
+              </button>
               <p className="text-xs text-[hsl(var(--ink-muted))]">След одобрение нашият екип ще направи професионален фото отчет.</p>
             </div>
           </form>
         </div>
       </section>
+
+      {showPreview && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-start justify-center p-4 overflow-auto" onClick={() => setShowPreview(false)} data-testid="sell-preview-modal">
+          <div className="bg-white rounded-card max-w-3xl w-full my-10" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6 border-b border-[hsl(var(--line))] flex items-center justify-between">
+              <div>
+                <div className="overline text-[hsl(var(--accent))]">Преглед преди публикуване</div>
+                <h2 className="font-serif text-2xl mt-1">Как ще изглежда вашата обява</h2>
+              </div>
+              <button onClick={() => setShowPreview(false)} className="text-sm text-[hsl(var(--ink-muted))] hover:text-[hsl(var(--ink))]">Затвори ✕</button>
+            </div>
+            <div className="p-6">
+              {(form.images_exterior?.[0] || form.images?.[0]) && (
+                <div className="aspect-[16/10] overflow-hidden rounded-card mb-5 bg-[hsl(var(--surface))]">
+                  <img src={form.images_exterior?.[0] || form.images?.[0]} alt="" className="w-full h-full object-cover" />
+                </div>
+              )}
+              <h3 className="font-serif text-3xl">{form.title || "Без заглавие"}</h3>
+              <div className="mt-2 text-sm text-[hsl(var(--ink-muted))]">
+                {form.year} · {form.make} {form.model} · {form.mileage_km} km · {form.fuel}
+              </div>
+              <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div className="p-3 border border-[hsl(var(--line))] rounded-card"><div className="text-[hsl(var(--ink-muted))]">Начална цена</div><div className="font-serif text-lg">{form.starting_bid_eur} €</div></div>
+                <div className="p-3 border border-[hsl(var(--line))] rounded-card"><div className="text-[hsl(var(--ink-muted))]">Резерв</div><div className="font-serif text-lg">{form.no_reserve ? "Без" : (form.reserve_eur || "—")} {!form.no_reserve && form.reserve_eur ? "€" : ""}</div></div>
+                <div className="p-3 border border-[hsl(var(--line))] rounded-card"><div className="text-[hsl(var(--ink-muted))]">ДДС</div><div className="font-serif text-lg">{form.vat_status === "vat_inclusive" ? "Неосв." : "Освоб."}</div></div>
+                <div className="p-3 border border-[hsl(var(--line))] rounded-card"><div className="text-[hsl(var(--ink-muted))]">Време</div><div className="font-serif text-lg">{form.duration_days} дни</div></div>
+              </div>
+              {form.description && <p className="mt-5 text-sm whitespace-pre-line">{form.description}</p>}
+              <div className="mt-6 flex items-center gap-3">
+                <button onClick={() => setShowPreview(false)} className="btn btn-secondary">Назад за редакция</button>
+                <button onClick={(e) => { setShowPreview(false); submit(e); }} className="btn btn-primary" data-testid="sell-preview-confirm">Потвърди и подай</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

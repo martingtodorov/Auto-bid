@@ -94,7 +94,7 @@
     "Build a React frontend with Tailwind CSS and Shadcn UI primitives. DO NOT USE NEXT.JS APP ROUTER IF ENVIRONMENT IS REACT SPA. Check environment first.",
     "The style must be 'Classic Editorial' (Archetype 4) - similar to Bring a Trailer.",
     "The application content and UI must be entirely in Bulgarian.",
-    "Ensure global layout has a sticky navigation bar with 'AutoBid.bg' text logo, and links: Търгове, Как работи, Продай автомобил, Вход.",
+    "Ensure global layout has a sticky navigation bar with 'autobids.bg' text logo, and links: Търгове, Как работи, Продай автомобил, Вход.",
     "Hero Section: Split layout or large cover image, large 'Playfair Display' heading ('Открийте и наддавайте за изключителни автомобили').",
     "Use grid-cols-1 md:grid-cols-2 lg:grid-cols-3 or bento box grid for the live active auctions.",
     "For the car cards, include specs: година (year), модел (model), пробег (mileage), двигател (engine), локация (location: София, Пловдив, Варна, etc.), and show current bid in both Euros (€) and Leva (лв.).",

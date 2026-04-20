@@ -213,10 +213,16 @@ def _public_auction(a: dict, viewer: Optional[dict] = None) -> dict:
     a["status"] = _auction_status(a)
     reserve = a.get("reserve_eur")
     is_owner_or_admin = viewer and (viewer.get("id") == a.get("seller_id") or viewer.get("role") == "admin")
+    no_reserve = bool(a.get("no_reserve"))
     # Reserve outcome is only revealed to the public once the auction has ended.
     ended_states = ("sold", "ended", "reserve_not_met")
     show_reserve_outcome = a["status"] in ended_states
-    if reserve is not None and reserve > 0:
+    if no_reserve:
+        a["has_reserve"] = False
+        a["no_reserve"] = True
+        a["reserve_met"] = None
+        a.pop("reserve_eur", None)
+    elif reserve is not None and reserve > 0:
         a["has_reserve"] = True
         if show_reserve_outcome or is_owner_or_admin:
             a["reserve_met"] = float(a.get("current_bid_eur", 0)) >= float(reserve)
@@ -276,10 +282,10 @@ async def list_auctions(
     items = await cursor.to_list(limit)
     items = [_public_auction(a, viewer) for a in items]
 
-    # Hide non-public statuses from public listings (pending/rejected/withdrawn/removed)
-    viewer_is_admin = viewer and viewer.get("role") == "admin"
+    # Hide non-public statuses from public listings (pending/rejected/withdrawn/removed/cancelled/paused)
+    viewer_is_admin = viewer and viewer.get("role") in ("admin", "moderator")
     if not viewer_is_admin:
-        items = [a for a in items if a["status"] in ("live", "ended", "sold", "reserve_not_met")]
+        items = [a for a in items if a["status"] in ("live", "ended", "sold", "reserve_not_met") and not a.get("is_archived")]
 
     if status:
         items = [a for a in items if a["status"] == status]
@@ -544,6 +550,30 @@ async def create_auction(request: Request, payload: AuctionCreate, user: dict = 
     ends_at = now + timedelta(days=payload.duration_days)
     doc = payload.model_dump()
     doc["images"] = merged
+
+    # ---- VAT validation ----
+    vat = (doc.get("vat_status") or "").strip() or None
+    if vat and vat not in ("exempt", "vat_inclusive"):
+        raise HTTPException(status_code=400, detail="vat_status трябва да е 'exempt' или 'vat_inclusive'")
+    if vat == "vat_inclusive":
+        if not doc.get("price_net_eur") or not doc.get("price_gross_eur"):
+            raise HTTPException(status_code=400, detail="За 'неосвободена от ДДС' са задължителни нетна и брутна цена")
+        if float(doc["price_gross_eur"]) <= float(doc["price_net_eur"]):
+            raise HTTPException(status_code=400, detail="Брутната цена трябва да е по-голяма от нетната")
+    else:
+        doc["price_net_eur"] = None
+        doc["price_gross_eur"] = None
+
+    # ---- No-reserve flag ----
+    if doc.get("no_reserve"):
+        doc["reserve_eur"] = None
+
+    # ---- Validate make is in the known catalog (if any makes seeded) ----
+    known_make = await db.makes.find_one({"name": doc.get("make", "")}, {"_id": 0, "name": 1})
+    total_makes = await db.makes.count_documents({})
+    if total_makes > 0 and not known_make:
+        raise HTTPException(status_code=400, detail=f"Неизвестна марка '{doc.get('make','')}'. Изберете от списъка или помолете админ да я добави.")
+
     doc.update({
         "id": auction_id,
         "seller_id": user["id"],
@@ -554,9 +584,52 @@ async def create_auction(request: Request, payload: AuctionCreate, user: dict = 
         "ends_at": ends_at.isoformat(),
         "status": "pending",  # awaiting approval
         "featured": False,
+        "is_archived": False,
     })
     await db.auctions.insert_one(doc)
     return {"id": auction_id, "status": "pending"}
+
+
+# ---- Public makes catalog ----
+@api.get("/makes")
+async def list_makes():
+    """Public list of approved car makes (alphabetical)."""
+    items = await db.makes.find({}, {"_id": 0, "id": 1, "name": 1}).sort("name", 1).to_list(1000)
+    return items
+
+
+@api.post("/auctions/{auction_id}/duplicate")
+async def duplicate_auction(auction_id: str, user: dict = Depends(get_current_user)):
+    """Seller duplicates their own (or admin any) auction as a new pending draft."""
+    src = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not src:
+        raise HTTPException(status_code=404, detail="Обявата не е намерена")
+    if src.get("seller_id") != user["id"] and user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Нямате права да дублирате тази обява")
+
+    new_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    clone = {k: v for k, v in src.items() if k not in ("id", "_id", "current_bid_eur", "bid_count",
+                                                        "high_bidder_id", "high_bidder_name", "status",
+                                                        "created_at", "ends_at", "finalized_at",
+                                                        "featured", "is_archived", "reactivated_at",
+                                                        "paused", "paused_at", "premium_captured")}
+    clone.update({
+        "id": new_id,
+        "seller_id": user["id"],
+        "seller_name": user["name"],
+        "title": f"{src.get('title','Обява')} (копие)",
+        "current_bid_eur": src.get("starting_bid_eur", 0),
+        "bid_count": 0,
+        "status": "pending",
+        "featured": False,
+        "is_archived": False,
+        "created_at": now.isoformat(),
+        "ends_at": (now + timedelta(days=10)).isoformat(),
+        "duplicated_from": auction_id,
+    })
+    await db.auctions.insert_one(clone)
+    return {"id": new_id, "status": "pending"}
 
 
 # ---- Mobile.bg import ----
@@ -2344,11 +2417,54 @@ async def on_startup():
     await db.comments.create_index("auction_id")
     await db.watches.create_index([("user_id", 1), ("auction_id", 1)])
     await db.bidding_credits.create_index([("auction_id", 1), ("user_id", 1)])
+    await db.makes.create_index("name", unique=True)
+    await db.audit_log.create_index([("at", -1)])
     await _load_settings_cache()
     await seed_admin()
     await seed()
+    await _seed_makes()
     # Start background scheduler for auction finalization
     asyncio.create_task(_auction_finalizer_loop())
+
+
+async def _seed_makes():
+    """Seed the makes collection with an initial catalog if empty."""
+    count = await db.makes.count_documents({})
+    if count > 0:
+        return
+    initial = [
+        "Abarth", "Acura", "Alfa Romeo", "Alpina", "Alpine", "Aston Martin", "Audi",
+        "Baic", "Bentley", "BMW", "Bugatti", "Buick", "BYD",
+        "Cadillac", "Chevrolet", "Chrysler", "Citroën", "Cupra",
+        "Dacia", "Daewoo", "Daihatsu", "Dodge", "DS Automobiles",
+        "Ferrari", "Fiat", "Fisker", "Ford",
+        "Genesis", "GMC",
+        "Honda", "Hongqi", "Hyundai",
+        "Ineos", "Infiniti", "Isuzu",
+        "Jaguar", "Jeep",
+        "Kia", "Koenigsegg",
+        "Lada", "Lamborghini", "Lancia", "Land Rover", "Lexus", "Lincoln", "Lotus", "Lucid",
+        "Maserati", "Maybach", "Mazda", "McLaren", "Mercedes-Benz", "MG", "MINI", "Mitsubishi", "Morgan",
+        "NIO", "Nissan",
+        "Opel",
+        "Pagani", "Peugeot", "Polestar", "Porsche",
+        "Renault", "Rimac", "Rolls-Royce",
+        "Saab", "Seat", "Skoda", "Smart", "Ssangyong", "Subaru", "Suzuki",
+        "Tesla", "Toyota",
+        "Volkswagen", "Volvo",
+        "Xpeng",
+    ]
+    docs = []
+    for name in initial:
+        docs.append({
+            "id": str(uuid.uuid4()),
+            "name": name,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_by": "system",
+        })
+    if docs:
+        await db.makes.insert_many(docs)
+    logger.info("[seed_makes] seeded %d makes", len(docs))
 
 
 async def _auction_finalizer_loop():

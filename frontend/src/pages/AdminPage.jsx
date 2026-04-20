@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Navigate, Link } from "react-router-dom";
-import { Check, X, Clock, AlertCircle, DollarSign, Archive, Ban, Edit3, Trash2, RotateCcw, Search, List, Users, BarChart3, Trash, RefreshCw, CreditCard, ScrollText } from "lucide-react";
+import { Check, X, Clock, AlertCircle, DollarSign, Archive, Ban, Edit3, Trash2, RotateCcw, Search, List, Users, BarChart3, Trash, RefreshCw, CreditCard, ScrollText, Tag, Pause, Play, Star, StarOff, Copy, XCircle } from "lucide-react";
 import { useAuth, formatError } from "../lib/auth";
 import { api, formatEUR, formatKM } from "../lib/apiClient";
 import AdminEditModal from "../components/AdminEditModal";
@@ -9,6 +9,7 @@ import AdminDashboard from "../components/AdminDashboard";
 import AdminSettingsTab from "../components/AdminSettingsTab";
 import AdminStripeTab from "../components/AdminStripeTab";
 import AdminAuditLogTab from "../components/AdminAuditLogTab";
+import AdminMakesTab from "../components/AdminMakesTab";
 
 const STATUS_LABELS = {
   pending: "Очаква",
@@ -163,12 +164,65 @@ export default function AdminPage() {
     finally { setBusy(null); }
   };
 
+  // ---- Phase 2 lifecycle actions ----
+  const toggleFeatured = async (id) => {
+    setBusy(id);
+    try { await api.post(`/admin/auctions/${id}/featured`); await loadAll(); }
+    catch (e) { setErr(formatError(e)); }
+    finally { setBusy(null); }
+  };
+  const pauseAuction = async (id) => {
+    if (!window.confirm("Паузирай търга? Оставащото време ще се запази до възобновяване.")) return;
+    setBusy(id);
+    try { await api.post(`/admin/auctions/${id}/pause`); await loadAll(); }
+    catch (e) { setErr(formatError(e)); }
+    finally { setBusy(null); }
+  };
+  const unpauseAuction = async (id) => {
+    setBusy(id);
+    try { await api.post(`/admin/auctions/${id}/unpause`); await loadAll(); }
+    catch (e) { setErr(formatError(e)); }
+    finally { setBusy(null); }
+  };
+  const cancelAuction = async (id, title) => {
+    const reason = window.prompt(`Причина за отказване на "${title || id}" (мин. 3 символа):`);
+    if (!reason || reason.trim().length < 3) return;
+    if (!window.confirm("Сигурни ли сте? Обявата ще бъде маркирана като отказана.")) return;
+    setBusy(id);
+    try { await api.post(`/admin/auctions/${id}/cancel`, { reason: reason.trim() }); await loadAll(); }
+    catch (e) { setErr(formatError(e)); }
+    finally { setBusy(null); }
+  };
+  const closeNow = async (id, title) => {
+    if (!window.confirm(`Затваряне на "${title || id}" сега? Обявата ще премине към финализиране в рамките на 60 секунди.`)) return;
+    setBusy(id);
+    try { await api.post(`/admin/auctions/${id}/close-now`); await loadAll(); }
+    catch (e) { setErr(formatError(e)); }
+    finally { setBusy(null); }
+  };
+  const archiveAuction = async (id) => {
+    setBusy(id);
+    try { await api.post(`/admin/auctions/${id}/archive`); await Promise.all([loadAll(), loadSold()]); }
+    catch (e) { setErr(formatError(e)); }
+    finally { setBusy(null); }
+  };
+  const duplicateAuction = async (id) => {
+    setBusy(id);
+    try {
+      const { data } = await api.post(`/auctions/${id}/duplicate`);
+      alert(`Създаден е нов draft: ${data.id}. Ще го намерите в "Очакващи".`);
+      await Promise.all([loadAll(), loadPending()]);
+    } catch (e) { setErr(formatError(e)); }
+    finally { setBusy(null); }
+  };
+
   const tabs = [
     { k: "dashboard", label: "Начало", icon: BarChart3 },
     { k: "pending", label: `Очакващи (${pending.length})`, icon: Clock },
     { k: "all", label: `Всички обяви (${allListings.length})`, icon: List },
     { k: "users", label: "Потребители", icon: Users },
     { k: "sold", label: `Продадени (${sold.length})`, icon: Archive },
+    { k: "makes", label: "Марки", icon: Tag, adminOnly: true },
     { k: "stripe", label: "Stripe", icon: CreditCard, adminOnly: true },
     { k: "audit", label: "Журнал", icon: ScrollText },
     { k: "settings", label: "Настройки", icon: Edit3, adminOnly: true },
@@ -339,6 +393,38 @@ export default function AdminPage() {
                           <RefreshCw size={12} /> Поднови
                         </button>
                       )}
+                      {/* Phase 2 lifecycle */}
+                      <button onClick={() => toggleFeatured(a.id)} disabled={busy === a.id} className={`btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1 ${a.featured ? "!border-amber-500 !text-amber-600" : ""}`} data-testid={`featured-${a.id}`} title={a.featured ? "Премахни от препоръчани" : "Добави към препоръчани"}>
+                        {a.featured ? <><StarOff size={12} /> Без промо</> : <><Star size={12} /> Промо</>}
+                      </button>
+                      {a.status === "live" && !a.paused && (
+                        <button onClick={() => pauseAuction(a.id)} disabled={busy === a.id} className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1" data-testid={`pause-${a.id}`}>
+                          <Pause size={12} /> Пауза
+                        </button>
+                      )}
+                      {a.status === "paused" && (
+                        <button onClick={() => unpauseAuction(a.id)} disabled={busy === a.id} className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1 !border-[hsl(var(--accent))] !text-[hsl(var(--accent))]" data-testid={`unpause-${a.id}`}>
+                          <Play size={12} /> Продължи
+                        </button>
+                      )}
+                      {a.status === "live" && (
+                        <button onClick={() => closeNow(a.id, a.title)} disabled={busy === a.id} className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1" data-testid={`close-now-${a.id}`} title="Затвори веднага">
+                          <XCircle size={12} /> Затвори сега
+                        </button>
+                      )}
+                      {!["sold", "cancelled", "withdrawn"].includes(a.status) && (
+                        <button onClick={() => cancelAuction(a.id, a.title)} disabled={busy === a.id} className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1 !border-[hsl(var(--danger))] !text-[hsl(var(--danger))]" data-testid={`cancel-${a.id}`} title="Отказ с причина">
+                          <Ban size={12} /> Отказ
+                        </button>
+                      )}
+                      <button onClick={() => duplicateAuction(a.id)} disabled={busy === a.id} className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1" data-testid={`duplicate-${a.id}`} title="Дублирай като draft">
+                        <Copy size={12} /> Дублирай
+                      </button>
+                      {(a.status === "sold" || a.status === "ended" || a.status === "cancelled") && !a.is_archived && (
+                        <button onClick={() => archiveAuction(a.id)} disabled={busy === a.id} className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1" data-testid={`archive-${a.id}`} title="Архивирай (скрий от публични списъци)">
+                          <Archive size={12} /> Архив
+                        </button>
+                      )}
                       {a.status === "removed" || a.status === "withdrawn" ? (
                         <button onClick={() => restoreListing(a.id)} disabled={busy === a.id} className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1" data-testid={`restore-${a.id}`}>
                           <RotateCcw size={12} /> Възстанови
@@ -369,6 +455,7 @@ export default function AdminPage() {
         {tab === "settings" && <AdminSettingsTab />}
         {tab === "stripe" && <AdminStripeTab />}
         {tab === "audit" && <AdminAuditLogTab />}
+        {tab === "makes" && <AdminMakesTab />}
 
         {tab === "sold" && (
           <div className="mt-10">

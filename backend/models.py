@@ -49,6 +49,10 @@ class AuctionCreate(BaseModel):
     images_interior: List[str] = []
     starting_bid_eur: float
     reserve_eur: Optional[float] = None
+    no_reserve: Optional[bool] = False
+    vat_status: Optional[str] = None  # "exempt" | "vat_inclusive"
+    price_net_eur: Optional[float] = None
+    price_gross_eur: Optional[float] = None
     duration_days: int = 10
     contact_email: EmailStr
     contact_phone: str = Field(min_length=5, max_length=32)
@@ -77,6 +81,10 @@ class AuctionUpdate(BaseModel):
     description: Optional[str] = None
     starting_bid_eur: Optional[float] = None
     reserve_eur: Optional[float] = None
+    no_reserve: Optional[bool] = None
+    vat_status: Optional[str] = None
+    price_net_eur: Optional[float] = None
+    price_gross_eur: Optional[float] = None
     images: Optional[List[str]] = None
     images_exterior: Optional[List[str]] = None
     images_wheels: Optional[List[str]] = None
@@ -112,13 +120,28 @@ class AdminAuctionUpdate(BaseModel):
     images_interior: Optional[List[str]] = None
     starting_bid_eur: Optional[float] = None
     reserve_eur: Optional[float] = None
+    no_reserve: Optional[bool] = None
+    vat_status: Optional[str] = None
+    price_net_eur: Optional[float] = None
+    price_gross_eur: Optional[float] = None
     current_bid_eur: Optional[float] = None
+    starts_at: Optional[str] = None
     ends_at: Optional[str] = None
     status: Optional[str] = None
     featured: Optional[bool] = None
+    is_archived: Optional[bool] = None
     seller_name: Optional[str] = None
     contact_email: Optional[str] = None
     contact_phone: Optional[str] = None
+
+
+# ---------- Admin actions ----------
+class CancelReason(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class MakeCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
 
 
 # ---------- Counter-offer / Negotiation ----------

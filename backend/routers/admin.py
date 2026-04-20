@@ -20,7 +20,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from deps import db
-from models import SiteSettingsUpdate, AdminUserUpdate, StripeSettingsUpdate
+from models import SiteSettingsUpdate, AdminUserUpdate, StripeSettingsUpdate, MakeCreate, CancelReason
 from helpers import audit_log, mask_secret, stripe_public_config, stripe_runtime_config
 
 router = APIRouter()
@@ -367,3 +367,152 @@ def register_routes():
                 "bidder_references_cleared": hb.modified_count,
             },
         }
+
+    # ============================================================
+    # Phase 2 — Car makes CMS
+    # ============================================================
+    import uuid as _uuid
+
+    @router.get("/admin/makes")
+    async def admin_list_makes(_admin: dict = Depends(_require_admin_or_moderator)):
+        items = await db.makes.find({}, {"_id": 0}).sort("name", 1).to_list(1000)
+        return items
+
+    @router.post("/admin/makes")
+    async def admin_add_make(payload: MakeCreate, request: Request, admin: dict = Depends(_require_admin)):
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Името не може да е празно")
+        existing = await db.makes.find_one({"name": name}, {"_id": 0, "id": 1})
+        if existing:
+            raise HTTPException(status_code=409, detail="Тази марка вече съществува")
+        doc = {
+            "id": str(_uuid.uuid4()),
+            "name": name,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_by": admin["id"],
+        }
+        await db.makes.insert_one(doc)
+        await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
+                        action="make.create", target_type="make", target_id=doc["id"],
+                        details={"name": name}, ip=request.client.host if request.client else "")
+        doc.pop("_id", None)
+        return doc
+
+    @router.delete("/admin/makes/{make_id}")
+    async def admin_delete_make(make_id: str, request: Request, admin: dict = Depends(_require_admin)):
+        make = await db.makes.find_one({"id": make_id}, {"_id": 0})
+        if not make:
+            raise HTTPException(status_code=404, detail="Марката не е намерена")
+        in_use = await db.auctions.count_documents({"make": make["name"]})
+        if in_use > 0:
+            raise HTTPException(status_code=400, detail=f"Марката се използва в {in_use} обяви и не може да бъде изтрита.")
+        await db.makes.delete_one({"id": make_id})
+        await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
+                        action="make.delete", target_type="make", target_id=make_id,
+                        details={"name": make["name"]}, ip=request.client.host if request.client else "")
+        return {"ok": True}
+
+    # ============================================================
+    # Phase 2 — Auction lifecycle (pause / cancel / close-now / archive / featured)
+    # ============================================================
+    @router.post("/admin/auctions/{auction_id}/pause")
+    async def admin_pause(auction_id: str, request: Request, admin: dict = Depends(_require_admin)):
+        a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+        if not a:
+            raise HTTPException(status_code=404, detail="Обявата не е намерена")
+        if a.get("status") != "live":
+            raise HTTPException(status_code=400, detail="Само активни търгове могат да бъдат паузирани")
+        if a.get("paused"):
+            raise HTTPException(status_code=400, detail="Търгът вече е паузиран")
+        now = datetime.now(timezone.utc)
+        ends_at = datetime.fromisoformat(a["ends_at"])
+        seconds_remaining = max(0, int((ends_at - now).total_seconds()))
+        await db.auctions.update_one({"id": auction_id}, {
+            "$set": {"paused": True, "paused_at": now.isoformat(), "paused_seconds_remaining": seconds_remaining, "status": "paused"},
+        })
+        await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
+                        action="auction.pause", target_type="auction", target_id=auction_id,
+                        details={"seconds_remaining": seconds_remaining}, ip=request.client.host if request.client else "")
+        return {"ok": True, "status": "paused", "seconds_remaining": seconds_remaining}
+
+    @router.post("/admin/auctions/{auction_id}/unpause")
+    async def admin_unpause(auction_id: str, request: Request, admin: dict = Depends(_require_admin)):
+        a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+        if not a:
+            raise HTTPException(status_code=404, detail="Обявата не е намерена")
+        if not a.get("paused"):
+            raise HTTPException(status_code=400, detail="Търгът не е паузиран")
+        now = datetime.now(timezone.utc)
+        secs = int(a.get("paused_seconds_remaining") or 0)
+        new_ends = (now + timedelta(seconds=max(secs, 300))).isoformat()
+        await db.auctions.update_one({"id": auction_id}, {
+            "$set": {"paused": False, "status": "live", "ends_at": new_ends},
+            "$unset": {"paused_at": "", "paused_seconds_remaining": ""},
+        })
+        await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
+                        action="auction.unpause", target_type="auction", target_id=auction_id,
+                        details={"new_ends_at": new_ends}, ip=request.client.host if request.client else "")
+        return {"ok": True, "status": "live", "ends_at": new_ends}
+
+    @router.post("/admin/auctions/{auction_id}/cancel")
+    async def admin_cancel(auction_id: str, payload: CancelReason, request: Request, admin: dict = Depends(_require_admin)):
+        a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+        if not a:
+            raise HTTPException(status_code=404, detail="Обявата не е намерена")
+        if a.get("status") in ("sold", "cancelled", "withdrawn"):
+            raise HTTPException(status_code=400, detail=f"Обява със статус '{a.get('status')}' не може да бъде отказана")
+        now = datetime.now(timezone.utc).isoformat()
+        await db.auctions.update_one({"id": auction_id}, {
+            "$set": {"status": "cancelled", "cancelled_at": now, "cancel_reason": payload.reason.strip(), "cancelled_by": admin["id"]},
+        })
+        await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
+                        action="auction.cancel", target_type="auction", target_id=auction_id,
+                        details={"reason": payload.reason.strip()[:200]}, ip=request.client.host if request.client else "")
+        return {"ok": True, "status": "cancelled"}
+
+    @router.post("/admin/auctions/{auction_id}/close-now")
+    async def admin_close_now(auction_id: str, request: Request, admin: dict = Depends(_require_admin)):
+        """Force-end a live auction immediately. Sets ends_at=now; finalizer loop will handle."""
+        a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+        if not a:
+            raise HTTPException(status_code=404, detail="Обявата не е намерена")
+        if a.get("status") != "live":
+            raise HTTPException(status_code=400, detail="Само активни търгове могат да бъдат затваряни ръчно")
+        now = datetime.now(timezone.utc).isoformat()
+        await db.auctions.update_one({"id": auction_id}, {"$set": {"ends_at": now, "force_closed_at": now, "force_closed_by": admin["id"]}})
+        await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
+                        action="auction.force_close", target_type="auction", target_id=auction_id,
+                        details={}, ip=request.client.host if request.client else "")
+        return {"ok": True, "ends_at": now, "note": "Финализирането ще се случи до 60 секунди"}
+
+    @router.post("/admin/auctions/{auction_id}/archive")
+    async def admin_archive(auction_id: str, request: Request, admin: dict = Depends(_require_admin)):
+        a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+        if not a:
+            raise HTTPException(status_code=404, detail="Обявата не е намерена")
+        await db.auctions.update_one({"id": auction_id}, {"$set": {"is_archived": True, "archived_at": datetime.now(timezone.utc).isoformat()}})
+        await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
+                        action="auction.archive", target_type="auction", target_id=auction_id,
+                        details={"previous_status": a.get("status")}, ip=request.client.host if request.client else "")
+        return {"ok": True, "is_archived": True}
+
+    @router.post("/admin/auctions/{auction_id}/unarchive")
+    async def admin_unarchive(auction_id: str, request: Request, admin: dict = Depends(_require_admin)):
+        await db.auctions.update_one({"id": auction_id}, {"$set": {"is_archived": False}, "$unset": {"archived_at": ""}})
+        await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
+                        action="auction.unarchive", target_type="auction", target_id=auction_id, details={})
+        return {"ok": True, "is_archived": False}
+
+    @router.post("/admin/auctions/{auction_id}/featured")
+    async def admin_toggle_featured(auction_id: str, request: Request, admin: dict = Depends(_require_admin)):
+        a = await db.auctions.find_one({"id": auction_id}, {"_id": 0, "featured": 1})
+        if not a:
+            raise HTTPException(status_code=404, detail="Обявата не е намерена")
+        new_val = not bool(a.get("featured"))
+        await db.auctions.update_one({"id": auction_id}, {"$set": {"featured": new_val}})
+        await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
+                        action="auction.featured_toggle", target_type="auction", target_id=auction_id,
+                        details={"featured": new_val}, ip=request.client.host if request.client else "")
+        return {"ok": True, "featured": new_val}
+
