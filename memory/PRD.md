@@ -80,15 +80,33 @@
 - comments, watches, vin_requests, saved_searches
 
 ## Backlog / Future tasks
-- **P1** Реална Stripe интеграция (CMS и webhook готови — остава PaymentIntent preauth/capture на buyer fee)
-- **P2** „Buy Now" функционалност (фиксирана цена)
-- **P2** „Верифициран продавач" бадж (автоматичен при 5+ отзива, средна ≥4.5)
-- **P2** Phase 2 listing hardening — predefined makes + admin CMS, VAT fields, edit reserve pre-launch, preview, duplicate
-- **P2** Phase 2 auction lifecycle — pause/cancel/manual extend/close/featured toggle
-- **P2** Довършване на auctions refactor (основни /auctions + lifecycle admin routes → отделни модули)
-- **P3** CAPTCHA при регистрация (hCaptcha/Cloudflare Turnstile)
-- **P3** WAF layer (SQLi/XSS pattern matching)
-- **P3** Email templates визуален upgrade
+- **P1** Реална Stripe интеграция (CMS + webhook готови — остава PaymentIntent preauth/capture на buyer fee)
+- **Phase 3** Bid & User controls — full bid history, invalidate bid (с reason), block bidder (per-auction + platform-wide), anti-sniping indicator, suspicious flags, suspend/verify seller, internal notes per user, VIN request log, resend verification, IP/device audit
+- **Phase 4** Payments + Comms + Moderation + Analytics — buyer fee статус/mark paid/waive/refund, Stripe event log, export transactions, canned emails, manual messages, notification log, internal auction notes, views/bidders/followers counters, sell-through rate, VIN→bid conversion
+- **Phase 5** Homepage OG image CMS upload, auto-generated meta за auction pages (title=auction title, desc=description, OG=car photo), Romanian i18n (ro.domain), maintenance mode, webhook/cron monitor, admin role management, backup access
+- **Security audit** — vulnerability scan (SQL/NoSQL inj, XSS, CSRF, rate-limit gaps, Secret exposure) + GDPR compliance (data retention, right-to-erasure, consent tracking, cookie banner, DPA)
+
+### Apr 2026 — Phase 2 Listing Hardening + Auction Lifecycle (DONE)
+
+**Listing hardening:**
+- **Predefined makes**: нова `makes` колекция (79 auto-seed стойности при startup), `GET /api/makes` публичен. SellPage замени свободен input със `<select>` от DB. Auto-reject на create с непозната марка.
+- **Admin Makes CMS**: нов таб „Марки" (само super-admin може да добавя/трие). Азбучно групиране (A, B, C…). DELETE блокира при in-use (count > 0).
+- **VAT fields**: `vat_status` = "exempt" | "vat_inclusive" + `price_net_eur` + `price_gross_eur`. Backend валидация (gross > net; задължителни при vat_inclusive). UI radio toggle + conditional inputs.
+- **No-reserve flag**: `no_reserve: bool` — премахва reserve_eur, скрива „резерв не е достигнат" логика. UI checkbox в SellPage.
+- **Preview before publish**: client-side modal `data-testid=sell-preview-modal` рендерира listing-а преди submit. „Потвърди и подай" подава след визуална проверка.
+- **Duplicate as draft**: `POST /api/auctions/{id}/duplicate` — клонира като `pending` с `" (копие)"` суфикс, нулирани бидове/дати. Бутон в admin all-listings + достъпен за seller на собствени обяви.
+
+**Auction lifecycle (всички admin-only с audit log):**
+- `POST /admin/auctions/{id}/pause` + `/unpause` — запазва `paused_seconds_remaining` и го добавя при unpause
+- `POST /admin/auctions/{id}/cancel` {reason} — mandatory reason (≥3 chars), status=cancelled
+- `POST /admin/auctions/{id}/close-now` — force end; finalizer приключва в ≤60s
+- `POST /admin/auctions/{id}/archive` + `/unarchive` — `is_archived` toggle, скрива от публични списъци
+- `POST /admin/auctions/{id}/featured` — toggles `featured` bool
+- Всички нови бутони в admin all-listings tab
+
+**Public filter:** `/api/auctions` вече изключва `is_archived=true` и non-public статуси (pending/cancelled/paused/…) за non-admin viewer.
+
+Testing: 29/30 Phase 2 backend + 32/35 Phase 1 regression + 100% frontend = **~97%** ✅ (`iteration_6.json`)
 
 ### Apr 2026 — Phase 1 Security & Admin (DONE)
 Потребителят поиска 70+ функции в 12 категории; разделихме на фази. Phase 1 фокусира се върху security + admin foundation:
