@@ -73,7 +73,7 @@ _audit_logger = _logging.getLogger("audit")
 
 async def audit_log(db, *, actor_id: str, actor_email: str = "", actor_role: str = "",
                     action: str, target_type: str = "", target_id: str = "",
-                    details: dict = None, ip: str = ""):
+                    details: dict = None, ip: str = "", user_agent: str = ""):
     """Append an immutable audit entry. Never raises — audit failures must not break flows."""
     try:
         doc = {
@@ -87,6 +87,7 @@ async def audit_log(db, *, actor_id: str, actor_email: str = "", actor_role: str
             "target_id": target_id or "",
             "details": details or {},
             "ip": ip or "",
+            "user_agent": user_agent or "",
         }
         await db.audit_log.insert_one(doc)
     except Exception as e:

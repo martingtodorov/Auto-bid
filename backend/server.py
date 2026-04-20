@@ -15,6 +15,7 @@ from typing import List, Optional
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Query, WebSocket, WebSocketDisconnect, Response
 from fastapi.responses import PlainTextResponse
 from starlette.middleware.cors import CORSMiddleware
+import re
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
 
@@ -2659,6 +2660,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ---- WAF lite: block obvious SQLi/XSS patterns in query string ----
+_WAF_PATTERNS = re.compile(
+    r"(\bunion\s+select\b|\bor\s+1\s*=\s*1\b|';\s*drop\s+table|<script\b|javascript:|onerror\s*=|onload\s*=|%3Cscript)",
+    re.IGNORECASE,
+)
+
+
+@app.middleware("http")
+async def waf_middleware(request: Request, call_next):
+    from urllib.parse import unquote
+    qs = request.url.query or ""
+    # Decode percent-encoded chars so `%27%20OR%201%3D1` matches patterns
+    decoded = unquote(qs)
+    if decoded and _WAF_PATTERNS.search(decoded):
+        logger.warning("[WAF] blocked request path=%s ip=%s qs=%s", request.url.path, request.client.host if request.client else "?", decoded[:120])
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"detail": "Заявката е отхвърлена от защитата."}, status_code=400)
+    return await call_next(request)
 
 
 # ---- Maintenance mode middleware ----

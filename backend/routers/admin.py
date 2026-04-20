@@ -722,3 +722,102 @@ def register_routes():
         items = await db.stripe_events.find({}, {"_id": 0}).sort("received_at", -1).limit(limit).to_list(limit)
         return {"items": items, "total": await db.stripe_events.count_documents({})}
 
+
+
+    # ============================================================
+    # Phase 4 — Notification log + CSV export
+    # ============================================================
+    @router.get("/admin/notifications")
+    async def admin_notifications(
+        limit: int = 100, offset: int = 0, status: Optional[str] = None,
+        _admin: dict = Depends(_require_admin_or_moderator),
+    ):
+        limit = max(1, min(500, int(limit)))
+        offset = max(0, int(offset))
+        q: dict = {}
+        if status:
+            q["status"] = status
+        total = await db.notification_log.count_documents(q)
+        items = await db.notification_log.find(q, {"_id": 0}).sort("at", -1).skip(offset).limit(limit).to_list(limit)
+        return {"items": items, "total": total, "offset": offset, "limit": limit}
+
+    @router.get("/admin/transactions/export.csv")
+    async def admin_export_transactions(_admin: dict = Depends(_require_admin)):
+        """Export all sold auctions + buyer-fee info as CSV."""
+        from fastapi.responses import StreamingResponse
+        import io as _io, csv as _csv
+        cur = db.auctions.find({"status": "sold"}, {"_id": 0}).sort("finalized_at", -1)
+        rows = await cur.to_list(5000)
+        buf = _io.StringIO()
+        buf.write("\ufeff")
+        w = _csv.writer(buf)
+        w.writerow(["auction_id", "title", "make", "model", "year", "sold_price_eur", "buyer_fee_status", "premium_amount_eur", "seller_id", "seller_name", "high_bidder_id", "high_bidder_name", "finalized_at"])
+        for a in rows:
+            w.writerow([
+                a.get("id", ""), a.get("title", ""), a.get("make", ""), a.get("model", ""),
+                a.get("year", ""), a.get("current_bid_eur", ""),
+                a.get("buyer_fee_status", "unpaid"), a.get("premium_amount_eur", ""),
+                a.get("seller_id", ""), a.get("seller_name", ""),
+                a.get("high_bidder_id", "") or "", a.get("high_bidder_name", "") or "",
+                a.get("finalized_at", ""),
+            ])
+        buf.seek(0)
+        return StreamingResponse(
+            iter([buf.getvalue().encode("utf-8")]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=transactions_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"},
+        )
+
+    # ============================================================
+    # Phase 4 — Canned email templates (stored inside site_settings)
+    # ============================================================
+    from fastapi import Body
+
+    @router.get("/admin/email-templates")
+    async def admin_get_templates(_admin: dict = Depends(_require_admin_or_moderator)):
+        s = _settings_fn()
+        return s.get("email_templates") or {}
+
+    @router.put("/admin/email-templates")
+    async def admin_put_templates(request: Request, payload: dict = Body(...), admin: dict = Depends(_require_admin)):
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=400, detail="Очаква се обект с ключ/стойност")
+        cleaned: dict = {}
+        for k, v in list(payload.items())[:20]:
+            if not isinstance(v, dict):
+                continue
+            subject = str(v.get("subject", ""))[:200]
+            body = str(v.get("body", ""))[:20000]
+            cleaned[str(k)[:40]] = {"subject": subject, "body": body}
+        await db.site_settings.update_one(
+            {"id": "global"},
+            {"$set": {"email_templates": cleaned, "updated_at": datetime.now(timezone.utc).isoformat()},
+             "$setOnInsert": {"id": "global"}},
+            upsert=True,
+        )
+        await _load_settings_cache()
+        await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
+                        action="email_templates.update", target_type="site_settings", target_id="global",
+                        details={"count": len(cleaned)}, ip=request.client.host if request.client else "",
+                        user_agent=request.headers.get("user-agent", ""))
+        return {"ok": True, "templates": cleaned}
+
+    @router.post("/admin/send-email")
+    async def admin_send_manual_email(
+        request: Request,
+        payload: dict = Body(...),
+        admin: dict = Depends(_require_admin),
+    ):
+        to = (payload.get("to") or "").strip().lower()
+        subject = (payload.get("subject") or "").strip()[:200]
+        body = payload.get("body") or ""
+        if "@" not in to or not subject or not body:
+            raise HTTPException(status_code=400, detail="Необходими са валиден email, тема и съдържание.")
+        from emails import send_email, _shell
+        ok = await send_email(to, subject, _shell(subject, f"<div>{body}</div>"))
+        await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
+                        action="email.manual", target_type="email", target_id=to,
+                        details={"subject": subject[:120], "ok": ok},
+                        ip=request.client.host if request.client else "",
+                        user_agent=request.headers.get("user-agent", ""))
+        return {"ok": ok}

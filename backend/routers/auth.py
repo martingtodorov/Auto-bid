@@ -69,6 +69,8 @@ def register_routes():
     @router.post("/register")
     @_limiter.limit("5/minute")
     async def register(request: Request, payload: UserRegister):
+        if not payload.terms_accepted:
+            raise HTTPException(status_code=400, detail="Моля, приемете Общите условия.")
         existing = await db.users.find_one({"email": payload.email.lower()})
         if existing:
             raise HTTPException(status_code=409, detail="Имейлът вече е регистриран")
@@ -80,6 +82,7 @@ def register_routes():
             "password_hash": _hash_password(payload.password),
             "role": "user",
             "created_at": datetime.now(timezone.utc).isoformat(),
+            "terms_accepted_at": datetime.now(timezone.utc).isoformat(),
         }
         await db.users.insert_one(doc)
         token = _create_token(user_id, doc["email"])

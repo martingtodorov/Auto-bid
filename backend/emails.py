@@ -15,18 +15,41 @@ if RESEND_API_KEY:
 
 
 async def send_email(to: str, subject: str, html: str) -> bool:
-    """Send an email via Resend. Returns True on success, False on failure or missing key."""
+    """Send an email via Resend. Logs to notification_log. Returns True on success."""
+    from datetime import datetime, timezone
+    import uuid as _uuid
+    try:
+        from deps import db
+    except Exception:
+        db = None
+    ok = False
+    error = None
     if not RESEND_API_KEY:
         logger.info("[EMAIL:mock] to=%s subject=%s", to, subject)
-        return False
-    try:
-        params = {"from": SENDER_EMAIL, "to": [to], "subject": subject, "html": html}
-        result = await asyncio.to_thread(resend.Emails.send, params)
-        logger.info("[EMAIL:sent] id=%s to=%s", result.get("id"), to)
-        return True
-    except Exception as e:
-        logger.error("[EMAIL:error] to=%s err=%s", to, e)
-        return False
+    else:
+        try:
+            params = {"from": SENDER_EMAIL, "to": [to], "subject": subject, "html": html}
+            result = await asyncio.to_thread(resend.Emails.send, params)
+            logger.info("[EMAIL:sent] id=%s to=%s", result.get("id"), to)
+            ok = True
+        except Exception as e:
+            logger.error("[EMAIL:error] %s", e)
+            error = str(e)[:300]
+    # Notification log (non-blocking)
+    if db is not None:
+        try:
+            await db.notification_log.insert_one({
+                "id": str(_uuid.uuid4()),
+                "channel": "email",
+                "to": to,
+                "subject": subject,
+                "status": "sent" if ok else ("mock" if not RESEND_API_KEY else "error"),
+                "error": error,
+                "at": datetime.now(timezone.utc).isoformat(),
+            })
+        except Exception as e:
+            logger.error("[notification_log insert failed] %s", e)
+    return ok
 
 
 def _shell(title: str, body_html: str) -> str:

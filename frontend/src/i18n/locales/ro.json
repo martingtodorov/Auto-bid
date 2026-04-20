@@ -1,0 +1,77 @@
+{
+  "nav": {
+    "home": "Acasă",
+    "auctions": "Licitații",
+    "sold": "Vândute",
+    "sell": "Vinde-ți mașina",
+    "about": "Despre noi",
+    "login": "Autentificare",
+    "register": "Înregistrare",
+    "logout": "Ieșire",
+    "admin": "Admin",
+    "profile": "Profil",
+    "settings": "Setări",
+    "watchlist": "Favorite"
+  },
+  "hero": {
+    "discover": "Descoperă",
+    "exceptional": "mașini",
+    "cars": "excepționale.",
+    "subtitle": "Fiecare mașină — selectată manual, documentată în detaliu și prezentată de un curator. Licitează, urmărește și cumpără cu încredere.",
+    "browse": "Vezi licitațiile active",
+    "sell_cta": "Vinde cu noi"
+  },
+  "forms": {
+    "email": "Email",
+    "password": "Parolă",
+    "name": "Nume",
+    "phone": "Telefon",
+    "forgot_password": "Ai uitat parola?",
+    "submit": "Trimite",
+    "cancel": "Anulează",
+    "save": "Salvează",
+    "back": "Înapoi",
+    "required": "Câmp obligatoriu",
+    "confirm": "Confirmă",
+    "loading": "Se încarcă…",
+    "sending": "Se trimite…"
+  },
+  "auth": {
+    "welcome_back": "Bine ai revenit",
+    "login_subtitle": "Autentifică-te pentru a licita, comenta și urmări licitațiile.",
+    "no_account": "Nu ai cont?",
+    "have_account": "Ai deja cont?",
+    "agree_terms_prefix": "Sunt de acord cu",
+    "terms_link": "Termenii și condițiile",
+    "and": "și",
+    "privacy_link": "Politica de confidențialitate",
+    "create_account": "Creează cont",
+    "two_fa_title": "Autentificare în doi pași",
+    "two_fa_enter_code": "Introdu codul de 6 cifre din aplicația authenticator.",
+    "two_fa_verify": "Verifică"
+  },
+  "auction": {
+    "current_bid": "Ofertă curentă",
+    "bids_count": "oferte",
+    "time_left": "Rămase",
+    "reserve_met": "Rezerva atinsă",
+    "no_reserve": "Fără rezervă",
+    "place_bid": "Licitează",
+    "watchlist_add": "Adaugă la favorite",
+    "watchlist_remove": "Elimină de la favorite",
+    "views": "vizualizări"
+  },
+  "footer": {
+    "faq": "Întrebări frecvente",
+    "terms": "Termeni și condiții",
+    "privacy": "Confidențialitate",
+    "fees": "Taxe",
+    "how_it_works": "Cum funcționează",
+    "contact": "Contact",
+    "copyright": "Toate drepturile rezervate."
+  },
+  "language": {
+    "bg": "Български",
+    "ro": "Română"
+  }
+}

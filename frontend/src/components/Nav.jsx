@@ -1,20 +1,23 @@
 import React, { useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Menu, X, User, Search } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../lib/auth";
-
-const links = [
-  { to: "/auctions", label: "Търгове" },
-  { to: "/how-it-works", label: "Как работи" },
-  { to: "/sales", label: "Продадени" },
-  { to: "/sell", label: "Продай автомобил" },
-];
+import LanguageSwitcher from "./LanguageSwitcher";
 
 export default function Nav() {
+  const { t } = useTranslation();
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const navigate = useNavigate();
+
+  const links = [
+    { to: "/auctions", label: t("nav.auctions") },
+    { to: "/how-it-works", label: t("footer.how_it_works") },
+    { to: "/sales", label: t("nav.sold") },
+    { to: "/sell", label: t("nav.sell") },
+  ];
 
   const doSearch = (e) => {
     e.preventDefault();
