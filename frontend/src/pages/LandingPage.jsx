@@ -66,8 +66,8 @@ export default function LandingPage() {
                   dangerouslySetInnerHTML={{ __html: cmsHeadline.replace(/\n/g, "<br />") }}
                 />
               ) : (
-                <h1 className="hero-headline text-5xl sm:text-6xl lg:text-[60px] lg:leading-[1.05] mt-0" data-testid="hero-headline-i18n">
-                  {t("hero.discover")} <em>{t("hero.exceptional")}</em><br />{t("hero.cars")}
+                <h1 className="hero-headline text-5xl sm:text-6xl lg:text-[60px] lg:leading-[1.05] mt-0 text-balance" data-testid="hero-headline-i18n">
+                  {t("hero.discover")} <em>{t("hero.exceptional")}</em> {t("hero.cars")}
                 </h1>
               )}
               <p className="mt-5 text-base lg:text-lg text-[hsl(var(--ink-muted))] leading-relaxed max-w-xl" data-testid="hero-subtitle">
