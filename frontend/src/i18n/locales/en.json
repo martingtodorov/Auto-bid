@@ -1,4 +1,7 @@
 {
+  "common": {
+    "min_short": "min."
+  },
   "nav": {
     "home": "Home",
     "auctions": "Auctions",
@@ -243,6 +246,7 @@
       "colour": "Colour",
       "region": "Region",
       "city": "City",
+      "country": "Country",
       "starting_bid_eur": "Starting bid (EUR)",
       "reserve_eur": "Reserve price (EUR, optional)",
       "no_reserve_label": "No reserve (sells to the highest bidder)",

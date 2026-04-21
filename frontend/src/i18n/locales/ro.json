@@ -1,4 +1,7 @@
 {
+  "common": {
+    "min_short": "min."
+  },
   "nav": {
     "home": "Acasă",
     "auctions": "Licitații",
@@ -243,6 +246,7 @@
       "colour": "Culoare",
       "region": "Regiune",
       "city": "Oraș",
+      "country": "Țară",
       "starting_bid_eur": "Preț de pornire (EUR)",
       "reserve_eur": "Preț de rezervă (EUR, opțional)",
       "no_reserve_label": "Fără rezervă (no-reserve — se vinde la cea mai mare ofertă)",

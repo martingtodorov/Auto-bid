@@ -17,6 +17,51 @@ const REGIONS = [
   "Ловеч", "Разград", "Силистра", "Смолян", "Търговище",
 ];
 
+// Countries stored (and displayed) in English — sorted alphabetically with
+// Bulgaria pinned on top as the default.
+const COUNTRIES = [
+  "Bulgaria",
+  "Romania",
+  "Albania",
+  "Austria",
+  "Belgium",
+  "Bosnia and Herzegovina",
+  "Croatia",
+  "Cyprus",
+  "Czech Republic",
+  "Denmark",
+  "Estonia",
+  "Finland",
+  "France",
+  "Germany",
+  "Greece",
+  "Hungary",
+  "Ireland",
+  "Italy",
+  "Kosovo",
+  "Latvia",
+  "Lithuania",
+  "Luxembourg",
+  "Malta",
+  "Moldova",
+  "Montenegro",
+  "Netherlands",
+  "North Macedonia",
+  "Norway",
+  "Poland",
+  "Portugal",
+  "Serbia",
+  "Slovakia",
+  "Slovenia",
+  "Spain",
+  "Sweden",
+  "Switzerland",
+  "Turkey",
+  "Ukraine",
+  "United Kingdom",
+  "Other",
+];
+
 const inputCls = "w-full border border-[hsl(var(--line))] h-11 px-3 text-sm";
 
 function Field({ label, children, span = 1 }) {
@@ -32,7 +77,7 @@ const emptyForm = (user) => ({
   title: "", make: "", model: "", year: 2020, mileage_km: 0,
   fuel: "Бензин", transmission: "Автоматична", body_type: "Седан",
   power_hp: 150, engine_cc: 2000, color: "",
-  region: "София (град)", city: "София", description: "",
+  region: "София (град)", city: "София", country: "Bulgaria", description: "",
   vin: "",
   contact_email: user?.email || "",
   contact_phone: "",
@@ -300,6 +345,11 @@ export default function SellPage() {
             </Field>
             <Field label={t("sell.form.city")}>
               <input value={form.city} onChange={(e) => set("city", e.target.value)} className={inputCls} />
+            </Field>
+            <Field label={t("sell.form.country")}>
+              <select value={form.country} onChange={(e) => set("country", e.target.value)} className={inputCls} data-testid="sell-country">
+                {COUNTRIES.map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
             </Field>
             <Field label={t("sell.form.starting_bid_eur")}>
               <input type="number" required value={form.starting_bid_eur} onChange={(e) => set("starting_bid_eur", e.target.value)} className={inputCls} data-testid="sell-starting-bid" />

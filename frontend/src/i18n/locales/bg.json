@@ -1,4 +1,7 @@
 {
+  "common": {
+    "min_short": "мин."
+  },
   "nav": {
     "home": "Начало",
     "auctions": "Търгове",
@@ -243,6 +246,7 @@
       "colour": "Цвят",
       "region": "Регион",
       "city": "Град",
+      "country": "Държава",
       "starting_bid_eur": "Начална цена (EUR)",
       "reserve_eur": "Резервна цена (EUR, незадължителна)",
       "no_reserve_label": "Без резервна цена (no-reserve — продава се на най-високия бид)",

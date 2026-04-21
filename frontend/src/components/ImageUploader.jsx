@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { Upload, X, Image as ImageIcon, AlertCircle, Check, Move, GripVertical, ArrowRightLeft } from "lucide-react";
 
 const MAX_SIZE = 2 * 1024 * 1024;
@@ -40,6 +41,7 @@ export default function ImageUploader({
   onMoveBetween,
   availableCategories = [],
 }) {
+  const { t } = useTranslation();
   const ref = useRef(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
   const [dragOverGrid, setDragOverGrid] = useState(false);
@@ -259,7 +261,7 @@ export default function ImageUploader({
           </div>
           <div className={`flex items-center gap-1.5 text-xs font-mono ${meetsMin ? "text-[hsl(var(--accent))]" : "text-[hsl(var(--ink-muted))]"}`}>
             {meetsMin ? <Check size={12} /> : <AlertCircle size={12} />}
-            {images.length}/{max} {min > 0 && <span>· мин. {min}</span>}
+            {images.length}/{max} {min > 0 && <span>· {t("common.min_short")} {min}</span>}
           </div>
         </div>
       )}

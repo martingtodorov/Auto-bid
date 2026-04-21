@@ -58,7 +58,7 @@ export default function AuctionCard({ auction, compact = false }) {
             <span className="flex items-center gap-1.5"><Calendar size={13} />{auction.year}</span>
             <span className="flex items-center gap-1.5"><Gauge size={13} />{formatKM(auction.mileage_km)}</span>
             <span className="flex items-center gap-1.5"><Fuel size={13} />{translateEnum(auction.fuel, "fuel", lang)}</span>
-            <span className="flex items-center gap-1.5"><MapPin size={13} />{translateEnum(auction.city, "city", lang)}</span>
+            <span className="flex items-center gap-1.5"><MapPin size={13} />{translateEnum(auction.city, "city", lang)}{auction.country ? `, ${auction.country}` : ""}</span>
           </div>
         )}
 

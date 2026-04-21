@@ -43,6 +43,7 @@ class AuctionCreate(BaseModel):
     color: str
     region: str
     city: str
+    country: Optional[str] = "Bulgaria"
     description: str
     images: List[str] = []
     images_exterior: List[str] = []
@@ -95,6 +96,7 @@ class AuctionUpdate(BaseModel):
     color: Optional[str] = None
     region: Optional[str] = None
     city: Optional[str] = None
+    country: Optional[str] = None
     vin: Optional[str] = None
 
 
@@ -114,6 +116,7 @@ class AdminAuctionUpdate(BaseModel):
     color: Optional[str] = None
     region: Optional[str] = None
     city: Optional[str] = None
+    country: Optional[str] = None
     vin: Optional[str] = None
     images: Optional[List[str]] = None
     images_exterior: Optional[List[str]] = None

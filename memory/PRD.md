@@ -287,6 +287,15 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 - Нови i18n namespaces: `footer`, `watchlist`, `auctions_page`, `my_listings` (с nested `status`), `admin` (с nested `tabs`) в трите locales
 - Тествано с Playwright: RO версията на `/auctions` показва пълно преведен hero, filters, sort, footer и nav. Lei currency се показва вместо лв. Nav links и footer линкове всички преведени.
 
+### Apr 2026 (Phase 8) — Country field + location format + "мин./min." i18n
+- **SellPage country dropdown**: Нов `country` selector (40 държави на английски, Bulgaria е default). Записва се в ново поле `country` в `auctions`.
+- **Backend models**: `country: Optional[str] = "Bulgaria"` в `AuctionCreate` + optional в `AuctionUpdate`/`AdminAuctionUpdate`.
+- **Data backfill**: 5 съществуващи обяви получиха `country="Bulgaria"`.
+- **Location format "City, Country"**: `AuctionCard.jsx`, `AuctionDetailPage.jsx` (spec row + hero subtitle).
+- **i18n — "мин." → "min." за RO/EN**: нов `common.min_short` ключ; `ImageUploader.jsx` рендерира `· min. {n}`.
+- **SellPage.jsx repair**: Corrupt UTF-8 от предишна итерация е отстранен; файлът минава lint clean.
+- Test: Screenshot BG/EN `/auctions` показват `Sofia, Bulgaria`; EN `/sell` показва `min. 8`; backend curl round-trip с `country: Germany` ✅.
+
 ### Apr 2026 (Phase 7) — Auto-translate + multi-lang CMS + deep UI i18n
 - **Auto-translate на описания (Emergent LLM / Gemini 2.5 Flash)**:
   - Нов `/app/backend/translate.py` с `translate_text(text, target_lang)` helper
