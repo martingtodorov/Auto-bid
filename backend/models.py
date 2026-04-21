@@ -208,6 +208,12 @@ class SiteSettingsUpdate(BaseModel):
     maintenance_message: Optional[str] = None
     seo_title: Optional[str] = None
     seo_description: Optional[str] = None
+    seo_title_bg: Optional[str] = None
+    seo_title_ro: Optional[str] = None
+    seo_title_en: Optional[str] = None
+    seo_description_bg: Optional[str] = None
+    seo_description_ro: Optional[str] = None
+    seo_description_en: Optional[str] = None
     google_site_verification: Optional[str] = None
     bing_site_verification: Optional[str] = None
     google_analytics_id: Optional[str] = None

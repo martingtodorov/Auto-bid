@@ -36,6 +36,12 @@ export default function AdminSettingsTab() {
         buyer_fee_max_eur: data.buyer_fee_max_eur ?? 4000,
         seo_title: data.seo_title ?? "",
         seo_description: data.seo_description ?? "",
+        seo_title_bg: data.seo_title_bg ?? "",
+        seo_title_ro: data.seo_title_ro ?? "",
+        seo_title_en: data.seo_title_en ?? "",
+        seo_description_bg: data.seo_description_bg ?? "",
+        seo_description_ro: data.seo_description_ro ?? "",
+        seo_description_en: data.seo_description_en ?? "",
         google_site_verification: data.google_site_verification ?? "",
         bing_site_verification: data.bing_site_verification ?? "",
         google_analytics_id: data.google_analytics_id ?? "",
@@ -72,6 +78,12 @@ export default function AdminSettingsTab() {
         buyer_fee_max_eur: Number(form.buyer_fee_max_eur),
         seo_title: form.seo_title,
         seo_description: form.seo_description,
+        seo_title_bg: form.seo_title_bg,
+        seo_title_ro: form.seo_title_ro,
+        seo_title_en: form.seo_title_en,
+        seo_description_bg: form.seo_description_bg,
+        seo_description_ro: form.seo_description_ro,
+        seo_description_en: form.seo_description_en,
         google_site_verification: form.google_site_verification,
         bing_site_verification: form.bing_site_verification,
         google_analytics_id: form.google_analytics_id,
@@ -134,23 +146,37 @@ export default function AdminSettingsTab() {
         </div>
       </section>
 
-      {/* SEO */}
+      {/* SEO — multi-language */}
       <section className="rounded-card border border-[hsl(var(--line))] bg-white p-6">
         <h2 className="font-serif text-2xl">SEO на заглавна страница</h2>
-        <p className="mt-2 text-sm text-[hsl(var(--ink-muted))]">Показват се в Google и при споделяне.</p>
-        <div className="mt-5 space-y-4">
-          <Field label="Заглавие (title)" testid="seo-title">
-            <input type="text" value={form.seo_title}
-              onChange={(e) => set("seo_title", e.target.value)}
-              maxLength={120}
-              className="w-full border border-[hsl(var(--line))] h-11 px-3 text-sm" />
-          </Field>
-          <Field label="Описание (description)" testid="seo-desc">
-            <textarea rows={3} value={form.seo_description}
-              onChange={(e) => set("seo_description", e.target.value)}
-              maxLength={320}
-              className="w-full border border-[hsl(var(--line))] p-3 text-sm" />
-          </Field>
+        <p className="mt-2 text-sm text-[hsl(var(--ink-muted))]">
+          Показват се в Google и при споделяне. Попълнете за всеки език — ако полето е празно за RO/EN, ще се използва българската версия като fallback.
+        </p>
+        <div className="mt-5 space-y-8">
+          {CMS_LANGS.map(({ code, flag, label }) => (
+            <div key={code} className="rounded-card border border-[hsl(var(--line))] p-4 bg-[hsl(var(--surface))]" data-testid={`seo-lang-${code}`}>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xl" aria-hidden>{flag}</span>
+                <span className="overline text-[hsl(var(--ink))]">{label}</span>
+              </div>
+              <Field label="Заглавие (title)" testid={`seo-title-${code}`}>
+                <input type="text" value={form[`seo_title_${code}`]}
+                  onChange={(e) => set(`seo_title_${code}`, e.target.value)}
+                  maxLength={120}
+                  className="w-full border border-[hsl(var(--line))] h-11 px-3 text-sm bg-white"
+                  data-testid={`seo-title-input-${code}`}
+                />
+              </Field>
+              <Field label="Описание (description)" testid={`seo-desc-${code}`}>
+                <textarea rows={3} value={form[`seo_description_${code}`]}
+                  onChange={(e) => set(`seo_description_${code}`, e.target.value)}
+                  maxLength={320}
+                  className="w-full border border-[hsl(var(--line))] p-3 text-sm bg-white"
+                  data-testid={`seo-desc-input-${code}`}
+                />
+              </Field>
+            </div>
+          ))}
           <Field label="Социална картинка (OG image URL)" testid="seo-og-image" span={2}>
             <input
               type="url"

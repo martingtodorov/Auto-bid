@@ -17,17 +17,20 @@ export default function LandingPage() {
   const [sold, setSold] = useState([]);
   const settings = useSiteSettings();
 
-  // Update SEO from site settings
+  // Update SEO from site settings (per-language, fallback to legacy field)
+  const lang = (i18n.resolvedLanguage || "bg").slice(0, 2);
+  const seoTitle = settings?.[`seo_title_${lang}`] || settings?.seo_title;
+  const seoDescription = settings?.[`seo_description_${lang}`] || settings?.seo_description;
   useEffect(() => {
-    if (settings?.seo_title || settings?.seo_description) {
+    if (seoTitle || seoDescription) {
       setPageMeta({
-        title: settings.seo_title,
-        description: settings.seo_description,
+        title: seoTitle,
+        description: seoDescription,
         url: window.location.origin,
       });
     }
     return () => resetPageMeta();
-  }, [settings?.seo_title, settings?.seo_description]);
+  }, [seoTitle, seoDescription]);
 
   useEffect(() => {
     (async () => {
@@ -49,7 +52,6 @@ export default function LandingPage() {
   const hero = featured[0] || auctions[0];
 
   // CMS-editable hero text per language (falls back to static i18n)
-  const lang = (i18n.resolvedLanguage || "bg").slice(0, 2);
   const cmsHeadline = settings?.[`hero_headline_${lang}`];
   const cmsSubtitle = settings?.[`hero_subtitle_${lang}`];
 
