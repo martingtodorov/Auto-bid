@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Navigate, Link } from "react-router-dom";
 import { Check, X, Clock, AlertCircle, DollarSign, Archive, Ban, Edit3, Trash2, RotateCcw, Search, List, Users, BarChart3, Trash, RefreshCw, CreditCard, ScrollText, Tag, Pause, Play, Star, StarOff, Copy, XCircle, Gavel, Mail, Inbox, FileEdit } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useAuth, formatError } from "../lib/auth";
 import { api, formatEUR, formatKM } from "../lib/apiClient";
 import AdminEditModal from "../components/AdminEditModal";
@@ -27,6 +28,7 @@ const STATUS_LABELS = {
 };
 
 export default function AdminPage() {
+  const { t } = useTranslation();
   const { user, loading } = useAuth();
   const [tab, setTab] = useState("dashboard");
   const [pending, setPending] = useState([]);
@@ -222,25 +224,25 @@ export default function AdminPage() {
   };
 
   const tabs = [
-    { k: "dashboard", label: "Начало", icon: BarChart3 },
-    { k: "pending", label: `Очакващи (${pending.length})`, icon: Clock },
-    { k: "all", label: `Всички обяви (${allListings.length})`, icon: List },
-    { k: "requests", label: "Заявки", icon: Inbox },
-    { k: "users", label: "Потребители", icon: Users },
-    { k: "sold", label: `Продадени (${sold.length})`, icon: Archive },
-    { k: "makes", label: "Марки", icon: Tag, adminOnly: true },
-    { k: "stripe", label: "Stripe", icon: CreditCard, adminOnly: true },
-    { k: "notifications", label: "Известия", icon: Mail },
-    { k: "templates", label: "Имейл шаблони", icon: FileEdit, adminOnly: true },
-    { k: "audit", label: "Журнал", icon: ScrollText },
-    { k: "settings", label: "Настройки", icon: Edit3, adminOnly: true },
+    { k: "dashboard", label: t("admin.tabs.dashboard"), icon: BarChart3 },
+    { k: "pending", label: `${t("admin.tabs.pending")} (${pending.length})`, icon: Clock },
+    { k: "all", label: `${t("admin.tabs.all_listings")} (${allListings.length})`, icon: List },
+    { k: "requests", label: t("admin.tabs.requests"), icon: Inbox },
+    { k: "users", label: t("admin.tabs.users"), icon: Users },
+    { k: "sold", label: `${t("admin.tabs.sold")} (${sold.length})`, icon: Archive },
+    { k: "makes", label: t("admin.tabs.makes"), icon: Tag, adminOnly: true },
+    { k: "stripe", label: t("admin.tabs.stripe"), icon: CreditCard, adminOnly: true },
+    { k: "notifications", label: t("admin.tabs.notifications"), icon: Mail },
+    { k: "templates", label: t("admin.tabs.templates"), icon: FileEdit, adminOnly: true },
+    { k: "audit", label: t("admin.tabs.audit"), icon: ScrollText },
+    { k: "settings", label: t("admin.tabs.settings"), icon: Edit3, adminOnly: true },
   ].filter((t) => !t.adminOnly || user?.role === "admin");
 
   return (
     <main data-testid="admin-page">
       <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-10 py-16">
-        <div className="overline text-[hsl(var(--accent))]">Администратор</div>
-        <h1 className="font-serif text-4xl lg:text-5xl mt-3 tracking-tight">Контролен панел</h1>
+        <div className="overline text-[hsl(var(--accent))]">{t("admin.overline")}</div>
+        <h1 className="font-serif text-4xl lg:text-5xl mt-3 tracking-tight">{t("admin.title")}</h1>
 
         <div className="mt-8 inline-flex rounded-card border border-[hsl(var(--line))] overflow-hidden bg-white flex-wrap">
           {tabs.map((t, i) => {

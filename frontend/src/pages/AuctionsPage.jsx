@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "../lib/apiClient";
 import { useAuth, formatError } from "../lib/auth";
 import AuctionCard from "../components/AuctionCard";
@@ -7,6 +8,7 @@ import { mergeMakes } from "../lib/makes";
 import { setPageMeta, resetPageMeta, buildBreadcrumbs } from "../lib/seo";
 
 export default function AuctionsPage() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -70,7 +72,7 @@ export default function AuctionsPage() {
     <div>
       <label className="overline text-[hsl(var(--ink-muted))] block mb-2">{label}</label>
       <select value={filters[k]} onChange={(e) => set(k, e.target.value)} className="w-full border border-[hsl(var(--line))] h-10 px-3 text-sm bg-white" data-testid={`filter-${k}`}>
-        <option value="">Всички</option>
+        <option value="">{t("auctions_page.all")}</option>
         {options.map((o) => <option key={o} value={o}>{o}</option>)}
       </select>
     </div>
@@ -79,52 +81,34 @@ export default function AuctionsPage() {
   const Sidebar = (
     <aside className="bg-white border border-[hsl(var(--line))] p-6 space-y-5 rounded-card">
       <div className="flex items-center justify-between">
-        <h2 className="font-serif text-xl">Филтри</h2>
-        <button onClick={reset} className="text-xs underline text-[hsl(var(--ink-muted))]" data-testid="reset-filters">Изчисти</button>
+        <h2 className="font-serif text-xl">{t("auctions_page.filters")}</h2>
+        <button onClick={reset} className="text-xs underline text-[hsl(var(--ink-muted))]" data-testid="reset-filters">{t("auctions_page.clear")}</button>
       </div>
 
-      <Select k="make" label="Марка" options={mergeMakes(facets.makes)} />
-      <Select k="body_type" label="Тип купе" options={facets.body_types} />
-      <Select k="fuel" label="Гориво" options={facets.fuels} />
-      <Select k="transmission" label="Скоростна кутия" options={facets.transmissions} />
-      <Select k="region" label="Регион" options={facets.regions} />
+      <Select k="make" label={t("auctions_page.make")} options={mergeMakes(facets.makes)} />
+      <Select k="body_type" label={t("auctions_page.body_type")} options={facets.body_types} />
+      <Select k="fuel" label={t("auctions_page.fuel")} options={facets.fuels} />
+      <Select k="transmission" label={t("auctions_page.transmission")} options={facets.transmissions} />
+      <Select k="region" label={t("auctions_page.region")} options={facets.regions} />
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="overline text-[hsl(var(--ink-muted))] block mb-2">Година от</label>
+          <label className="overline text-[hsl(var(--ink-muted))] block mb-2">{t("auctions_page.year_from")}</label>
           <input type="number" value={filters.year_min} onChange={(e) => set("year_min", e.target.value)} className="w-full border border-[hsl(var(--line))] h-10 px-3 text-sm" data-testid="filter-year-min" />
         </div>
         <div>
-          <label className="overline text-[hsl(var(--ink-muted))] block mb-2">до</label>
+          <label className="overline text-[hsl(var(--ink-muted))] block mb-2">{t("auctions_page.year_to")}</label>
           <input type="number" value={filters.year_max} onChange={(e) => set("year_max", e.target.value)} className="w-full border border-[hsl(var(--line))] h-10 px-3 text-sm" data-testid="filter-year-max" />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="overline text-[hsl(var(--ink-muted))] block mb-2">Цена от €</label>
+          <label className="overline text-[hsl(var(--ink-muted))] block mb-2">{t("auctions_page.price_from_eur")}</label>
           <input type="number" value={filters.min_price} onChange={(e) => set("min_price", e.target.value)} className="w-full border border-[hsl(var(--line))] h-10 px-3 text-sm" data-testid="filter-min-price" />
         </div>
         <div>
-          <label className="overline text-[hsl(var(--ink-muted))] block mb-2">до €</label>
+          <label className="overline text-[hsl(var(--ink-muted))] block mb-2">{t("auctions_page.price_to_eur")}</label>
           <input type="number" value={filters.max_price} onChange={(e) => set("max_price", e.target.value)} className="w-full border border-[hsl(var(--line))] h-10 px-3 text-sm" data-testid="filter-max-price" />
-        </div>
-      </div>
-
-      <div>
-        <label className="overline text-[hsl(var(--ink-muted))] block mb-2">Статус</label>
-        <div className="grid grid-cols-3 border border-[hsl(var(--line))] rounded-md overflow-hidden">
-          {[
-            { v: "live", l: "Активни" },
-            { v: "ended", l: "Приключили" },
-            { v: "sold", l: "Продадени" },
-          ].map((o) => (
-            <button
-              key={o.v}
-              onClick={() => set("status", filters.status === o.v ? "" : o.v)}
-              className={`text-xs py-2 border-r last:border-r-0 border-[hsl(var(--line))] ${filters.status === o.v ? "bg-[hsl(var(--ink))] text-white" : ""}`}
-              data-testid={`filter-status-${o.v}`}
-            >{o.l}</button>
-          ))}
         </div>
       </div>
     </aside>
@@ -133,8 +117,8 @@ export default function AuctionsPage() {
   return (
     <main className="rule-b" data-testid="auctions-page">
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-12">
-        <div className="overline text-[hsl(var(--accent))]">Търгове</div>
-        <h1 className="font-serif text-4xl lg:text-5xl tracking-tight mt-3">Разгледайте обявите</h1>
+        <div className="overline text-[hsl(var(--accent))]">{t("auctions_page.overline")}</div>
+        <h1 className="font-serif text-4xl lg:text-5xl tracking-tight mt-3">{t("auctions_page.title")}</h1>
 
         <div className="mt-6 max-w-2xl relative">
           <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[hsl(var(--ink-muted))]" />
@@ -142,7 +126,7 @@ export default function AuctionsPage() {
             type="text"
             value={filters.q}
             onChange={(e) => set("q", e.target.value)}
-            placeholder="Търси марка, модел, цвят, описание…"
+            placeholder={t("auctions_page.search_placeholder")}
             className="w-full border border-[hsl(var(--line))] h-12 pl-11 pr-4 text-sm bg-white"
             data-testid="search-input"
           />
@@ -155,26 +139,26 @@ export default function AuctionsPage() {
 
         <div className="mt-8 flex items-end justify-between mb-8 flex-wrap gap-3">
           <p className="text-sm text-[hsl(var(--ink-muted))]" data-testid="results-count">
-            {items.length} резултата{filters.q && <> за „<span className="text-[hsl(var(--ink))]">{filters.q}</span>"</>}
+            {items.length} {t("auctions_page.results_count")}{filters.q && <> · „<span className="text-[hsl(var(--ink))]">{filters.q}</span>"</>}
             {saveMsg && <span className="ml-3 text-[hsl(var(--accent))] inline-flex items-center gap-1"><Check size={13} /> {saveMsg}</span>}
             {saveErr && <span className="ml-3 text-[hsl(var(--danger))]">{saveErr}</span>}
           </p>
           <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
             <button onClick={saveSearch} className="btn btn-secondary !py-2 !px-3 sm:!px-4 flex items-center gap-1.5 text-xs sm:text-sm shrink-0" data-testid="save-search-btn">
               <BookmarkPlus size={14} />
-              <span className="hidden sm:inline">Запази търсенето</span>
-              <span className="sm:hidden">Запази</span>
+              <span className="hidden sm:inline">{t("auctions_page.save_search")}</span>
+              <span className="sm:hidden">{t("forms.save")}</span>
             </button>
             <select value={filters.sort} onChange={(e) => set("sort", e.target.value)} className="flex-1 sm:flex-none border border-[hsl(var(--line))] h-10 px-2 sm:px-3 text-xs sm:text-sm bg-white min-w-0" data-testid="sort-select">
-              <option value="ending_soon">Завършващи</option>
-              <option value="newest">Най-нови</option>
-              <option value="price_asc">Цена ↑</option>
-              <option value="price_desc">Цена ↓</option>
-              <option value="most_bids">Най-много</option>
+              <option value="ending_soon">{t("auctions_page.sort_ending_soon")}</option>
+              <option value="newest">{t("auctions_page.sort_newest")}</option>
+              <option value="price_asc">{t("auctions_page.sort_lowest_price")}</option>
+              <option value="price_desc">{t("auctions_page.sort_highest_price")}</option>
+              <option value="most_bids">{t("auctions_page.sort_most_bids")}</option>
             </select>
             <button onClick={() => setOpen(true)} className="lg:hidden btn btn-secondary !py-2 !px-3 sm:!px-4 flex items-center gap-1.5 text-xs sm:text-sm shrink-0" data-testid="open-filters">
               <SlidersHorizontal size={14} />
-              <span className="hidden sm:inline">Филтри</span>
+              <span className="hidden sm:inline">{t("auctions_page.filters")}</span>
             </button>
           </div>
         </div>
@@ -184,11 +168,11 @@ export default function AuctionsPage() {
 
           <div className="lg:col-span-9">
             {loading ? (
-              <div className="py-20 text-center text-[hsl(var(--ink-muted))]">Зареждане…</div>
+              <div className="py-20 text-center text-[hsl(var(--ink-muted))]">{t("auctions_page.loading")}</div>
             ) : items.length === 0 ? (
-              <div className="py-20 text-center rounded-card border border-[hsl(var(--line))]">
-                <p className="font-serif text-2xl">Няма резултати</p>
-                <p className="text-sm text-[hsl(var(--ink-muted))] mt-2">Опитайте с други думи или изчистете филтрите.</p>
+              <div className="py-20 text-center rounded-card border border-[hsl(var(--line))]" data-testid="auctions-empty">
+                <p className="font-serif text-2xl">{t("auctions_page.no_results")}</p>
+                <p className="text-sm text-[hsl(var(--ink-muted))] mt-2">{t("auctions_page.no_results_hint")}</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 stagger" data-testid="auctions-grid">
@@ -203,7 +187,7 @@ export default function AuctionsPage() {
         <div className="fixed inset-0 z-50 bg-black/40 lg:hidden" onClick={() => setOpen(false)}>
           <div className="absolute inset-y-0 right-0 w-[88vw] max-w-sm bg-white overflow-auto" onClick={(e) => e.stopPropagation()}>
             <div className="p-4 flex items-center justify-between rule-b">
-              <span className="font-serif text-xl">Филтри</span>
+              <span className="font-serif text-xl">{t("auctions_page.filters")}</span>
               <button onClick={() => setOpen(false)}><X /></button>
             </div>
             <div className="p-4">{Sidebar}</div>

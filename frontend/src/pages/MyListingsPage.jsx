@@ -1,21 +1,24 @@
 import React, { useEffect, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { Plus, Clock, CheckCircle2, XCircle, Gavel, Archive, AlertCircle, Edit3, Trash2, Gift, HandCoins, Star, FileEdit, Images } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useAuth, formatError } from "../lib/auth";
 import { api, formatEUR, timeLeft } from "../lib/apiClient";
 import SellerRequestModal from "../components/SellerRequestModal";
 
-const STATUS_META = {
-  pending:          { label: "Очаква одобрение", icon: Clock,        cls: "text-[hsl(var(--ink-muted))] border-[hsl(var(--line))]" },
-  live:             { label: "Активен търг",     icon: Gavel,        cls: "text-[hsl(var(--accent))] border-[hsl(var(--accent))]/40 bg-[hsl(var(--accent-soft))]" },
-  sold:             { label: "Продаден",         icon: CheckCircle2, cls: "text-[hsl(var(--success))] border-[hsl(var(--success))]/40" },
-  ended:            { label: "Приключил",        icon: Archive,      cls: "text-[hsl(var(--ink-muted))] border-[hsl(var(--line))]" },
-  rejected:         { label: "Отказан",          icon: XCircle,      cls: "text-[hsl(var(--danger))] border-[hsl(var(--danger))]/40" },
-  withdrawn:        { label: "Оттеглен",         icon: Archive,      cls: "text-[hsl(var(--ink-muted))] border-[hsl(var(--line))]" },
-  reserve_not_met:  { label: "Резерв недостигнат", icon: HandCoins,  cls: "text-[hsl(var(--danger))] border-[hsl(var(--danger))]/40" },
+/** i18n-aware status metadata: labels come from locales, icons+colors stay static */
+const STATUS_ICON = {
+  pending: { icon: Clock, cls: "text-[hsl(var(--ink-muted))] border-[hsl(var(--line))]" },
+  live: { icon: Gavel, cls: "text-[hsl(var(--accent))] border-[hsl(var(--accent))]/40 bg-[hsl(var(--accent-soft))]" },
+  sold: { icon: CheckCircle2, cls: "text-[hsl(var(--success))] border-[hsl(var(--success))]/40" },
+  ended: { icon: Archive, cls: "text-[hsl(var(--ink-muted))] border-[hsl(var(--line))]" },
+  rejected: { icon: XCircle, cls: "text-[hsl(var(--danger))] border-[hsl(var(--danger))]/40" },
+  withdrawn: { icon: Archive, cls: "text-[hsl(var(--ink-muted))] border-[hsl(var(--line))]" },
+  reserve_not_met: { icon: HandCoins, cls: "text-[hsl(var(--danger))] border-[hsl(var(--danger))]/40" },
 };
 
 export default function MyListingsPage() {
+  const { t } = useTranslation();
   const { user, loading } = useAuth();
   const [items, setItems] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -46,7 +49,7 @@ export default function MyListingsPage() {
 
   useEffect(() => { if (user) load(); }, [user]);
 
-  if (loading) return <div className="py-24 text-center">Зареждане…</div>;
+  if (loading) return <div className="py-24 text-center">{t("watchlist.loading")}</div>;
   if (!user) return <Navigate to="/login?next=/my-listings" replace />;
 
   const startEdit = (a) => {
@@ -91,31 +94,33 @@ export default function MyListingsPage() {
       <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-10 py-16">
         <div className="flex items-end justify-between gap-4 flex-wrap">
           <div>
-            <div className="overline text-[hsl(var(--accent))]">Продавач</div>
-            <h1 className="font-serif text-4xl lg:text-5xl tracking-tight mt-3">Моите обяви</h1>
-            <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">Управлявайте своите автомобили, одобрения и след-търговите сделки.</p>
+            <div className="overline text-[hsl(var(--accent))]">{t("my_listings.overline")}</div>
+            <h1 className="font-serif text-4xl lg:text-5xl tracking-tight mt-3">{t("my_listings.title")}</h1>
+            <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">{t("my_listings.subtitle")}</p>
           </div>
           <Link to="/sell" className="btn btn-primary flex items-center gap-2" data-testid="new-listing-btn">
-            <Plus size={14} /> Нова обява
+            <Plus size={14} /> {t("my_listings.new_listing")}
           </Link>
         </div>
 
         {err && <p className="mt-4 text-sm text-[hsl(var(--danger))]" data-testid="listings-error">{err}</p>}
 
         {items === null ? (
-          <div className="py-24 text-center text-[hsl(var(--ink-muted))]">Зареждане…</div>
+          <div className="py-24 text-center text-[hsl(var(--ink-muted))]">{t("watchlist.loading")}</div>
         ) : items.length === 0 ? (
-          <div className="mt-12 py-24 text-center rounded-card border border-[hsl(var(--line))]">
+          <div className="mt-12 py-24 text-center rounded-card border border-[hsl(var(--line))]" data-testid="my-listings-empty">
             <AlertCircle size={32} className="mx-auto text-[hsl(var(--ink-muted))]" />
-            <p className="mt-4 font-serif text-2xl">Все още нямате подадени обяви</p>
-            <Link to="/sell" className="btn btn-primary mt-6 inline-flex">Продай автомобил</Link>
+            <p className="mt-4 font-serif text-2xl">{t("my_listings.empty_title")}</p>
+            <p className="mt-2 text-sm text-[hsl(var(--ink-muted))]">{t("my_listings.empty_hint")}</p>
+            <Link to="/sell" className="btn btn-primary mt-6 inline-flex">{t("my_listings.start_sell")}</Link>
           </div>
         ) : (
           <div className="mt-10 space-y-5" data-testid="my-listings-list">
             {items.map((a) => {
-              const meta = STATUS_META[a.status] || STATUS_META.pending;
-              const Icon = meta.icon;
-              const t = a.status === "live" ? timeLeft(a.ends_at) : null;
+              const icon = STATUS_ICON[a.status] || STATUS_ICON.pending;
+              const Icon = icon.icon;
+              const statusLabel = t(`my_listings.status.${a.status}`, t(`my_listings.status.pending`));
+              const tl = a.status === "live" ? timeLeft(a.ends_at) : null;
               const canEdit = a.status === "pending" || a.status === "rejected" || (a.status === "live" && (a.bid_count || 0) === 0);
               const canWithdraw = ["pending", "rejected", "ended", "reserve_not_met"].includes(a.status) || (a.status === "live" && (a.bid_count || 0) === 0);
               const isRNM = a.status === "reserve_not_met";
@@ -129,7 +134,7 @@ export default function MyListingsPage() {
                     </div>
                     <div className="p-5">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`pill ${meta.cls}`} data-testid={`status-${a.id}`}><Icon size={11} /> {meta.label}</span>
+                        <span className={`pill ${icon.cls}`} data-testid={`status-${a.id}`}><Icon size={11} /> {statusLabel}</span>
                         {a.has_reserve && (a.reserve_met ? <span className="pill pill-live">Резервът е достигнат</span> : <span className="pill">С резерв · €{Math.round(a.reserve_eur || 0).toLocaleString("bg-BG")}</span>)}
                         {a.has_reserve === false && <span className="pill">Без резерв</span>}
                         {counter === "pending" && <span className="pill pill-ending">Чака отговор</span>}
@@ -183,8 +188,8 @@ export default function MyListingsPage() {
                           )}
 
                           <div className="mt-4 flex gap-2 flex-wrap">
-                            {canEdit && <button onClick={() => startEdit(a)} className="btn btn-secondary !py-2 !px-3 text-xs flex items-center gap-1.5" data-testid={`edit-${a.id}`}><Edit3 size={12} /> Редактирай</button>}
-                            {canWithdraw && <button onClick={() => withdraw(a.id)} className="btn btn-secondary !py-2 !px-3 text-xs flex items-center gap-1.5" data-testid={`withdraw-${a.id}`}><Trash2 size={12} /> Оттегли</button>}
+                            {canEdit && <button onClick={() => startEdit(a)} className="btn btn-secondary !py-2 !px-3 text-xs flex items-center gap-1.5" data-testid={`edit-${a.id}`}><Edit3 size={12} /> {t("my_listings.edit")}</button>}
+                            {canWithdraw && <button onClick={() => withdraw(a.id)} className="btn btn-secondary !py-2 !px-3 text-xs flex items-center gap-1.5" data-testid={`withdraw-${a.id}`}><Trash2 size={12} /> {t("my_listings.withdraw")}</button>}
                             {/* Self-service seller requests (available while pending / live / paused) */}
                             {["pending", "live", "paused"].includes(a.status) && (
                               <>
@@ -232,7 +237,7 @@ export default function MyListingsPage() {
                       {a.status === "live" && (<>
                         <div className="overline text-[hsl(var(--ink-muted))]">Текуща</div>
                         <div className="font-serif text-2xl">{formatEUR(a.current_bid_eur)}</div>
-                        <div className="text-xs text-[hsl(var(--ink-muted))]">{a.bid_count || 0} наддав. · {t?.label}</div>
+                        <div className="text-xs text-[hsl(var(--ink-muted))]">{a.bid_count || 0} {t("auction.bids_word")} · {tl?.label}</div>
                       </>)}
                       {a.status === "sold" && (<>
                         <div className="overline text-[hsl(var(--ink-muted))]">Продаден за</div>
