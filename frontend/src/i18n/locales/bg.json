@@ -135,7 +135,30 @@
     "vin_masked_note_ended": "Заявка за VIN е достъпна само при активен търг.",
     "vin_request_cta": "Заяви пълен VIN",
     "vin_sending": "Изпращане…",
-    "vin_unmasked": "Пълен VIN · разкрит"
+    "vin_unmasked": "Пълен VIN · разкрит",
+    "leading_bidder": "Водещ",
+    "comments_placeholder": "Споделете мнение или въпрос…",
+    "comments_placeholder_logged_out": "Влезте, за да коментирате",
+    "comments_submit": "Публикувай",
+    "also_see": "Също виж",
+    "similar_listings": "Подобни обяви",
+    "view_all_auctions": "Виж всички търгове"
+  },
+  "preauth": {
+    "confirm_card": "Потвърди картата",
+    "buyer_fee": "Такса на купувача",
+    "fee_detail": "{{pct}}% от наддаването (мин. €{{min}}, макс. €{{max}}). Блокира се върху картата до финализиране. При загуба се освобождава изцяло; при победа се таксува.",
+    "card_number": "Номер на карта",
+    "validity": "Валидност",
+    "cvc": "CVC",
+    "card_name": "Име върху картата",
+    "err_invalid_number": "Невалиден номер на карта",
+    "err_invalid_exp": "Невалидна валидност (ММ/ГГ)",
+    "err_invalid_cvc": "Невалиден CVC код",
+    "err_missing_name": "Въведете име върху картата",
+    "processing": "Обработка…",
+    "authorize_cta": "Оторизирай {{amount}} и наддай",
+    "test_mode": "Тестов режим · Използвай 4242 4242 4242 4242"
   },
   "spec": {
     "year": "Година",
@@ -144,7 +167,8 @@
     "power": "Мощност",
     "hp": "к.с.",
     "colour": "Цвят",
-    "location": "Локация"
+    "location": "Локация",
+    "interior": "Интериор"
   },
   "time": {
     "ended": "Приключил",

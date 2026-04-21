@@ -135,7 +135,30 @@
     "vin_masked_note_ended": "VIN requests are available only on active auctions.",
     "vin_request_cta": "Request full VIN",
     "vin_sending": "Sending…",
-    "vin_unmasked": "Full VIN · unmasked"
+    "vin_unmasked": "Full VIN · unmasked",
+    "leading_bidder": "Leading",
+    "comments_placeholder": "Share a thought or question…",
+    "comments_placeholder_logged_out": "Log in to comment",
+    "comments_submit": "Post",
+    "also_see": "Also see",
+    "similar_listings": "Similar listings",
+    "view_all_auctions": "View all auctions"
+  },
+  "preauth": {
+    "confirm_card": "Confirm your card",
+    "buyer_fee": "Buyer's fee",
+    "fee_detail": "{{pct}}% of the bid (min. €{{min}}, max. €{{max}}). Pre-authorised on your card until settlement. Fully released if you lose; charged if you win.",
+    "card_number": "Card number",
+    "validity": "Expiry",
+    "cvc": "CVC",
+    "card_name": "Name on card",
+    "err_invalid_number": "Invalid card number",
+    "err_invalid_exp": "Invalid expiry (MM/YY)",
+    "err_invalid_cvc": "Invalid CVC",
+    "err_missing_name": "Enter the name on the card",
+    "processing": "Processing…",
+    "authorize_cta": "Authorize {{amount}} and bid",
+    "test_mode": "Test mode · Use 4242 4242 4242 4242"
   },
   "spec": {
     "year": "Year",
@@ -144,7 +167,8 @@
     "power": "Power",
     "hp": "hp",
     "colour": "Colour",
-    "location": "Location"
+    "location": "Location",
+    "interior": "Interior"
   },
   "time": {
     "ended": "Ended",

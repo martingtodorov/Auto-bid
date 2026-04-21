@@ -287,8 +287,15 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 - Нови i18n namespaces: `footer`, `watchlist`, `auctions_page`, `my_listings` (с nested `status`), `admin` (с nested `tabs`) в трите locales
 - Тествано с Playwright: RO версията на `/auctions` показва пълно преведен hero, filters, sort, footer и nav. Lei currency се показва вместо лв. Nav links и footer линкове всички преведени.
 
-### Apr 2026 (Phase 8) — Country field + location format + "мин./min." i18n + region removal
-- **Removed `region` field**: SellPage няма повече region dropdown (градът е свободен текст); AuctionsPage филтърът за регион е премахнат; AuctionDetailPage seller badge показва `City, Country` вместо region. Backend `AuctionCreate.region` е optional за съвместимост със съществуващи обяви.
+### Apr 2026 (Phase 8) — Country field + location format + "мин./min." i18n + region removal + deep detail page i18n
+- **Deep translation на AuctionDetailPage**:
+  - Interior figcaption (3 снимки в описанието) → `spec.interior`
+  - Comment placeholder + logged-out state + submit бутон → `auction.comments_placeholder*` + `auction.comments_submit`
+  - `С резерв / Без резерв` badges → `auction.with_reserve / no_reserve_badge`
+  - `Водещ: {name}` → `auction.leading_bidder`
+  - Related section: `Също виж / Подобни обяви / Виж всички търгове` → `auction.also_see / similar_listings / view_all_auctions`
+- **PreauthModal — пълно i18n преписване**: нов `preauth.*` namespace (15 ключа) в bg/ro/en. Modal title, buyer fee label + detail, card fields, error messages, CTA, test-mode footer — всички преведени.
+- **Removed `region` field**: SellPage няма повече region dropdown; AuctionsPage филтърът за регион е изтрит.
 - **Filter enum verification (RO/EN)**: `Marcă/Caroserie/Combustibil/Transmisie` на RO; `Make/Body type/Fuel/Gearbox` на EN; опциите са преведени през `translateEnum` (Petrol, Automatic, SUV/Coupe/Sedan).
 - **SellPage country dropdown**: Нов `country` selector (40 държави на английски, Bulgaria default).
 - **Backend models**: `country: Optional[str] = "Bulgaria"` в `AuctionCreate` + optional в `AuctionUpdate`/`AdminAuctionUpdate`.

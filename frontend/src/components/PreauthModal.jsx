@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { CreditCard, Lock, X } from "lucide-react";
 import { formatEUR } from "../lib/apiClient";
 import { useSiteSettings, computeBuyerFee } from "../lib/settings";
@@ -9,6 +10,7 @@ import { useSiteSettings, computeBuyerFee } from "../lib/settings";
  * swapped for real Stripe Elements later.
  */
 export default function PreauthModal({ open, onClose, onConfirm, bidAmount }) {
+  const { t } = useTranslation();
   const [number, setNumber] = useState("4242 4242 4242 4242");
   const [exp, setExp] = useState("12/28");
   const [cvc, setCvc] = useState("123");
@@ -29,10 +31,10 @@ export default function PreauthModal({ open, onClose, onConfirm, bidAmount }) {
   const submit = async () => {
     setErr("");
     const digits = number.replace(/\s/g, "");
-    if (digits.length < 13) return setErr("Невалиден номер на карта");
-    if (!/^\d{2}\/\d{2}$/.test(exp)) return setErr("Невалидна валидност (ММ/ГГ)");
-    if (cvc.length < 3) return setErr("Невалиден CVC код");
-    if (!name.trim()) return setErr("Въведете име върху картата");
+    if (digits.length < 13) return setErr(t("preauth.err_invalid_number"));
+    if (!/^\d{2}\/\d{2}$/.test(exp)) return setErr(t("preauth.err_invalid_exp"));
+    if (cvc.length < 3) return setErr(t("preauth.err_invalid_cvc"));
+    if (!name.trim()) return setErr(t("preauth.err_missing_name"));
 
     setProcessing(true);
     // Simulate Stripe tokenization latency
@@ -48,7 +50,7 @@ export default function PreauthModal({ open, onClose, onConfirm, bidAmount }) {
         <div className="p-5 flex items-center justify-between rule-b">
           <div className="flex items-center gap-2">
             <Lock size={16} />
-            <span className="font-serif text-lg">Потвърди картата</span>
+            <span className="font-serif text-lg">{t("preauth.confirm_card")}</span>
           </div>
           <button onClick={onClose} data-testid="preauth-close"><X size={18} /></button>
         </div>
@@ -56,16 +58,22 @@ export default function PreauthModal({ open, onClose, onConfirm, bidAmount }) {
         <div className="p-6">
           <div className="rounded-card border border-[hsl(var(--line))] bg-[hsl(var(--surface))] p-4 flex items-center justify-between">
             <div>
-              <div className="overline text-[hsl(var(--ink-muted))]">Такса на купувача</div>
+              <div className="overline text-[hsl(var(--ink-muted))]">{t("preauth.buyer_fee")}</div>
               <div className="font-serif text-2xl mt-1">{formatEUR(preauth)}</div>
-              <div className="text-xs text-[hsl(var(--ink-muted))] mt-1">{settings.buyer_fee_pct}% от наддаването (мин. €{settings.buyer_fee_min_eur}, макс. €{settings.buyer_fee_max_eur}). Блокира се върху картата до финализиране. При загуба се освобождава изцяло; при победа се таксува.</div>
+              <div className="text-xs text-[hsl(var(--ink-muted))] mt-1">
+                {t("preauth.fee_detail", {
+                  pct: settings.buyer_fee_pct,
+                  min: settings.buyer_fee_min_eur,
+                  max: settings.buyer_fee_max_eur,
+                })}
+              </div>
             </div>
             <CreditCard size={40} className="text-[hsl(var(--ink-muted))]" />
           </div>
 
           <div className="mt-6 space-y-4">
             <div>
-              <label className="overline text-[hsl(var(--ink-muted))] block mb-2">Номер на карта</label>
+              <label className="overline text-[hsl(var(--ink-muted))] block mb-2">{t("preauth.card_number")}</label>
               <input
                 value={number}
                 onChange={(e) => setNumber(formatCard(e.target.value))}
@@ -76,26 +84,26 @@ export default function PreauthModal({ open, onClose, onConfirm, bidAmount }) {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="overline text-[hsl(var(--ink-muted))] block mb-2">Валидност</label>
+                <label className="overline text-[hsl(var(--ink-muted))] block mb-2">{t("preauth.validity")}</label>
                 <input value={exp} onChange={(e) => setExp(formatExp(e.target.value))} className="w-full border border-[hsl(var(--line))] h-11 px-3 text-sm font-mono" data-testid="preauth-exp" />
               </div>
               <div>
-                <label className="overline text-[hsl(var(--ink-muted))] block mb-2">CVC</label>
+                <label className="overline text-[hsl(var(--ink-muted))] block mb-2">{t("preauth.cvc")}</label>
                 <input value={cvc} onChange={(e) => setCvc(e.target.value.replace(/\D/g, "").slice(0, 4))} className="w-full border border-[hsl(var(--line))] h-11 px-3 text-sm font-mono" data-testid="preauth-cvc" />
               </div>
             </div>
             <div>
-              <label className="overline text-[hsl(var(--ink-muted))] block mb-2">Име върху картата</label>
+              <label className="overline text-[hsl(var(--ink-muted))] block mb-2">{t("preauth.card_name")}</label>
               <input value={name} onChange={(e) => setName(e.target.value)} className="w-full border border-[hsl(var(--line))] h-11 px-3 text-sm" data-testid="preauth-name" />
             </div>
             {err && <p className="text-sm text-[hsl(var(--danger))]" data-testid="preauth-error">{err}</p>}
           </div>
 
           <button onClick={submit} disabled={processing} className="btn btn-accent w-full mt-6" data-testid="preauth-confirm">
-            {processing ? "Обработка…" : `Оторизирай ${formatEUR(preauth)} и наддай`}
+            {processing ? t("preauth.processing") : t("preauth.authorize_cta", { amount: formatEUR(preauth) })}
           </button>
           <p className="text-xs text-center text-[hsl(var(--ink-muted))] mt-3 flex items-center justify-center gap-1">
-            <Lock size={11} /> Тестов режим · Използвай 4242 4242 4242 4242
+            <Lock size={11} /> {t("preauth.test_mode")}
           </p>
         </div>
       </div>

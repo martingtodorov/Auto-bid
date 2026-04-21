@@ -135,7 +135,30 @@
     "vin_masked_note_ended": "Cererea VIN este disponibilă doar pentru licitații active.",
     "vin_request_cta": "Cere VIN complet",
     "vin_sending": "Se trimite…",
-    "vin_unmasked": "VIN complet · dezvăluit"
+    "vin_unmasked": "VIN complet · dezvăluit",
+    "leading_bidder": "Lider",
+    "comments_placeholder": "Împărtășește o părere sau o întrebare…",
+    "comments_placeholder_logged_out": "Autentifică-te pentru a comenta",
+    "comments_submit": "Publică",
+    "also_see": "Vezi și",
+    "similar_listings": "Anunțuri similare",
+    "view_all_auctions": "Vezi toate licitațiile"
+  },
+  "preauth": {
+    "confirm_card": "Confirmă cardul",
+    "buyer_fee": "Comision cumpărător",
+    "fee_detail": "{{pct}}% din ofertă (min. €{{min}}, max. €{{max}}). Se blochează pe card până la finalizare. La pierdere se eliberează integral; la câștig se percepe.",
+    "card_number": "Număr card",
+    "validity": "Valabilitate",
+    "cvc": "CVC",
+    "card_name": "Nume pe card",
+    "err_invalid_number": "Număr de card invalid",
+    "err_invalid_exp": "Valabilitate invalidă (LL/AA)",
+    "err_invalid_cvc": "Cod CVC invalid",
+    "err_missing_name": "Introdu numele de pe card",
+    "processing": "Se procesează…",
+    "authorize_cta": "Autorizează {{amount}} și licitează",
+    "test_mode": "Mod test · Folosește 4242 4242 4242 4242"
   },
   "spec": {
     "year": "An",
@@ -144,7 +167,8 @@
     "power": "Putere",
     "hp": "CP",
     "colour": "Culoare",
-    "location": "Locație"
+    "location": "Locație",
+    "interior": "Interior"
   },
   "time": {
     "ended": "Încheiat",

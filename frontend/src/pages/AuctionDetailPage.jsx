@@ -448,7 +448,7 @@ export default function AuctionDetailPage() {
                 />
                 <div className="mt-3 flex justify-end">
                   <button onClick={postComment} disabled={!user || !commentText.trim()} className="btn btn-primary disabled:opacity-40" data-testid="submit-comment">
-                    Публикувай
+                    {t("auction.comments_submit")}
                   </button>
                 </div>
               </div>
@@ -509,8 +509,8 @@ export default function AuctionDetailPage() {
                     : a.status === "ended" ? <span className="pill pill-sold">Приключил</span>
                     : tl.urgent ? <span className="pill pill-ending">{formatTimeLeft(tl, t)}</span>
                     : <span className="pill pill-live">{formatTimeLeft(tl, t)}</span>}
-                  {a.has_reserve && <span className="pill" data-testid="with-reserve">С резерв</span>}
-                  {a.has_reserve === false && <span className="pill" data-testid="no-reserve">Без резерв</span>}
+                  {a.has_reserve && <span className="pill" data-testid="with-reserve">{t("auction.with_reserve")}</span>}
+                  {a.has_reserve === false && <span className="pill" data-testid="no-reserve">{t("auction.no_reserve_badge")}</span>}
                   <span className="overline text-[hsl(var(--ink-muted))] ml-auto">{a.bid_count || 0} {t("auction.bids_word")}</span>
                 </div>
 
@@ -519,7 +519,7 @@ export default function AuctionDetailPage() {
                   <div className="font-serif text-5xl mt-2" data-testid="current-bid">{formatEUR(a.current_bid_eur)}</div>
                   <div className="text-sm text-[hsl(var(--ink-muted))] font-mono mt-1">{formatLocal(a.current_bid_eur, i18n.language)}</div>
                   {a.high_bidder_name && (
-                    <div className="mt-2 text-xs text-[hsl(var(--ink-muted))]">Водещ: <span className="text-[hsl(var(--ink))]">{a.high_bidder_name}</span></div>
+                    <div className="mt-2 text-xs text-[hsl(var(--ink-muted))]">{t("auction.leading_bidder")}: <span className="text-[hsl(var(--ink))]">{a.high_bidder_name}</span></div>
                   )}
                   {a.has_reserve && a.status === "reserve_not_met" && (
                     <div className="mt-3 text-xs text-[hsl(var(--ink-muted))] flex items-center gap-1.5" data-testid="reserve-not-met">
