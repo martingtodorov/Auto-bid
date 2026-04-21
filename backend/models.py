@@ -12,6 +12,7 @@ class UserRegister(BaseModel):
     password: str = Field(min_length=6, max_length=128)
     name: str = Field(min_length=1, max_length=80)
     terms_accepted: bool = Field(default=False)
+    terms_version: Optional[str] = Field(default="v1", max_length=20)
 
 
 class UserLogin(BaseModel):
@@ -212,6 +213,13 @@ class SiteSettingsUpdate(BaseModel):
     contacts_content: Optional[str] = None
     fees_content: Optional[str] = None
     how_it_works_content: Optional[str] = None
+    # Phase 6 — Multi-language hero text (CMS-editable)
+    hero_headline_bg: Optional[str] = None
+    hero_subtitle_bg: Optional[str] = None
+    hero_headline_ro: Optional[str] = None
+    hero_subtitle_ro: Optional[str] = None
+    hero_headline_en: Optional[str] = None
+    hero_subtitle_en: Optional[str] = None
 
 
 
@@ -266,4 +274,26 @@ class InternalNote(BaseModel):
 class BuyerFeeUpdate(BaseModel):
     status: str  # "unpaid" | "paid" | "waived" | "refunded"
     note: Optional[str] = Field(default=None, max_length=500)
+
+
+# ---------- Phase 6 seller-initiated moderation requests ----------
+class PromotionRequestCreate(BaseModel):
+    """Seller asks to have their auction featured on the homepage."""
+    note: Optional[str] = Field(default=None, max_length=600)
+
+
+class TextChangeRequestCreate(BaseModel):
+    """Seller requests a text / photo change on a live auction. Moderator must approve."""
+    title: Optional[str] = Field(default=None, max_length=200)
+    description: Optional[str] = Field(default=None, max_length=8000)
+    note: Optional[str] = Field(default=None, max_length=600)
+
+
+class ReorderImagesRequest(BaseModel):
+    """Seller reorders images on their own auction (no approval needed)."""
+    images: List[str] = Field(default_factory=list, max_length=40)
+
+
+class ModerationDecision(BaseModel):
+    reason: Optional[str] = Field(default=None, max_length=600)
 

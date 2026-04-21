@@ -146,6 +146,13 @@ SETTINGS_DEFAULTS = {
     "og_image_url": "",
     "maintenance_mode": False,
     "maintenance_message": "AutoBids.bg се обновява. Моля, върнете се след малко.",
+    # --- Phase 6: Multi-language hero CMS ---
+    "hero_headline_bg": "",
+    "hero_subtitle_bg": "",
+    "hero_headline_ro": "",
+    "hero_subtitle_ro": "",
+    "hero_headline_en": "",
+    "hero_subtitle_en": "",
 }
 _settings_cache: dict = dict(SETTINGS_DEFAULTS)
 
@@ -1387,6 +1394,12 @@ async def get_public_settings():
         "og_image_url": s.get("og_image_url") or "",
         "maintenance_mode": bool(s.get("maintenance_mode")),
         "maintenance_message": s.get("maintenance_message") or "",
+        "hero_headline_bg": s.get("hero_headline_bg") or "",
+        "hero_subtitle_bg": s.get("hero_subtitle_bg") or "",
+        "hero_headline_ro": s.get("hero_headline_ro") or "",
+        "hero_subtitle_ro": s.get("hero_subtitle_ro") or "",
+        "hero_headline_en": s.get("hero_headline_en") or "",
+        "hero_subtitle_en": s.get("hero_subtitle_en") or "",
     }
 
 
@@ -2610,6 +2623,7 @@ from routers import negotiations as _neg_router  # noqa: E402
 from routers import auth as _auth_router  # noqa: E402
 from routers import reviews as _reviews_router  # noqa: E402
 from routers import admin as _admin_router  # noqa: E402
+from routers import seller_requests as _seller_requests_router  # noqa: E402
 
 # Wire up injected deps for the negotiation router
 _neg_router.configure(
@@ -2645,11 +2659,19 @@ _admin_router.configure(
 )
 _admin_router.register_routes()
 
+# Wire up seller requests router (promotion / text-change / image reorder)
+_seller_requests_router.configure(
+    get_current_user=get_current_user,
+    require_admin_or_moderator=require_admin_or_moderator,
+)
+_seller_requests_router.register_routes()
+
 api.include_router(_seo_router.router)
 api.include_router(_neg_router.router)
 api.include_router(_auth_router.router)
 api.include_router(_reviews_router.router)
 api.include_router(_admin_router.router)
+api.include_router(_seller_requests_router.router)
 
 app.include_router(api)
 

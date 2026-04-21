@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
-import { Plus, Clock, CheckCircle2, XCircle, Gavel, Archive, AlertCircle, Edit3, Trash2, Gift, HandCoins } from "lucide-react";
+import { Plus, Clock, CheckCircle2, XCircle, Gavel, Archive, AlertCircle, Edit3, Trash2, Gift, HandCoins, Star, FileEdit, Images } from "lucide-react";
 import { useAuth, formatError } from "../lib/auth";
 import { api, formatEUR, timeLeft } from "../lib/apiClient";
+import SellerRequestModal from "../components/SellerRequestModal";
 
 const STATUS_META = {
   pending:          { label: "Очаква одобрение", icon: Clock,        cls: "text-[hsl(var(--ink-muted))] border-[hsl(var(--line))]" },
@@ -22,9 +23,24 @@ export default function MyListingsPage() {
   const [counterFor, setCounterFor] = useState(null);
   const [counterPrice, setCounterPrice] = useState("");
   const [err, setErr] = useState("");
+  const [requestsByAuction, setRequestsByAuction] = useState({});
+  const [modal, setModal] = useState(null); // { auction, mode }
 
   const load = async () => {
-    try { const { data } = await api.get("/me/listings"); setItems(data); }
+    try {
+      const { data } = await api.get("/me/listings");
+      setItems(data);
+      // Parallel: pending seller requests for visual badges
+      try {
+        const { data: reqs } = await api.get("/me/seller-requests", { params: { status: "pending" } });
+        const map = {};
+        for (const r of reqs || []) {
+          map[r.auction_id] = map[r.auction_id] || {};
+          map[r.auction_id][r.type] = r;
+        }
+        setRequestsByAuction(map);
+      } catch { /* non-blocking */ }
+    }
     catch (e) { setItems([]); }
   };
 
@@ -169,6 +185,45 @@ export default function MyListingsPage() {
                           <div className="mt-4 flex gap-2 flex-wrap">
                             {canEdit && <button onClick={() => startEdit(a)} className="btn btn-secondary !py-2 !px-3 text-xs flex items-center gap-1.5" data-testid={`edit-${a.id}`}><Edit3 size={12} /> Редактирай</button>}
                             {canWithdraw && <button onClick={() => withdraw(a.id)} className="btn btn-secondary !py-2 !px-3 text-xs flex items-center gap-1.5" data-testid={`withdraw-${a.id}`}><Trash2 size={12} /> Оттегли</button>}
+                            {/* Self-service seller requests (available while pending / live / paused) */}
+                            {["pending", "live", "paused"].includes(a.status) && (
+                              <>
+                                <button
+                                  onClick={() => setModal({ auction: a, mode: "reorder" })}
+                                  className="btn btn-secondary !py-2 !px-3 text-xs flex items-center gap-1.5"
+                                  data-testid={`reorder-photos-${a.id}`}
+                                  disabled={(a.images || []).length < 2}
+                                  title={(a.images || []).length < 2 ? "Трябват поне 2 снимки за пренареждане" : "Пренареди снимките (без одобрение)"}
+                                >
+                                  <Images size={12} /> Пренареди снимки
+                                </button>
+                                <button
+                                  onClick={() => setModal({ auction: a, mode: "text" })}
+                                  className="btn btn-secondary !py-2 !px-3 text-xs flex items-center gap-1.5"
+                                  data-testid={`request-text-${a.id}`}
+                                  disabled={!!requestsByAuction[a.id]?.text_change}
+                                  title={requestsByAuction[a.id]?.text_change ? "Имате чакаща заявка" : "Заяви ревизия на текста"}
+                                >
+                                  <FileEdit size={12} /> {requestsByAuction[a.id]?.text_change ? "Чакаща ревизия" : "Заяви ревизия"}
+                                </button>
+                                {!a.featured && (
+                                  <button
+                                    onClick={() => setModal({ auction: a, mode: "promote" })}
+                                    className="btn btn-secondary !py-2 !px-3 text-xs flex items-center gap-1.5 !border-amber-400 !text-amber-700"
+                                    data-testid={`request-promote-${a.id}`}
+                                    disabled={!!requestsByAuction[a.id]?.promotion}
+                                    title={requestsByAuction[a.id]?.promotion ? "Имате чакаща заявка" : "Заяви промотиране"}
+                                  >
+                                    <Star size={12} /> {requestsByAuction[a.id]?.promotion ? "Заявено" : "Промотирай"}
+                                  </button>
+                                )}
+                                {a.featured && (
+                                  <span className="pill text-xs text-amber-700 border-amber-300 bg-amber-50" data-testid={`featured-badge-${a.id}`}>
+                                    <Star size={11} /> Промотирана
+                                  </span>
+                                )}
+                              </>
+                            )}
                           </div>
                         </>
                       )}
@@ -200,6 +255,15 @@ export default function MyListingsPage() {
           </div>
         )}
       </div>
+
+      {modal && (
+        <SellerRequestModal
+          auction={modal.auction}
+          mode={modal.mode}
+          onClose={() => setModal(null)}
+          onDone={() => load()}
+        />
+      )}
     </main>
   );
 }

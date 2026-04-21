@@ -11,15 +11,22 @@
     "admin": "Admin",
     "profile": "Profil",
     "settings": "Setări",
-    "watchlist": "Favorite"
+    "watchlist": "Favorite",
+    "my_listings": "Anunțurile mele",
+    "dashboard": "Tablou de bord"
+  },
+  "search": {
+    "placeholder": "Caută mașină…"
   },
   "hero": {
     "discover": "Descoperă",
     "exceptional": "mașini",
     "cars": "excepționale.",
-    "subtitle": "Fiecare mașină — selectată manual, documentată în detaliu și prezentată de un curator. Licitează, urmărește și cumpără cu încredere.",
-    "browse": "Vezi licitațiile active",
-    "sell_cta": "Vinde cu noi"
+    "subtitle": "autobids.bg este o platformă de licitații online — fiecare mașină este atent selectată, documentată și prezentată de echipa noastră.",
+    "browse": "Vezi licitațiile",
+    "sell_cta": "Vinde-ți mașina",
+    "featured_listing": "Anunț selectat",
+    "current": "Curent"
   },
   "forms": {
     "email": "Email",
@@ -41,10 +48,15 @@
     "login_subtitle": "Autentifică-te pentru a licita, comenta și urmări licitațiile.",
     "no_account": "Nu ai cont?",
     "have_account": "Ai deja cont?",
+    "new_account": "Cont nou",
+    "join_us": "Alătură-te",
+    "register_subtitle": "Înregistrare gratuită. Începe să licitezi astăzi.",
+    "min_6_chars": "min. 6 caractere",
     "agree_terms_prefix": "Sunt de acord cu",
     "terms_link": "Termenii și condițiile",
     "and": "și",
     "privacy_link": "Politica de confidențialitate",
+    "terms_required": "Te rugăm să accepți Termenii și condițiile pentru a continua.",
     "create_account": "Creează cont",
     "two_fa_title": "Autentificare în doi pași",
     "two_fa_enter_code": "Introdu codul de 6 cifre din aplicația authenticator.",
@@ -61,6 +73,52 @@
     "watchlist_remove": "Elimină de la favorite",
     "views": "vizualizări"
   },
+  "cta": {
+    "view_all": "Toate",
+    "join_community_overline": "Alătură-te comunității",
+    "ready_next_deal": "Ești gata pentru următoarea ta afacere?",
+    "register_free": "Înregistrează-te gratuit",
+    "sell_car": "Vinde mașina",
+    "cta_subtitle": "Creează un cont și primește noile anunțuri înaintea celorlalți."
+  },
+  "landing": {
+    "active": "Active",
+    "active_auctions": "Licitații active",
+    "process": "Procesul",
+    "how_it_works": "Cum funcționează",
+    "how_it_works_desc": "Patru pași de la înregistrare până la cheile în mâinile noului proprietar.",
+    "editorial": "Redacția recomandă",
+    "selected": "Exemplare selectate",
+    "archive": "Arhivă",
+    "recent_sales": "Vânzări recente",
+    "all_sales": "Toate vânzările",
+    "steps": {
+      "s1_title": "01. Înregistrare",
+      "s1_desc": "Creează un cont gratuit într-un minut. Verificăm identitatea înainte de prima licitație.",
+      "s2_title": "02. Documentare",
+      "s2_desc": "Raport foto complet, istoric service, verificare VIN și raport tehnic independent.",
+      "s3_title": "03. Licitare",
+      "s3_desc": "Online, în timp real, cu protecție anti-snipe — ultimele 2 minute extind licitația.",
+      "s4_title": "04. Finalizare",
+      "s4_desc": "Contact direct cu vânzătorul, asistență pentru transport, înmatriculare și finalizare."
+    }
+  },
+  "seller": {
+    "promote_request": "Cerere de promovare",
+    "promote_description": "Cere moderatorului să marcheze anunțul ca „Selectat“ — va apărea pe pagina principală.",
+    "request_text_change": "Modificare text",
+    "text_change_description": "Cere modificarea titlului sau descrierii — un moderator va verifica și aplica.",
+    "reorder_photos": "Reordonează fotografiile",
+    "reorder_description": "Trage fotografiile pentru a schimba ordinea. Prima fotografie este principală.",
+    "already_featured": "Anunțul este deja promovat",
+    "pending_request": "Cerere în așteptare",
+    "request_sent": "Cererea a fost trimisă. Vei primi o notificare după decizia moderatorului.",
+    "my_requests": "Cererile mele",
+    "new_title": "Titlu nou",
+    "new_description": "Descriere nouă",
+    "note_for_mod": "Notă pentru moderator (opțional)",
+    "save_order": "Salvează ordinea"
+  },
   "footer": {
     "faq": "Întrebări frecvente",
     "terms": "Termeni și condiții",
@@ -72,6 +130,7 @@
   },
   "language": {
     "bg": "Български",
-    "ro": "Română"
+    "ro": "Română",
+    "en": "English"
   }
 }

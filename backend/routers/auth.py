@@ -75,16 +75,44 @@ def register_routes():
         if existing:
             raise HTTPException(status_code=409, detail="Имейлът вече е регистриран")
         user_id = str(_uuid.uuid4())
+        # Capture device + network fingerprint at the moment of T&C acceptance
+        ip_addr = (request.client.host if request.client else "") or ""
+        ua = (request.headers.get("user-agent") or "")[:500]
+        lang_hdr = (request.headers.get("accept-language") or "")[:60]
+        now_iso = datetime.now(timezone.utc).isoformat()
         doc = {
             "id": user_id,
             "email": payload.email.lower(),
             "name": payload.name.strip(),
             "password_hash": _hash_password(payload.password),
             "role": "user",
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "terms_accepted_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": now_iso,
+            # T&C audit trail (required for GDPR / ZZLD proof of consent)
+            "terms_accepted": True,
+            "terms_accepted_at": now_iso,
+            "terms_accepted_ip": ip_addr,
+            "terms_accepted_user_agent": ua,
+            "terms_accepted_language": lang_hdr,
+            "terms_version": (payload.terms_version or "v1")[:20],
         }
         await db.users.insert_one(doc)
+        # Also log into audit_log as a separate consent record (immutable)
+        try:
+            await db.audit_log.insert_one({
+                "id": str(_uuid.uuid4()),
+                "actor_id": user_id,
+                "actor_email": doc["email"],
+                "actor_role": "user",
+                "action": "user.terms_accepted",
+                "target_type": "user",
+                "target_id": user_id,
+                "details": {"terms_version": doc["terms_version"], "language": lang_hdr},
+                "ip": ip_addr,
+                "user_agent": ua,
+                "at": now_iso,
+            })
+        except Exception as e:
+            logger.warning("audit_log insert failed: %s", e)
         token = _create_token(user_id, doc["email"])
         return {"token": token, "user": _sanitize(doc)}
 

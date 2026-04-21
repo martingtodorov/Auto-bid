@@ -4,6 +4,7 @@ import LanguageDetector from "i18next-browser-languagedetector";
 
 import bg from "./locales/bg.json";
 import ro from "./locales/ro.json";
+import en from "./locales/en.json";
 
 i18n
   .use(LanguageDetector)
@@ -12,9 +13,10 @@ i18n
     resources: {
       bg: { translation: bg },
       ro: { translation: ro },
+      en: { translation: en },
     },
     fallbackLng: "bg",
-    supportedLngs: ["bg", "ro"],
+    supportedLngs: ["bg", "ro", "en"],
     interpolation: { escapeValue: false },
     detection: {
       order: ["localStorage", "navigator"],

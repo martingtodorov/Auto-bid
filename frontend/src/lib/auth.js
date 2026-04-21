@@ -41,8 +41,12 @@ export function AuthProvider({ children }) {
     return data.user;
   };
 
-  const register = async (email, password, name) => {
-    const { data } = await api.post("/auth/register", { email, password, name });
+  const register = async (email, password, name, termsAccepted = false) => {
+    const { data } = await api.post("/auth/register", {
+      email, password, name,
+      terms_accepted: !!termsAccepted,
+      terms_version: "v1",
+    });
     localStorage.setItem("autobid_token", data.token);
     setUser(data.user);
     return data.user;

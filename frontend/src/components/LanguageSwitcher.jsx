@@ -4,7 +4,11 @@ import { Globe } from "lucide-react";
 
 export default function LanguageSwitcher({ className = "" }) {
   const { i18n } = useTranslation();
-  const langs = [{ code: "bg", flag: "🇧🇬", label: "BG" }, { code: "ro", flag: "🇷🇴", label: "RO" }];
+  const langs = [
+    { code: "bg", flag: "🇧🇬", label: "BG" },
+    { code: "ro", flag: "🇷🇴", label: "RO" },
+    { code: "en", flag: "🇬🇧", label: "EN" },
+  ];
   const change = (lng) => {
     i18n.changeLanguage(lng);
     try { localStorage.setItem("autobids_lang", lng); } catch (_e) { /* ignore */ }

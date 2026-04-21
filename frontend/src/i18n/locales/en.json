@@ -1,0 +1,136 @@
+{
+  "nav": {
+    "home": "Home",
+    "auctions": "Auctions",
+    "sold": "Sold",
+    "sell": "Sell your car",
+    "about": "About",
+    "login": "Log in",
+    "register": "Sign up",
+    "logout": "Log out",
+    "admin": "Admin",
+    "profile": "Profile",
+    "settings": "Settings",
+    "watchlist": "Watchlist",
+    "my_listings": "My listings",
+    "dashboard": "Dashboard"
+  },
+  "search": {
+    "placeholder": "Search a car…"
+  },
+  "hero": {
+    "discover": "Discover",
+    "exceptional": "exceptional",
+    "cars": "cars.",
+    "subtitle": "autobids.bg is an online car auction platform — every car is carefully curated, documented and presented by our team.",
+    "browse": "Browse auctions",
+    "sell_cta": "Sell your car",
+    "featured_listing": "Featured listing",
+    "current": "Current"
+  },
+  "forms": {
+    "email": "Email",
+    "password": "Password",
+    "name": "Name",
+    "phone": "Phone",
+    "forgot_password": "Forgot password?",
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "save": "Save",
+    "back": "Back",
+    "required": "Required",
+    "confirm": "Confirm",
+    "loading": "Loading…",
+    "sending": "Sending…"
+  },
+  "auth": {
+    "welcome_back": "Welcome back",
+    "login_subtitle": "Log in to bid, comment and follow auctions.",
+    "no_account": "No account yet?",
+    "have_account": "Already have an account?",
+    "new_account": "New account",
+    "join_us": "Join us",
+    "register_subtitle": "Free registration. Start bidding today.",
+    "min_6_chars": "min. 6 characters",
+    "agree_terms_prefix": "I agree with the",
+    "terms_link": "Terms & Conditions",
+    "and": "and",
+    "privacy_link": "Privacy Policy",
+    "terms_required": "Please accept the Terms & Conditions to continue.",
+    "create_account": "Create account",
+    "two_fa_title": "Two-factor authentication",
+    "two_fa_enter_code": "Enter the 6-digit code from your authenticator app.",
+    "two_fa_verify": "Verify"
+  },
+  "auction": {
+    "current_bid": "Current bid",
+    "bids_count": "bids",
+    "time_left": "Left",
+    "reserve_met": "Reserve met",
+    "no_reserve": "No reserve",
+    "place_bid": "Place bid",
+    "watchlist_add": "Add to watchlist",
+    "watchlist_remove": "Remove from watchlist",
+    "views": "views"
+  },
+  "cta": {
+    "view_all": "All",
+    "join_community_overline": "Join the community",
+    "ready_next_deal": "Ready for your next deal?",
+    "register_free": "Sign up for free",
+    "sell_car": "Sell a car",
+    "cta_subtitle": "Create an account and get new listings before anyone else."
+  },
+  "landing": {
+    "active": "Live now",
+    "active_auctions": "Active auctions",
+    "process": "The process",
+    "how_it_works": "How it works",
+    "how_it_works_desc": "Four steps from signing up to handing the keys to the new owner.",
+    "editorial": "Editor's picks",
+    "selected": "Selected listings",
+    "archive": "Archive",
+    "recent_sales": "Recent sales",
+    "all_sales": "All sales",
+    "steps": {
+      "s1_title": "01. Sign up",
+      "s1_desc": "Create a free account in a minute. We verify identity before your first bid.",
+      "s2_title": "02. Research",
+      "s2_desc": "Full photo report, service history, VIN check and independent technical report.",
+      "s3_title": "03. Bid",
+      "s3_desc": "Online, real-time, with anti-snipe — the last 2 minutes extend the auction.",
+      "s4_title": "04. Close",
+      "s4_desc": "Direct contact with the seller, transport, registration and completion help."
+    }
+  },
+  "seller": {
+    "promote_request": "Promotion request",
+    "promote_description": "Ask a moderator to mark the listing as Featured — it will appear on the homepage.",
+    "request_text_change": "Request text change",
+    "text_change_description": "Request a title or description edit — a moderator will review and apply.",
+    "reorder_photos": "Reorder photos",
+    "reorder_description": "Drag photos to change their order. The first photo is the cover.",
+    "already_featured": "Listing is already featured",
+    "pending_request": "Pending request",
+    "request_sent": "Request sent. You'll be notified after moderator decision.",
+    "my_requests": "My requests",
+    "new_title": "New title",
+    "new_description": "New description",
+    "note_for_mod": "Note for moderator (optional)",
+    "save_order": "Save order"
+  },
+  "footer": {
+    "faq": "FAQ",
+    "terms": "Terms & Conditions",
+    "privacy": "Privacy",
+    "fees": "Fees",
+    "how_it_works": "How it works",
+    "contact": "Contact",
+    "copyright": "All rights reserved."
+  },
+  "language": {
+    "bg": "Български",
+    "ro": "Română",
+    "en": "English"
+  }
+}

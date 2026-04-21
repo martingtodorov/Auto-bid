@@ -55,33 +55,34 @@ export default function Nav() {
               type="text"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Търси автомобил…"
+              placeholder={t("search.placeholder")}
               className="w-full border border-[hsl(var(--accent))]/60 hover:border-[hsl(var(--accent))] focus:border-[hsl(var(--accent))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--accent))]/20 h-9 pl-9 pr-3 text-sm bg-[hsl(var(--surface))] transition-colors"
               data-testid="nav-search-input"
             />
           </form>
 
           <div className="hidden md:flex items-center gap-3 lg:gap-4 shrink-0">
+            <LanguageSwitcher className="hidden lg:inline-flex" />
             {user ? (
               <>
-                {user.role === "admin" && (
-                  <Link to="/admin" className="text-sm text-[hsl(var(--accent))] whitespace-nowrap" data-testid="nav-admin">Админ</Link>
+                {(user.role === "admin" || user.role === "moderator") && (
+                  <Link to="/admin" className="text-sm text-[hsl(var(--accent))] whitespace-nowrap" data-testid="nav-admin">{t("nav.admin")}</Link>
                 )}
-                <Link to="/my-listings" className="text-sm whitespace-nowrap hidden xl:inline" data-testid="nav-my-listings">Мои обяви</Link>
-                <Link to="/watchlist" className="text-sm whitespace-nowrap hidden xl:inline" data-testid="nav-watchlist">Любими</Link>
-                <Link to="/settings" className="text-sm whitespace-nowrap hidden xl:inline" data-testid="nav-settings">Настройки</Link>
+                <Link to="/my-listings" className="text-sm whitespace-nowrap hidden xl:inline" data-testid="nav-my-listings">{t("nav.my_listings")}</Link>
+                <Link to="/watchlist" className="text-sm whitespace-nowrap hidden xl:inline" data-testid="nav-watchlist">{t("nav.watchlist")}</Link>
+                <Link to="/settings" className="text-sm whitespace-nowrap hidden xl:inline" data-testid="nav-settings">{t("nav.settings")}</Link>
                 <Link to="/dashboard" className="flex items-center gap-1.5 text-sm whitespace-nowrap" data-testid="nav-dashboard">
                   <User size={16} />
                   <span className="max-w-[110px] truncate">{user.name}</span>
                 </Link>
                 <button onClick={() => { logout(); navigate("/"); }} className="btn btn-secondary !py-2 !px-3 lg:!px-4 whitespace-nowrap" data-testid="nav-logout">
-                  Изход
+                  {t("nav.logout")}
                 </button>
               </>
             ) : (
               <>
-                <Link to="/login" className="text-sm whitespace-nowrap" data-testid="nav-login">Вход</Link>
-                <Link to="/register" className="btn btn-primary !py-2 !px-4" data-testid="nav-register">Регистрация</Link>
+                <Link to="/login" className="text-sm whitespace-nowrap" data-testid="nav-login">{t("nav.login")}</Link>
+                <Link to="/register" className="btn btn-primary !py-2 !px-4" data-testid="nav-register">{t("nav.register")}</Link>
               </>
             )}
           </div>
@@ -101,11 +102,16 @@ export default function Nav() {
                 type="text"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Търси автомобил…"
+                placeholder={t("search.placeholder")}
                 className="w-full border border-[hsl(var(--accent))]/60 focus:border-[hsl(var(--accent))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--accent))]/20 h-10 pl-9 pr-3 text-sm bg-[hsl(var(--surface))]"
                 data-testid="mobile-search-input"
               />
             </form>
+
+            <div className="flex items-center justify-between pb-2">
+              <span className="text-xs text-[hsl(var(--ink-muted))]">Език / Limbă / Language</span>
+              <LanguageSwitcher />
+            </div>
 
             {links.map((l) => (
               <Link key={l.to} to={l.to} onClick={() => setOpen(false)} className="block py-2 text-sm" data-testid={`mobile-nav-${l.to.slice(1)}`}>
@@ -115,27 +121,27 @@ export default function Nav() {
 
             {user && (
               <div className="rule-t pt-3 space-y-2" data-testid="mobile-account-links">
-                {user.role === "admin" && (
+                {(user.role === "admin" || user.role === "moderator") && (
                   <Link to="/admin" onClick={() => setOpen(false)} className="block py-2 text-sm text-[hsl(var(--accent))] font-semibold" data-testid="mobile-nav-admin">
-                    Админ панел
+                    {t("nav.admin")}
                   </Link>
                 )}
                 <Link to="/dashboard" onClick={() => setOpen(false)} className="block py-2 text-sm" data-testid="mobile-nav-dashboard">
                   {user.name}
                 </Link>
-                <Link to="/my-listings" onClick={() => setOpen(false)} className="block py-2 text-sm" data-testid="mobile-nav-my-listings">Мои обяви</Link>
-                <Link to="/watchlist" onClick={() => setOpen(false)} className="block py-2 text-sm" data-testid="mobile-nav-watchlist">Любими</Link>
-                <Link to="/settings" onClick={() => setOpen(false)} className="block py-2 text-sm" data-testid="mobile-nav-settings">Настройки</Link>
+                <Link to="/my-listings" onClick={() => setOpen(false)} className="block py-2 text-sm" data-testid="mobile-nav-my-listings">{t("nav.my_listings")}</Link>
+                <Link to="/watchlist" onClick={() => setOpen(false)} className="block py-2 text-sm" data-testid="mobile-nav-watchlist">{t("nav.watchlist")}</Link>
+                <Link to="/settings" onClick={() => setOpen(false)} className="block py-2 text-sm" data-testid="mobile-nav-settings">{t("nav.settings")}</Link>
               </div>
             )}
 
             <div className="rule-t pt-3 flex gap-3">
               {user ? (
-                <button onClick={() => { logout(); setOpen(false); navigate("/"); }} className="btn btn-secondary flex-1" data-testid="mobile-logout">Изход</button>
+                <button onClick={() => { logout(); setOpen(false); navigate("/"); }} className="btn btn-secondary flex-1" data-testid="mobile-logout">{t("nav.logout")}</button>
               ) : (
                 <>
-                  <Link to="/login" onClick={() => setOpen(false)} className="btn btn-secondary flex-1" data-testid="mobile-login">Вход</Link>
-                  <Link to="/register" onClick={() => setOpen(false)} className="btn btn-primary flex-1" data-testid="mobile-register">Регистрация</Link>
+                  <Link to="/login" onClick={() => setOpen(false)} className="btn btn-secondary flex-1" data-testid="mobile-login">{t("nav.login")}</Link>
+                  <Link to="/register" onClick={() => setOpen(false)} className="btn btn-primary flex-1" data-testid="mobile-register">{t("nav.register")}</Link>
                 </>
               )}
             </div>

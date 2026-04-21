@@ -39,6 +39,12 @@ export default function AdminSettingsTab() {
         og_image_url: data.og_image_url ?? "",
         maintenance_mode: !!data.maintenance_mode,
         maintenance_message: data.maintenance_message ?? "",
+        hero_headline_bg: data.hero_headline_bg ?? "",
+        hero_subtitle_bg: data.hero_subtitle_bg ?? "",
+        hero_headline_ro: data.hero_headline_ro ?? "",
+        hero_subtitle_ro: data.hero_subtitle_ro ?? "",
+        hero_headline_en: data.hero_headline_en ?? "",
+        hero_subtitle_en: data.hero_subtitle_en ?? "",
       });
     } catch (e) { setErr(formatError(e)); }
   };
@@ -63,6 +69,12 @@ export default function AdminSettingsTab() {
         og_image_url: form.og_image_url,
         maintenance_mode: !!form.maintenance_mode,
         maintenance_message: form.maintenance_message,
+        hero_headline_bg: form.hero_headline_bg,
+        hero_subtitle_bg: form.hero_subtitle_bg,
+        hero_headline_ro: form.hero_headline_ro,
+        hero_subtitle_ro: form.hero_subtitle_ro,
+        hero_headline_en: form.hero_headline_en,
+        hero_subtitle_en: form.hero_subtitle_en,
       };
       await api.put("/admin/settings", payload);
       await refreshSettings();
@@ -158,6 +170,53 @@ export default function AdminSettingsTab() {
               data-testid="maintenance-message-input"
             />
           </Field>
+        </div>
+      </section>
+
+      {/* Hero headline CMS — multi-language */}
+      <section className="rounded-card border border-[hsl(var(--line))] bg-white p-6" data-testid="hero-cms-section">
+        <h2 className="font-serif text-2xl">Hero текст на началната страница</h2>
+        <p className="mt-2 text-sm text-[hsl(var(--ink-muted))] max-w-3xl">
+          Редактирайте заглавието и подзаглавието на hero секцията на началната страница, отделно за всеки език. Оставете празно, за да се използва версията по подразбиране от преводите. Използвайте нов ред за пренасяне. Заглавието е в режим rich text — за курсив поставете <code className="text-xs font-mono">&lt;em&gt;…&lt;/em&gt;</code>.
+        </p>
+        <div className="mt-5 space-y-8">
+          {[
+            { code: "bg", flag: "🇧🇬", label: "Български" },
+            { code: "ro", flag: "🇷🇴", label: "Română" },
+            { code: "en", flag: "🇬🇧", label: "English" },
+          ].map(({ code, flag, label }) => (
+            <div key={code} className="rounded-card border border-[hsl(var(--line))] p-4 bg-[hsl(var(--surface))]" data-testid={`hero-lang-${code}`}>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xl" aria-hidden>{flag}</span>
+                <span className="overline text-[hsl(var(--ink))]">{label}</span>
+              </div>
+              <Field label="Заглавие (hero headline)" testid={`hero-headline-${code}`}>
+                <textarea
+                  rows={2}
+                  value={form[`hero_headline_${code}`]}
+                  onChange={(e) => set(`hero_headline_${code}`, e.target.value)}
+                  placeholder={code === "bg"
+                    ? "Открийте <em>изключителни</em>\nавтомобили."
+                    : code === "ro"
+                    ? "Descoperă <em>mașini</em>\nexcepționale."
+                    : "Discover <em>exceptional</em>\ncars."}
+                  maxLength={200}
+                  className="w-full border border-[hsl(var(--line))] p-3 text-sm bg-white"
+                  data-testid={`hero-headline-input-${code}`}
+                />
+              </Field>
+              <Field label="Подзаглавие (subtitle)" testid={`hero-subtitle-${code}`}>
+                <textarea
+                  rows={3}
+                  value={form[`hero_subtitle_${code}`]}
+                  onChange={(e) => set(`hero_subtitle_${code}`, e.target.value)}
+                  maxLength={400}
+                  className="w-full border border-[hsl(var(--line))] p-3 text-sm bg-white"
+                  data-testid={`hero-subtitle-input-${code}`}
+                />
+              </Field>
+            </div>
+          ))}
         </div>
       </section>
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Navigate, Link } from "react-router-dom";
-import { Check, X, Clock, AlertCircle, DollarSign, Archive, Ban, Edit3, Trash2, RotateCcw, Search, List, Users, BarChart3, Trash, RefreshCw, CreditCard, ScrollText, Tag, Pause, Play, Star, StarOff, Copy, XCircle, Gavel } from "lucide-react";
+import { Check, X, Clock, AlertCircle, DollarSign, Archive, Ban, Edit3, Trash2, RotateCcw, Search, List, Users, BarChart3, Trash, RefreshCw, CreditCard, ScrollText, Tag, Pause, Play, Star, StarOff, Copy, XCircle, Gavel, Mail, Inbox, FileEdit } from "lucide-react";
 import { useAuth, formatError } from "../lib/auth";
 import { api, formatEUR, formatKM } from "../lib/apiClient";
 import AdminEditModal from "../components/AdminEditModal";
@@ -11,6 +11,9 @@ import AdminStripeTab from "../components/AdminStripeTab";
 import AdminAuditLogTab from "../components/AdminAuditLogTab";
 import AdminMakesTab from "../components/AdminMakesTab";
 import AdminBidHistoryModal from "../components/AdminBidHistoryModal";
+import AdminNotificationsTab from "../components/AdminNotificationsTab";
+import AdminEmailTemplatesTab from "../components/AdminEmailTemplatesTab";
+import AdminSellerRequestsTab from "../components/AdminSellerRequestsTab";
 
 const STATUS_LABELS = {
   pending: "Очаква",
@@ -222,10 +225,13 @@ export default function AdminPage() {
     { k: "dashboard", label: "Начало", icon: BarChart3 },
     { k: "pending", label: `Очакващи (${pending.length})`, icon: Clock },
     { k: "all", label: `Всички обяви (${allListings.length})`, icon: List },
+    { k: "requests", label: "Заявки", icon: Inbox },
     { k: "users", label: "Потребители", icon: Users },
     { k: "sold", label: `Продадени (${sold.length})`, icon: Archive },
     { k: "makes", label: "Марки", icon: Tag, adminOnly: true },
     { k: "stripe", label: "Stripe", icon: CreditCard, adminOnly: true },
+    { k: "notifications", label: "Известия", icon: Mail },
+    { k: "templates", label: "Имейл шаблони", icon: FileEdit, adminOnly: true },
     { k: "audit", label: "Журнал", icon: ScrollText },
     { k: "settings", label: "Настройки", icon: Edit3, adminOnly: true },
   ].filter((t) => !t.adminOnly || user?.role === "admin");
@@ -461,6 +467,9 @@ export default function AdminPage() {
         {tab === "stripe" && <AdminStripeTab />}
         {tab === "audit" && <AdminAuditLogTab />}
         {tab === "makes" && <AdminMakesTab />}
+        {tab === "notifications" && <AdminNotificationsTab />}
+        {tab === "templates" && <AdminEmailTemplatesTab />}
+        {tab === "requests" && <AdminSellerRequestsTab />}
 
         {tab === "sold" && (
           <div className="mt-10">
