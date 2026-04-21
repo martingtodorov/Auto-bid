@@ -76,25 +76,13 @@ code { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
 }
 .hero-headline em {
     font-style: normal;
-    background: linear-gradient(
-        120deg,
-        hsl(156 72% 32%) 0%,
-        hsl(158 70% 42%) 40%,
-        hsl(160 75% 55%) 75%,
-        hsl(156 72% 32%) 100%
-    );
-    background-size: 200% 100%;
+    background: linear-gradient(135deg, hsl(var(--accent)) 0%, hsl(var(--accent-ink)) 50%, hsl(156 72% 22%) 100%);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
     font-weight: 800;
     letter-spacing: -0.03em;
-    filter: drop-shadow(0 2px 12px hsl(var(--accent) / 0.25));
-    animation: heroShimmer 6s ease-in-out infinite;
-}
-@keyframes heroShimmer {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
+    filter: drop-shadow(0 4px 16px hsl(var(--accent) / 0.35));
 }
 
 /* Buttons */

@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Calendar, Gauge, Fuel, Settings, MapPin, Palette, Zap, Cog, MessageCircle, Heart, ArrowLeft, Shield, Wifi, Share2 } from "lucide-react";
-import { api, API_BASE, formatEUR, formatBGN, formatKM, timeLeft } from "../lib/apiClient";
+import { useTranslation } from "react-i18next";
+import { api, API_BASE, formatEUR, formatLocal, formatKM, timeLeft } from "../lib/apiClient";
 import { useAuth, formatError } from "../lib/auth";
 import PreauthModal from "../components/PreauthModal";
 import BiddingCreditModal from "../components/BiddingCreditModal";
@@ -14,6 +15,7 @@ import { setPageMeta, resetPageMeta, buildVehicleJsonLd, buildBreadcrumbs, combi
 export default function AuctionDetailPage() {
   const { id } = useParams();
   const { user } = useAuth();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [a, setA] = useState(null);
   const [bids, setBids] = useState([]);
@@ -22,7 +24,7 @@ export default function AuctionDetailPage() {
   const [lightboxIdx, setLightboxIdx] = useState(null);
   const [bidAmount, setBidAmount] = useState("");
   const [commentText, setCommentText] = useState("");
-  const [t, setT] = useState({ label: "" });
+  const [tl, setTl] = useState({ label: "" });
   const [error, setError] = useState("");
   const [placing, setPlacing] = useState(false);
   const [showPreauth, setShowPreauth] = useState(false);
@@ -192,9 +194,9 @@ export default function AuctionDetailPage() {
 
   useEffect(() => {
     if (!a) return;
-    setT(timeLeft(a.ends_at));
+    setTl(timeLeft(a.ends_at));
     if (a.status === "sold" || a.status === "ended") return;
-    const i = setInterval(() => setT(timeLeft(a.ends_at)), 1000);
+    const i = setInterval(() => setTl(timeLeft(a.ends_at)), 1000);
     return () => clearInterval(i);
   }, [a]);
 
@@ -258,7 +260,7 @@ export default function AuctionDetailPage() {
 
   if (notFound) return (
     <main className="py-24 text-center" data-testid="auction-not-found">
-      <h1 className="font-serif text-4xl">Търгът не е намерен</h1>
+      <h1 className="font-serif text-4xl">{t("auction.not_found")}</h1>
       <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">Обявата може да е оттеглена или archiveирана.</p>
       <Link to="/auctions" className="btn btn-primary mt-8 inline-flex">Към всички търгове</Link>
     </main>
@@ -268,8 +270,8 @@ export default function AuctionDetailPage() {
   const specs = [
     { i: Calendar, l: "Година", v: a.year },
     { i: Gauge, l: "Пробег", v: formatKM(a.mileage_km) },
-    { i: Fuel, l: "Гориво", v: a.fuel },
-    { i: Settings, l: "Скорости", v: a.transmission },
+    { i: Fuel, l: t("auction.fuel_label"), v: a.fuel },
+    { i: Settings, l: t("auction.transmission_label"), v: a.transmission },
     { i: Cog, l: "Двигател", v: `${a.engine_cc} см³` },
     { i: Zap, l: "Мощност", v: `${a.power_hp} к.с.` },
     { i: Palette, l: "Цвят", v: a.color },
@@ -339,7 +341,7 @@ export default function AuctionDetailPage() {
             )}
 
             <div className="mt-10">
-              <div className="overline text-[hsl(var(--ink-muted))]">Спецификации</div>
+              <div className="overline text-[hsl(var(--ink-muted))]">{t("auction.specs_overline")}</div>
               <div className="mt-4 rounded-card border border-[hsl(var(--line))] grid grid-cols-2 md:grid-cols-4 overflow-hidden">
                 {specs.map((s, i) => (
                   <div key={i} className="p-5 border-r border-b border-[hsl(var(--line))] last:border-r-0 [&:nth-child(4n)]:border-r-0 [&:nth-last-child(-n+4)]:border-b-0">
@@ -387,7 +389,7 @@ export default function AuctionDetailPage() {
             </div>
 
             <div className="mt-10">
-              <div className="overline text-[hsl(var(--ink-muted))]">Описание от редакцията</div>
+              <div className="overline text-[hsl(var(--ink-muted))]">{t("auction.editorial_description")}</div>
               <DescriptionWithInteriorShots description={a.description} interiorImages={a.images_interior || []} />
             </div>
 
@@ -396,8 +398,8 @@ export default function AuctionDetailPage() {
             )}
 
             <div className="mt-14">
-              <div className="overline text-[hsl(var(--accent))]">История на търга</div>
-              <h2 className="font-serif text-2xl lg:text-3xl mt-2">Наддавания ({bids.length})</h2>
+              <div className="overline text-[hsl(var(--accent))]">{t("auction.bids_history_overline")}</div>
+              <h2 className="font-serif text-2xl lg:text-3xl mt-2">{t("auction.bids_history_title")} ({bids.length})</h2>
               <div className="mt-6 rounded-card border border-[hsl(var(--line))] overflow-hidden">
                 {bids.length === 0 ? (
                   <p className="p-6 text-sm text-[hsl(var(--ink-muted))]">Все още няма наддавания. Бъдете първи.</p>
@@ -423,9 +425,9 @@ export default function AuctionDetailPage() {
             </div>
 
             <div className="mt-14">
-              <div className="overline text-[hsl(var(--accent))]">Общност</div>
+              <div className="overline text-[hsl(var(--accent))]">{t("auction.comments_overline")}</div>
               <h2 className="font-serif text-2xl lg:text-3xl mt-2 flex items-center gap-3">
-                <MessageCircle size={22} /> Коментари ({comments.length})
+                <MessageCircle size={22} /> {t("auction.comments_title")} ({comments.length})
               </h2>
               <div className="mt-5 rounded-card border border-[hsl(var(--line))] p-4">
                 <textarea
@@ -483,9 +485,9 @@ export default function AuctionDetailPage() {
               <div className="rounded-card border border-[hsl(var(--line))] p-6 bg-white" data-testid="bid-section">
                 {hasPendingCounterForMe && (
                   <div className="mb-5 rounded-card bg-[hsl(var(--accent-soft))] border border-[hsl(var(--accent))]/30 p-4" data-testid="counter-banner">
-                    <div className="overline text-[hsl(var(--accent))]">Контраоферта от продавача</div>
+                    <div className="overline text-[hsl(var(--accent))]">{t("auction.counter_offer_overline")}</div>
                     <div className="font-serif text-3xl mt-2">{formatEUR(a.counter_offer_eur)}</div>
-                    <p className="mt-2 text-xs text-[hsl(var(--ink-muted))]">Резервът не бе достигнат. Продавачът предлага тази цена директно на вас.</p>
+                    <p className="mt-2 text-xs text-[hsl(var(--ink-muted))]">{t("auction.counter_offer_text")}</p>
                     <div className="mt-3 flex gap-2">
                       <button onClick={() => respondCounter(true)} className="btn btn-accent !py-2 !px-4 text-xs flex-1" data-testid="counter-accept">Приеми</button>
                       <button onClick={() => respondCounter(false)} className="btn btn-secondary !py-2 !px-4 text-xs flex-1" data-testid="counter-decline">Откажи</button>
@@ -496,37 +498,37 @@ export default function AuctionDetailPage() {
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   {a.status === "sold" ? <span className="pill pill-sold">Продаден</span>
                     : a.status === "ended" ? <span className="pill pill-sold">Приключил</span>
-                    : t.urgent ? <span className="pill pill-ending">{t.label}</span>
-                    : <span className="pill pill-live">{t.label}</span>}
+                    : tl.urgent ? <span className="pill pill-ending">{tl.label}</span>
+                    : <span className="pill pill-live">{tl.label}</span>}
                   {a.has_reserve && <span className="pill" data-testid="with-reserve">С резерв</span>}
                   {a.has_reserve === false && <span className="pill" data-testid="no-reserve">Без резерв</span>}
-                  <span className="overline text-[hsl(var(--ink-muted))] ml-auto">{a.bid_count || 0} наддавания</span>
+                  <span className="overline text-[hsl(var(--ink-muted))] ml-auto">{a.bid_count || 0} {t("auction.bids_word")}</span>
                 </div>
 
                 <div className="mt-6">
-                  <div className="overline text-[hsl(var(--ink-muted))]">{a.status === "sold" ? "Продаден за" : "Текуща наддавка"}</div>
+                  <div className="overline text-[hsl(var(--ink-muted))]">{a.status === "sold" ? t("auction.sold_for") : t("auction.current_bid_label")}</div>
                   <div className="font-serif text-5xl mt-2" data-testid="current-bid">{formatEUR(a.current_bid_eur)}</div>
-                  <div className="text-sm text-[hsl(var(--ink-muted))] font-mono mt-1">{formatBGN(a.current_bid_eur)}</div>
+                  <div className="text-sm text-[hsl(var(--ink-muted))] font-mono mt-1">{formatLocal(a.current_bid_eur, i18n.language)}</div>
                   {a.high_bidder_name && (
                     <div className="mt-2 text-xs text-[hsl(var(--ink-muted))]">Водещ: <span className="text-[hsl(var(--ink))]">{a.high_bidder_name}</span></div>
                   )}
                   {a.has_reserve && a.status === "reserve_not_met" && (
                     <div className="mt-3 text-xs text-[hsl(var(--ink-muted))] flex items-center gap-1.5" data-testid="reserve-not-met">
                       <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--ink-muted))]"></span>
-                      Резервната цена не е достигната
+                      {t("auction.reserve_not_met")}
                     </div>
                   )}
                   {a.has_reserve && a.reserve_met === true && (a.status === "sold" || a.status === "ended") && (
                     <div className="mt-3 text-xs text-[hsl(var(--accent))] flex items-center gap-1.5" data-testid="reserve-reached">
                       <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--accent))]"></span>
-                      Резервната цена е достигната
+                      {t("auction.reserve_met_long")}
                     </div>
                   )}
                 </div>
 
                 {isLive && (
                   <div className="mt-6 rule-t pt-5">
-                    <label className="overline text-[hsl(var(--ink-muted))] block mb-2">Вашата наддавка (EUR)</label>
+                    <label className="overline text-[hsl(var(--ink-muted))] block mb-2">{t("auction.your_bid_eur")}</label>
                     <div className="flex gap-2">
                       <input
                         type="number"
@@ -538,7 +540,7 @@ export default function AuctionDetailPage() {
                         data-testid="bid-amount-input"
                       />
                       <button onClick={startBid} disabled={placing} className="btn btn-accent !px-6" data-testid="place-bid-button">
-                        {placing ? "…" : "Наддай"}
+                        {placing ? "…" : t("auction.place_bid")}
                       </button>
                     </div>
                     <p className="text-xs text-[hsl(var(--ink-muted))] mt-2">Минимум €{nextBid.min_next_eur?.toLocaleString("bg-BG")} · стъпка €{nextBid.step_eur?.toLocaleString("bg-BG")}</p>
@@ -567,7 +569,7 @@ export default function AuctionDetailPage() {
                         <div className="flex items-center gap-2 text-xs">
                           <Zap size={13} className="text-[hsl(var(--accent))] shrink-0" />
                           <div>
-                            <div className="font-semibold text-[hsl(var(--accent-ink))]">Наддавай без нови транзакции</div>
+                            <div className="font-semibold text-[hsl(var(--accent-ink))]">{t("auction.bid_no_new_tx")}</div>
                             <div className="text-[hsl(var(--ink-muted))] mt-0.5">Преавторизирай се за по-голяма сума →</div>
                           </div>
                         </div>
@@ -579,13 +581,13 @@ export default function AuctionDetailPage() {
                 )}
 
                 <button onClick={toggleWatch} className={`mt-5 w-full btn flex items-center justify-center gap-2 ${watching ? "btn-primary" : "btn-secondary"}`} data-testid="watch-button">
-                  <Heart size={14} className={watching ? "fill-current" : ""} /> {watching ? "В любими" : "Добави в любими"}
+                  <Heart size={14} className={watching ? "fill-current" : ""} /> {watching ? t("auction.watchlist_remove") : t("auction.watchlist_add")}
                 </button>
                 <ShareButton auctionId={id} title={a?.title} />
               </div>
 
               <div className="rounded-card border border-[hsl(var(--line))] p-6 bg-[hsl(var(--surface))]">
-                <div className="overline text-[hsl(var(--ink-muted))]">Продавач</div>
+                <div className="overline text-[hsl(var(--ink-muted))]">{t("auction.seller")}</div>
                 {a.seller_id && a.seller_id !== "platform" ? (
                   <Link to={`/profile/${a.seller_id}`} className="font-serif text-xl mt-2 block hover:text-[hsl(var(--accent))]" data-testid="seller-link">{a.seller_name}</Link>
                 ) : (

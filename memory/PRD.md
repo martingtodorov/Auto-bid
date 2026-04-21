@@ -254,6 +254,30 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
   - LandingPage + Nav + RegisterPage изцяло преведени
 - **Testing**: `iteration_8.json` — Backend 28/31 passed (2 skipped fixture-related, 1 minor `/health` 404), Frontend 100% critical flows. 0 critical, 0 action items.
 
+### Apr 2026 (продължение 2) — Multi-currency, domain-based i18n, page translations
+- **Domain-based language auto-detect**: Нов custom detector в `/app/frontend/src/i18n/index.js` чете hostname и пренасочва към правилния език при първо посещение:
+  - `autobids.bg` (или `REACT_APP_DOMAIN_BG`) → `bg`
+  - `autobids.ro` (или `REACT_APP_DOMAIN_RO`) → `ro`
+  - `autobids.com` (или `REACT_APP_DOMAIN_EN`) → `en`
+  - Работи с `endsWith` така че staging/preview subdomains автоматично наследяват езика
+  - Ръчният избор чрез `LanguageSwitcher` се пази в `localStorage.autobids_lang` и има приоритет
+  - Redirect order: `localStorage` > `domain` > `navigator` > fallback bg
+- **Multi-currency display (BGN / RON / none for EN)**:
+  - Нова `formatLocal(value, lng)` функция в `apiClient.js` — връща `лв.` за bg, `lei` (RON_RATE=4.97) за ro, празно за en
+  - `formatRON` exported за директна употреба
+  - Call sites обновени: `AuctionCard`, `LandingPage` hero featured, `AuctionDetailPage` price column
+  - BG потребители виждат EUR + лв., RO виждат EUR + lei, EN само EUR
+- **Page translations (BG/RO/EN)**:
+  - `LoginPage.jsx` — напълно преведена (welcome, 2FA challenge, password reset link, submit)
+  - `SellPage.jsx` — hero, sub-heading, mobile.bg import box, submit/preview бутони, success screen, основни error messages
+  - `AuctionDetailPage.jsx` — specs overline, "Oferte/Bids" history, comments title, current bid / sold for label, your bid label, reserve met/not met, seller, counter-offer banner, place-bid button, watchlist toggle, transmission/fuel labels
+  - Нова `sell.*` namespace в трите locales; `auth.*` разширен; `auction.*` разширен с 14+ ключа
+- **Hero gradient — unified with `btn-sell-gradient`**:
+  - `.hero-headline em` използва същия 3-стопов зелен linear-gradient (accent → accent-ink → dark green hsl(156 72% 22%))
+  - Премахнат shimmer animation — по-елегантен, статичен look
+  - Enhanced drop-shadow за дълбочина
+- **Fix**: duplicate `t` identifier в `AuctionDetailPage` — преименуван `[t, setT]` timer state на `[tl, setTl]`
+
 ## 3rd-party integrations status
 - Resend: Configured via env (RESEND_API_KEY), fallback console log
 - Twilio: Configured via env (TWILIO_*), fallback console log

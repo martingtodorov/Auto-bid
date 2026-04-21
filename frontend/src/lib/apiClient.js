@@ -18,10 +18,31 @@ export function formatEUR(value) {
   return new Intl.NumberFormat("bg-BG", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value);
 }
 
+/** BGN (лв.) — fixed peg 1 EUR = 1.95583 BGN */
 export function formatBGN(value) {
   if (value == null) return "—";
   const bgn = Number(value) * 1.95583;
   return new Intl.NumberFormat("bg-BG", { maximumFractionDigits: 0 }).format(bgn) + " лв.";
+}
+
+/** RON (lei) — approximate EUR→RON rate; adjust `RON_RATE` if BNR snapshot is preferred. */
+const RON_RATE = 4.97;
+export function formatRON(value) {
+  if (value == null) return "—";
+  const ron = Number(value) * RON_RATE;
+  return new Intl.NumberFormat("ro-RO", { maximumFractionDigits: 0 }).format(ron) + " lei";
+}
+
+/**
+ * Secondary local-currency formatter that picks BGN / RON / (none for EN)
+ * based on the current i18n language.  Returns an empty string for English
+ * (EUR already shown by formatEUR — no secondary needed).
+ */
+export function formatLocal(value, lng) {
+  const code = (lng || "bg").slice(0, 2);
+  if (code === "ro") return formatRON(value);
+  if (code === "en") return ""; // EN users don't need a secondary currency
+  return formatBGN(value);
 }
 
 export function formatKM(value) {

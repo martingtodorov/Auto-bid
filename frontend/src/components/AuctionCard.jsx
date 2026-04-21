@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { MapPin, Gauge, Fuel, Calendar, Users, Shield } from "lucide-react";
-import { formatEUR, formatBGN, formatKM, timeLeft } from "../lib/apiClient";
+import { useTranslation } from "react-i18next";
+import { formatEUR, formatLocal, formatKM, timeLeft } from "../lib/apiClient";
 
 export default function AuctionCard({ auction, compact = false }) {
+  const { i18n } = useTranslation();
   const [t, setT] = useState(() => timeLeft(auction.ends_at));
 
   useEffect(() => {
@@ -66,7 +68,7 @@ export default function AuctionCard({ auction, compact = false }) {
             <div className="font-serif text-2xl mt-1" data-testid={`auction-price-${auction.id}`}>
               {formatEUR(auction.current_bid_eur)}
             </div>
-            <div className="text-xs text-[hsl(var(--ink-muted))] font-mono">{formatBGN(auction.current_bid_eur)}</div>
+            <div className="text-xs text-[hsl(var(--ink-muted))] font-mono">{formatLocal(auction.current_bid_eur, i18n.language)}</div>
           </div>
           <div className="text-right">
             <div className="overline text-[hsl(var(--ink-muted))]">Наддавания</div>

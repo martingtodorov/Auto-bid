@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, Shield, Gavel, FileCheck, Sparkles } from "lucide-react";
-import { api, formatEUR, formatBGN } from "../lib/apiClient";
+import { api, formatEUR, formatLocal } from "../lib/apiClient";
 import AuctionCard from "../components/AuctionCard";
 import { setPageMeta, resetPageMeta } from "../lib/seo";
 import { useSiteSettings } from "../lib/settings";
@@ -100,7 +100,7 @@ export default function LandingPage() {
                     <div className="text-right shrink-0">
                       <div className="overline text-[hsl(var(--ink-muted))]">{t("hero.current")}</div>
                       <div className="font-serif text-xl lg:text-2xl">{formatEUR(hero.current_bid_eur)}</div>
-                      <div className="text-xs font-mono text-[hsl(var(--ink-muted))]">{formatBGN(hero.current_bid_eur)}</div>
+                      <div className="text-xs font-mono text-[hsl(var(--ink-muted))]">{formatLocal(hero.current_bid_eur, i18n.language)}</div>
                     </div>
                   </div>
                 </Link>

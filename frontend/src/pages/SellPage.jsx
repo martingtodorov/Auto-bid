@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth, formatError } from "../lib/auth";
 import { api } from "../lib/apiClient";
 import ImageUploader from "../components/ImageUploader";
@@ -54,6 +55,7 @@ const IMG_CATEGORIES = [
 ];
 
 export default function SellPage() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState(() => emptyForm(user));
@@ -109,13 +111,13 @@ export default function SellPage() {
       const bp = form.images_bumper || [];
       const intr = form.images_interior || [];
       if (!form.contact_email || !form.contact_phone) {
-        setErr("Моля, попълнете имейл и телефон за контакт.");
+        setErr(t("sell.err_contacts"));
         setLoading(false);
         return;
       }
       const phoneDigits = (form.contact_phone || "").replace(/[^\d]/g, "");
       if (phoneDigits.length < 7) {
-        setErr("Моля, въведете валиден телефонен номер.");
+        setErr(t("sell.err_phone"));
         setLoading(false);
         return;
       }
@@ -194,12 +196,10 @@ export default function SellPage() {
     return (
       <main className="py-24 text-center" data-testid="sell-success">
         <div className="max-w-lg mx-auto px-6">
-          <div className="overline text-[hsl(var(--accent))]">Готово</div>
-          <h1 className="font-serif text-4xl mt-3">Заявката е подадена</h1>
-          <p className="mt-5 text-[hsl(var(--ink-muted))]">
-            Нашият редакционен екип ще прегледа автомобила и ще се свърже с вас в рамките на 48 часа.
-          </p>
-          <button onClick={() => navigate("/")} className="btn btn-primary mt-8">Към началото</button>
+          <div className="overline text-[hsl(var(--accent))]">{t("sell.success_overline")}</div>
+          <h1 className="font-serif text-4xl mt-3">{t("sell.success_title")}</h1>
+          <p className="mt-5 text-[hsl(var(--ink-muted))]">{t("sell.success_body")}</p>
+          <button onClick={() => navigate("/")} className="btn btn-primary mt-8" data-testid="sell-success-home">{t("sell.success_home")}</button>
         </div>
       </main>
     );
@@ -209,20 +209,20 @@ export default function SellPage() {
     <main data-testid="sell-page">
       <section className="rule-b">
         <div className="max-w-[1100px] mx-auto px-4 sm:px-6 lg:px-10 py-16">
-          <div className="overline text-[hsl(var(--accent))]">Продай автомобил</div>
+          <div className="overline text-[hsl(var(--accent))]">{t("sell.overline")}</div>
           <div className="flex items-start justify-between gap-4 flex-wrap mt-3">
-            <h1 className="font-serif text-4xl lg:text-5xl tracking-tight">Подайте своя автомобил за търг</h1>
+            <h1 className="font-serif text-4xl lg:text-5xl tracking-tight" data-testid="sell-hero-title">{t("sell.hero_title")}</h1>
           </div>
           <p className="mt-4 text-[hsl(var(--ink-muted))] max-w-2xl leading-relaxed">
-            Попълнете подробностите по-долу. Нашият екип ще прегледа заявката, ще направи редакторски материал и ще стартира търга в рамките на 10 дни.
+            {t("sell.hero_subtitle")}
           </p>
 
           <div className="mt-10 rounded-card border border-[hsl(var(--accent))]/30 bg-[hsl(var(--accent-soft))] p-5" data-testid="mobile-bg-import">
             <div>
-              <div className="overline text-[hsl(var(--accent))]">Бърз импорт от mobile.bg</div>
-              <h3 className="font-serif text-xl mt-1.5">Имате обява в mobile.bg?</h3>
+              <div className="overline text-[hsl(var(--accent))]">{t("sell.import_overline")}</div>
+              <h3 className="font-serif text-xl mt-1.5">{t("sell.import_title")}</h3>
               <p className="text-sm text-[hsl(var(--ink))]/80 mt-1.5">
-                Ще заредим автоматично марка, модел, година, пробег, гориво, цвят, описание и снимки. <strong>Цената и резервът задавате сами.</strong>
+                {t("sell.import_description")}
               </p>
             </div>
 
@@ -242,7 +242,7 @@ export default function SellPage() {
                 className="btn btn-accent !py-2 !px-5 shrink-0"
                 data-testid="import-url-btn"
               >
-                {importing ? "Импортиране…" : "Импортирай данните"}
+                {importing ? t("sell.import_loading") : t("sell.import_cta")}
               </button>
             </div>
             {importMsg && <p className="mt-3 text-xs text-[hsl(var(--accent-ink))] font-semibold" data-testid="import-success">{importMsg}</p>}
@@ -421,7 +421,7 @@ export default function SellPage() {
                 className="btn btn-primary w-full sm:w-auto !h-14 sm:!h-auto !text-base sm:!text-sm !px-8 sm:!px-6 font-semibold shadow-lg sm:shadow-none"
                 data-testid="sell-submit"
               >
-                {loading ? "Изпращане…" : "Подай за одобрение"}
+                {loading ? t("sell.submit_loading") : t("sell.submit_cta")}
               </button>
               <button
                 type="button"
@@ -430,7 +430,7 @@ export default function SellPage() {
                 className="btn btn-secondary w-full sm:w-auto !h-14 sm:!h-auto !text-base sm:!text-sm !px-8 sm:!px-6"
                 data-testid="sell-preview-btn"
               >
-                Преглед
+                {t("sell.preview_cta")}
               </button>
               <p className="text-xs text-[hsl(var(--ink-muted))]">След одобрение нашият екип ще направи професионален фото отчет.</p>
             </div>
