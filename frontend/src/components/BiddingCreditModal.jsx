@@ -1,23 +1,62 @@
 import React, { useState, useEffect } from "react";
+import { useTranslation, Trans } from "react-i18next";
 import { X, Shield, Zap, CreditCard, TrendingUp } from "lucide-react";
 import { api, formatEUR } from "../lib/apiClient";
 import { formatError } from "../lib/auth";
+import { useSiteSettings, computeBuyerFee } from "../lib/settings";
 
 export default function BiddingCreditModal({ auctionId, currentBid, currentCredit, onClose, onSaved }) {
-  const [amount, setAmount] = useState(currentCredit?.max_amount_eur || Math.max(Math.ceil((currentBid + 10000) / 1000) * 1000, 10000));
+  const { t } = useTranslation();
+  const settings = useSiteSettings();
+
+  // Fetch the server-computed next minimum bid (respects variable step schedule)
+  const [nextMin, setNextMin] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    api.get(`/auctions/${auctionId}/next-bid`)
+      .then((r) => { if (!cancelled) setNextMin(Number(r.data?.min_next_eur || 0)); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [auctionId]);
+
+  // Minimum allowed credit: must cover at least the next valid bid, and when
+  // increasing an existing credit must exceed the current max.
+  const baseMin = nextMin != null ? nextMin : (currentBid || 0);
+  const minAllowed = currentCredit
+    ? Math.max(Math.floor(currentCredit.max_amount_eur) + 1, Math.ceil(baseMin))
+    : Math.ceil(baseMin);
+
+  const [amount, setAmount] = useState(() => {
+    const seed = currentCredit?.max_amount_eur || Math.max(minAllowed + 5000, 10000);
+    return Math.max(seed, minAllowed);
+  });
+  // If the server returns a higher min later, bump the input up automatically
+  useEffect(() => {
+    setAmount((prev) => (Number(prev) < minAllowed ? minAllowed : prev));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minAllowed]);
+
   const [cardNumber, setCardNumber] = useState(currentCredit?.card_last4 ? `4242 4242 4242 ${currentCredit.card_last4}` : "4242 4242 4242 4242");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [releasing, setReleasing] = useState(false);
 
-  const preauthAmount = Math.max(0, Math.round(amount * 0.02 * 100) / 100);
-  const minAllowed = currentCredit ? Math.floor(currentCredit.max_amount_eur) + 1 : currentBid + 100;
+  // Buyer's fee honoring the global min/max bounds (€150 / €4000 by default)
+  const preauthAmount = computeBuyerFee(amount, settings);
+  const pct = Number(settings?.buyer_fee_pct ?? 2);
+  const feeMin = Number(settings?.buyer_fee_min_eur ?? 150);
+  const feeMax = Number(settings?.buyer_fee_max_eur ?? 4000);
 
   const submit = async () => {
     setErr(""); setBusy(true);
     try {
+      if (Number(amount) < minAllowed) {
+        setErr(t("credit.err_below_min", { min: formatEUR(minAllowed) }));
+        setBusy(false);
+        return;
+      }
       const pmId = cardNumber.replace(/\s/g, "").trim();
-      if (pmId.length < 4) { setErr("Моля, въведете валиден номер на карта"); setBusy(false); return; }
+      if (pmId.length < 4) { setErr(t("credit.err_invalid_card")); setBusy(false); return; }
       const { data } = await api.post(`/auctions/${auctionId}/bidding-credit`, {
         max_amount_eur: Number(amount),
         payment_method_id: pmId,
@@ -30,7 +69,7 @@ export default function BiddingCreditModal({ auctionId, currentBid, currentCredi
   };
 
   const release = async () => {
-    if (!window.confirm("Сигурни ли сте, че искате да освободите кредита? Ще трябва да се преавторизирате отново за следващи наддавания.")) return;
+    if (!window.confirm(t("credit.release_confirm"))) return;
     setErr(""); setReleasing(true);
     try {
       await api.delete(`/auctions/${auctionId}/bidding-credit`);
@@ -48,7 +87,7 @@ export default function BiddingCreditModal({ auctionId, currentBid, currentCredi
             <div className="w-9 h-9 rounded-full bg-[hsl(var(--accent-soft))] flex items-center justify-center text-[hsl(var(--accent))]">
               <Zap size={16} />
             </div>
-            <h2 className="font-serif text-2xl">{currentCredit ? "Увеличи кредита" : "Наддавателен кредит"}</h2>
+            <h2 className="font-serif text-2xl">{currentCredit ? t("credit.title_increase") : t("credit.title_new")}</h2>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-[hsl(var(--surface))] rounded-full"><X size={18} /></button>
         </div>
@@ -58,9 +97,13 @@ export default function BiddingCreditModal({ auctionId, currentBid, currentCredi
             <div className="flex items-start gap-2.5">
               <Shield size={16} className="text-[hsl(var(--accent))] shrink-0 mt-0.5" />
               <div>
-                <p className="font-semibold text-[hsl(var(--accent-ink))] mb-1">Как работи?</p>
+                <p className="font-semibold text-[hsl(var(--accent-ink))] mb-1">{t("credit.how_it_works")}</p>
                 <p className="text-[hsl(var(--ink))]/80">
-                  Избирате <strong>максимална сума</strong>, до която сте готови да наддавате. Блокираме <strong>2% от тази сума</strong> на картата. След това можете да наддавате свободно до този лимит <strong>без нови картови транзакции</strong>. Ако бъдете надиграни — сумата се освобождава изцяло.
+                  <Trans
+                    i18nKey="credit.how_it_works_body"
+                    values={{ pct, min: feeMin, max: feeMax }}
+                    components={[<strong key="b" />]}
+                  />
                 </p>
               </div>
             </div>
@@ -70,11 +113,11 @@ export default function BiddingCreditModal({ auctionId, currentBid, currentCredi
             <div className="rounded-card border border-[hsl(var(--line))] p-4 bg-[hsl(var(--surface))]">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="overline text-[hsl(var(--ink-muted))]">Активен кредит</div>
+                  <div className="overline text-[hsl(var(--ink-muted))]">{t("credit.active_credit")}</div>
                   <div className="font-serif text-2xl mt-1">{formatEUR(currentCredit.max_amount_eur)}</div>
                 </div>
                 <div className="text-right">
-                  <div className="overline text-[hsl(var(--ink-muted))]">Блокирани</div>
+                  <div className="overline text-[hsl(var(--ink-muted))]">{t("credit.blocked")}</div>
                   <div className="font-mono text-lg mt-1">{formatEUR(currentCredit.preauth_amount_eur)}</div>
                 </div>
               </div>
@@ -83,7 +126,7 @@ export default function BiddingCreditModal({ auctionId, currentBid, currentCredi
 
           <div>
             <label className="overline text-[hsl(var(--ink-muted))] block mb-2">
-              {currentCredit ? "Нов максимум (трябва да е по-висок)" : "Максимум до колкото ще наддавате"}
+              {currentCredit ? t("credit.label_increase") : t("credit.label_new")}
             </label>
             <div className="relative">
               <input
@@ -91,33 +134,33 @@ export default function BiddingCreditModal({ auctionId, currentBid, currentCredi
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 min={minAllowed}
-                step={1000}
+                step={500}
                 className="w-full border border-[hsl(var(--line))] h-14 px-4 text-2xl font-serif pr-12"
                 data-testid="credit-amount-input"
               />
               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xl text-[hsl(var(--ink-muted))]">€</span>
             </div>
             <p className="mt-1.5 text-xs text-[hsl(var(--ink-muted))]">
-              Текуща водеща оферта: {formatEUR(currentBid)} · Минимум: {formatEUR(minAllowed)}
+              {t("credit.current_leading", { bid: formatEUR(currentBid), min: formatEUR(minAllowed) })}
             </p>
           </div>
 
           <div className="rounded-card border border-[hsl(var(--line))] p-4 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-sm text-[hsl(var(--ink-muted))] flex items-center gap-1.5">
-                <TrendingUp size={13} /> Pre-authorization (2%)
+                <TrendingUp size={13} /> {t("credit.preauth_label")}
               </span>
               <span className="font-serif text-xl">{formatEUR(preauthAmount)}</span>
             </div>
             <p className="text-xs text-[hsl(var(--ink-muted))]">
-              Блокира се сега на картата ви. Удържа се само ако спечелите търга.
+              {t("credit.preauth_hint")}
             </p>
           </div>
 
           {!currentCredit && (
             <div>
-              <label className="overline text-[hsl(var(--ink-muted))] block mb-2 flex items-center gap-1.5">
-                <CreditCard size={11} /> Номер на карта
+              <label className="overline text-[hsl(var(--ink-muted))] mb-2 flex items-center gap-1.5">
+                <CreditCard size={11} /> {t("credit.card_number")}
               </label>
               <input
                 type="text"
@@ -128,7 +171,7 @@ export default function BiddingCreditModal({ auctionId, currentBid, currentCredi
                 data-testid="credit-card-input"
               />
               <p className="mt-1.5 text-xs text-[hsl(var(--ink-muted))]">
-                Тестов режим · използвайте 4242 4242 4242 4242
+                {t("credit.test_mode")}
               </p>
             </div>
           )}
@@ -138,13 +181,13 @@ export default function BiddingCreditModal({ auctionId, currentBid, currentCredi
           <div className="flex items-center gap-2 pt-2">
             {currentCredit && (
               <button onClick={release} disabled={releasing || busy} className="btn btn-secondary !py-2.5 !px-4 text-sm !text-[hsl(var(--danger))] !border-[hsl(var(--danger))]/30" data-testid="credit-release">
-                {releasing ? "Освобождавам…" : "Освободи кредита"}
+                {releasing ? t("credit.releasing") : t("credit.release_cta")}
               </button>
             )}
             <div className="flex-1" />
-            <button onClick={onClose} disabled={busy || releasing} className="btn btn-secondary">Отказ</button>
+            <button onClick={onClose} disabled={busy || releasing} className="btn btn-secondary">{t("credit.cancel")}</button>
             <button onClick={submit} disabled={busy || releasing} className="btn btn-accent flex items-center gap-2" data-testid="credit-submit">
-              <Zap size={14} /> {busy ? "Обработка…" : currentCredit ? "Увеличи" : "Блокирай 2%"}
+              <Zap size={14} /> {busy ? t("credit.processing") : currentCredit ? t("credit.increase_cta") : t("credit.block_cta", { amount: formatEUR(preauthAmount) })}
             </button>
           </div>
         </div>
