@@ -143,6 +143,21 @@
     "colour": "Culoare",
     "location": "Locație"
   },
+  "time": {
+    "ended": "Încheiat",
+    "days_hours": "{{d}}z {{h}}h",
+    "hours_minutes": "{{h}}h {{m}}m",
+    "minutes_seconds": "{{m}}m {{s}}s",
+    "live": "Live",
+    "bids_short": "oferte"
+  },
+  "cookies": {
+    "title": "Folosim cookie-uri",
+    "body": "autobids.bg folosește doar cookie-uri strict necesare pentru sesiune și securitate. Nu folosim trackere terțe fără consimțământul tău. Citește",
+    "privacy_link": "politica noastră de confidențialitate",
+    "accept": "Accept",
+    "reject": "Refuză"
+  },
   "cta": {
     "view_all": "Toate",
     "join_community_overline": "Alătură-te comunității",

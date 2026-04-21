@@ -3,7 +3,7 @@ import { Link, Navigate } from "react-router-dom";
 import { Plus, Clock, CheckCircle2, XCircle, Gavel, Archive, AlertCircle, Edit3, Trash2, Gift, HandCoins, Star, FileEdit, Images } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth, formatError } from "../lib/auth";
-import { api, formatEUR, timeLeft } from "../lib/apiClient";
+import { api, formatEUR, timeLeft, formatTimeLeft } from "../lib/apiClient";
 import SellerRequestModal from "../components/SellerRequestModal";
 
 /** i18n-aware status metadata: labels come from locales, icons+colors stay static */
@@ -242,7 +242,7 @@ export default function MyListingsPage() {
                       {a.status === "live" && (<>
                         <div className="overline text-[hsl(var(--ink-muted))]">Текуща</div>
                         <div className="font-serif text-2xl">{formatEUR(a.current_bid_eur)}</div>
-                        <div className="text-xs text-[hsl(var(--ink-muted))]">{a.bid_count || 0} {t("auction.bids_word")} · {tl?.label}</div>
+                        <div className="text-xs text-[hsl(var(--ink-muted))]">{a.bid_count || 0} {t("time.bids_short")} · {tl ? formatTimeLeft(tl, t) : ""}</div>
                       </>)}
                       {a.status === "sold" && (<>
                         <div className="overline text-[hsl(var(--ink-muted))]">Продаден за</div>

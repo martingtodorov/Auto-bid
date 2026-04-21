@@ -13,6 +13,14 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+/** Map an i18n short code to an Intl BCP47 locale for date / number formatting. */
+export function intlLocale(lng) {
+  const code = (lng || "bg").slice(0, 2);
+  if (code === "ro") return "ro-RO";
+  if (code === "en") return "en-GB";
+  return "bg-BG";
+}
+
 export function formatEUR(value) {
   if (value == null) return "—";
   return new Intl.NumberFormat("bg-BG", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value);
@@ -50,16 +58,38 @@ export function formatKM(value) {
   return new Intl.NumberFormat("bg-BG").format(value) + " км";
 }
 
+/**
+ * Compute time remaining to `isoString`.
+ * Returns numeric parts + flags (expired/urgent). The label is produced by
+ * `formatTimeLeft()` because it depends on the active i18n language.
+ *
+ * The returned `.label` is a BG fallback kept for legacy callers; prefer
+ * `formatTimeLeft(tl, t)` in new code.
+ */
 export function timeLeft(isoString) {
   const end = new Date(isoString).getTime();
   const now = Date.now();
   const diff = end - now;
-  if (diff <= 0) return { label: "Приключил", expired: true };
+  if (diff <= 0) return { label: "Приключил", expired: true, days: 0, hours: 0, minutes: 0, seconds: 0 };
   const days = Math.floor(diff / (1000 * 60 * 60 * 24));
   const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
   const minutes = Math.floor((diff / (1000 * 60)) % 60);
   const seconds = Math.floor((diff / 1000) % 60);
-  if (days >= 1) return { label: `${days}д ${hours}ч`, expired: false, days, hours, minutes, seconds };
-  if (hours >= 1) return { label: `${hours}ч ${minutes}м`, expired: false, days, hours, minutes, seconds, urgent: hours < 6 };
-  return { label: `${minutes}м ${seconds}с`, expired: false, urgent: true, days, hours, minutes, seconds };
+  let label;
+  if (days >= 1) label = `${days}д ${hours}ч`;
+  else if (hours >= 1) label = `${hours}ч ${minutes}м`;
+  else label = `${minutes}м ${seconds}с`;
+  return { label, expired: false, urgent: days < 1 && (hours < 6), days, hours, minutes, seconds };
+}
+
+/**
+ * Render a `timeLeft` result using the current i18n translator `t`.
+ * Keys used: `time.ended`, `time.days_hours`, `time.hours_minutes`, `time.minutes_seconds`.
+ */
+export function formatTimeLeft(tl, t) {
+  if (!tl) return "";
+  if (tl.expired) return t("time.ended");
+  if (tl.days >= 1) return t("time.days_hours", { d: tl.days, h: tl.hours });
+  if (tl.hours >= 1) return t("time.hours_minutes", { h: tl.hours, m: tl.minutes });
+  return t("time.minutes_seconds", { m: tl.minutes, s: tl.seconds });
 }

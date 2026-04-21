@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Activity } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { api, formatEUR } from "../lib/apiClient";
 
 export default function LiveTicker() {
+  const { t } = useTranslation();
   const [items, setItems] = useState([]);
 
   useEffect(() => {
@@ -29,17 +31,17 @@ export default function LiveTicker() {
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[hsl(var(--accent))] opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-[hsl(var(--accent))]"></span>
           </span>
-          <Activity size={13} /> На живо
+          <Activity size={13} /> {t("time.live")}
         </div>
         <div className="flex-1 overflow-hidden relative">
           <div className="flex gap-10 whitespace-nowrap animate-marquee">
             {loop.map((a, i) => (
-              <Link key={i} to={`/auctions/${a.id}`} className="flex items-center gap-3 text-xs font-mono text-white/80 hover:text-white transition">
+              <Link key={i} to={`/auctions/${a.id}`} className="flex items-center gap-3 text-xs font-mono text-white/80 hover:text-white transition" data-testid={`ticker-item-${i}`}>
                 <span className="text-white/50">{a.make}</span>
                 <span className="truncate max-w-[220px]">{a.title}</span>
                 <span className="text-[hsl(var(--accent))] font-semibold" style={{ color: "#6DE0B1" }}>{formatEUR(a.current_bid_eur)}</span>
                 <span className="text-white/30">·</span>
-                <span className="text-white/40">{a.bid_count} наддав.</span>
+                <span className="text-white/40">{a.bid_count} {t("time.bids_short")}</span>
                 <span className="text-white/20">|</span>
               </Link>
             ))}

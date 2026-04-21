@@ -6,6 +6,7 @@ import { api, formatEUR, formatLocal } from "../lib/apiClient";
 import AuctionCard from "../components/AuctionCard";
 import { setPageMeta, resetPageMeta } from "../lib/seo";
 import { useSiteSettings } from "../lib/settings";
+import { translateEnum } from "../lib/carTranslations";
 
 const HERO_IMAGE = "https://images.unsplash.com/photo-1698995339730-86b3dd454001?crop=entropy&cs=srgb&fm=jpg&q=85&w=2000";
 
@@ -94,7 +95,7 @@ export default function LandingPage() {
                       <div className="overline text-[hsl(var(--accent))]">{t("hero.featured_listing")}</div>
                       <h3 className="font-serif text-xl lg:text-2xl mt-1.5 tracking-tight">{hero.title}</h3>
                       <div className="text-sm text-[hsl(var(--ink-muted))] mt-1.5">
-                        {hero.year} · {hero.city} · {hero.fuel}
+                        {hero.year} · {translateEnum(hero.city, "city", i18n.language)} · {translateEnum(hero.fuel, "fuel", i18n.language)}
                       </div>
                     </div>
                     <div className="text-right shrink-0">

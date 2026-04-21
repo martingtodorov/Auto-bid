@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { MapPin, Gauge, Fuel, Calendar, Users, Shield } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { formatEUR, formatLocal, formatKM, timeLeft } from "../lib/apiClient";
+import { formatEUR, formatLocal, formatKM, timeLeft, formatTimeLeft } from "../lib/apiClient";
 import { translateEnum } from "../lib/carTranslations";
 
 export default function AuctionCard({ auction, compact = false }) {
@@ -33,9 +33,9 @@ export default function AuctionCard({ auction, compact = false }) {
           ) : isEnded ? (
             <span className="pill pill-sold">{t("my_listings.status.ended")}</span>
           ) : tl.urgent ? (
-            <span className="pill pill-ending">{tl.label}</span>
+            <span className="pill pill-ending">{formatTimeLeft(tl, t)}</span>
           ) : (
-            <span className="pill pill-live">{tl.label}</span>
+            <span className="pill pill-live">{formatTimeLeft(tl, t)}</span>
           )}
           {auction.featured && !isSold && <span className="pill" data-testid={`featured-badge-${auction.id}`}>{t("auction.featured_badge")}</span>}
           {auction.seller_is_verified_dealer && (

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Calendar, Gauge, Fuel, Settings, MapPin, Palette, Zap, Cog, MessageCircle, Heart, ArrowLeft, Shield, Wifi, Share2, Languages } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { api, API_BASE, formatEUR, formatLocal, formatKM, timeLeft } from "../lib/apiClient";
+import { api, API_BASE, formatEUR, formatLocal, formatKM, timeLeft, formatTimeLeft, intlLocale } from "../lib/apiClient";
 import { translateEnum } from "../lib/carTranslations";
 import { useAuth, formatError } from "../lib/auth";
 import PreauthModal from "../components/PreauthModal";
@@ -420,7 +420,7 @@ export default function AuctionDetailPage() {
                           <div className="text-sm font-semibold">{b.user_name}</div>
                         )}
                         <div className="text-xs text-[hsl(var(--ink-muted))] font-mono">
-                          {new Date(b.created_at).toLocaleString("bg-BG")}
+                          {new Date(b.created_at).toLocaleString(intlLocale(i18n.language))}
                           {b.preauth_status === "authorized" && <span className="ml-2 text-[hsl(var(--accent))]">· preauth активен</span>}
                         </div>
                       </div>
@@ -468,7 +468,7 @@ export default function AuctionDetailPage() {
                         )}
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
-                        <div className="text-xs text-[hsl(var(--ink-muted))] font-mono">{new Date(c.created_at).toLocaleString("bg-BG")}</div>
+                        <div className="text-xs text-[hsl(var(--ink-muted))] font-mono">{new Date(c.created_at).toLocaleString(intlLocale(i18n.language))}</div>
                         {isAdmin && !c.deleted && (
                           <button
                             onClick={() => deleteComment(c.id)}
@@ -507,8 +507,8 @@ export default function AuctionDetailPage() {
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   {a.status === "sold" ? <span className="pill pill-sold">Продаден</span>
                     : a.status === "ended" ? <span className="pill pill-sold">Приключил</span>
-                    : tl.urgent ? <span className="pill pill-ending">{tl.label}</span>
-                    : <span className="pill pill-live">{tl.label}</span>}
+                    : tl.urgent ? <span className="pill pill-ending">{formatTimeLeft(tl, t)}</span>
+                    : <span className="pill pill-live">{formatTimeLeft(tl, t)}</span>}
                   {a.has_reserve && <span className="pill" data-testid="with-reserve">С резерв</span>}
                   {a.has_reserve === false && <span className="pill" data-testid="no-reserve">Без резерв</span>}
                   <span className="overline text-[hsl(var(--ink-muted))] ml-auto">{a.bid_count || 0} {t("auction.bids_word")}</span>
@@ -552,7 +552,7 @@ export default function AuctionDetailPage() {
                         {placing ? "…" : t("auction.place_bid")}
                       </button>
                     </div>
-                    <p className="text-xs text-[hsl(var(--ink-muted))] mt-2">{t("auction.min_next_bid", { min: nextBid.min_next_eur?.toLocaleString("bg-BG"), step: nextBid.step_eur?.toLocaleString("bg-BG") })}</p>
+                    <p className="text-xs text-[hsl(var(--ink-muted))] mt-2">{t("auction.min_next_bid", { min: nextBid.min_next_eur?.toLocaleString(intlLocale(i18n.language)), step: nextBid.step_eur?.toLocaleString(intlLocale(i18n.language)) })}</p>
 
                     <div className="mt-4 p-3 rounded-card bg-[hsl(var(--accent-soft))] border border-[hsl(var(--accent))]/20 flex items-start gap-2">
                       <Shield size={14} className="text-[hsl(var(--accent))] shrink-0 mt-0.5" />

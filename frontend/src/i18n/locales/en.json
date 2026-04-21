@@ -143,6 +143,21 @@
     "colour": "Colour",
     "location": "Location"
   },
+  "time": {
+    "ended": "Ended",
+    "days_hours": "{{d}}d {{h}}h",
+    "hours_minutes": "{{h}}h {{m}}m",
+    "minutes_seconds": "{{m}}m {{s}}s",
+    "live": "Live",
+    "bids_short": "bids"
+  },
+  "cookies": {
+    "title": "We use cookies",
+    "body": "autobids.bg only uses strictly necessary cookies for session and security. We do not use third-party trackers without your consent. Read our",
+    "privacy_link": "privacy policy",
+    "accept": "Accept",
+    "reject": "Reject"
+  },
   "cta": {
     "view_all": "All",
     "join_community_overline": "Join the community",
