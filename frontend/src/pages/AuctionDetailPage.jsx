@@ -440,7 +440,7 @@ export default function AuctionDetailPage() {
                 <textarea
                   value={commentText}
                   onChange={(e) => setCommentText(e.target.value)}
-                  placeholder={user ? "Споделете мнение или въпрос…" : "Влезте, за да коментирате"}
+                  placeholder={user ? t("auction.comments_placeholder") : t("auction.comments_placeholder_logged_out")}
                   disabled={!user}
                   rows={3}
                   className="w-full border border-[hsl(var(--line))] p-3 text-sm resize-none"
