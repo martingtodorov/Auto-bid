@@ -468,7 +468,7 @@ export default function SellPage() {
               >
                 {t("sell.preview_cta")}
               </button>
-              <p className="text-xs text-[hsl(var(--ink-muted))]">След одобрение нашият екип ще направи професионален фото отчет.</p>
+              <p className="text-xs text-[hsl(var(--ink-muted))]">{t("sell.photo_note")}</p>
             </div>
           </form>
         </div>

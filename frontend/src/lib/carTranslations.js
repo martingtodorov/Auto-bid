@@ -11,6 +11,7 @@ const FUELS = {
   "Бензин":        { ro: "Benzină",     en: "Petrol" },
   "Дизел":         { ro: "Diesel",      en: "Diesel" },
   "Хибрид":        { ro: "Hibrid",      en: "Hybrid" },
+  "Хибриден":      { ro: "Hibrid",      en: "Hybrid" },
   "Plug-in хибрид": { ro: "Plug-in hibrid", en: "Plug-in hybrid" },
   "Електричество": { ro: "Electric",    en: "Electric" },
   "Електрически":  { ro: "Electric",    en: "Electric" },
