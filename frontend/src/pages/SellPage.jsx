@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth, formatError } from "../lib/auth";
 import { api } from "../lib/apiClient";
+import { translateEnum } from "../lib/carTranslations";
 import ImageUploader from "../components/ImageUploader";
 
 const FUELS = ["Бензин", "Дизел", "Хибриден", "Електрически", "Газ/Бензин"];
@@ -55,7 +56,7 @@ const IMG_CATEGORIES = [
 ];
 
 export default function SellPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState(() => emptyForm(user));
@@ -250,70 +251,70 @@ export default function SellPage() {
           </div>
 
           <form onSubmit={submit} className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-5">
-            <Field label="Заглавие" span={2}>
-              <input required value={form.title} onChange={(e) => set("title", e.target.value)} className={inputCls} placeholder="Напр. Audi RS6 Avant Performance — Nardo Grey" data-testid="sell-title" />
+            <Field label={t("sell.form.title")} span={2}>
+              <input required value={form.title} onChange={(e) => set("title", e.target.value)} className={inputCls} placeholder={t("sell.form.title_placeholder")} data-testid="sell-title" />
             </Field>
-            <Field label="Марка">
+            <Field label={t("sell.form.make")}>
               <select required value={form.make} onChange={(e) => set("make", e.target.value)} className={inputCls} data-testid="sell-make">
-                <option value="" disabled>— изберете марка —</option>
+                <option value="" disabled>{t("sell.form.pick_make")}</option>
                 {makes.map((m) => <option key={m.id || m.name} value={m.name}>{m.name}</option>)}
               </select>
             </Field>
-            <Field label="Модел">
+            <Field label={t("sell.form.model")}>
               <input required value={form.model} onChange={(e) => set("model", e.target.value)} className={inputCls} data-testid="sell-model" />
             </Field>
-            <Field label="Година">
+            <Field label={t("sell.form.year")}>
               <input type="number" required value={form.year} onChange={(e) => set("year", e.target.value)} className={inputCls} data-testid="sell-year" />
             </Field>
-            <Field label="Пробег (км)">
+            <Field label={t("sell.form.mileage_km")}>
               <input type="number" required value={form.mileage_km} onChange={(e) => set("mileage_km", e.target.value)} className={inputCls} data-testid="sell-mileage" />
             </Field>
-            <Field label="Гориво">
+            <Field label={t("sell.form.fuel")}>
               <select value={form.fuel} onChange={(e) => set("fuel", e.target.value)} className={inputCls} data-testid="sell-fuel">
-                {FUELS.map((o) => <option key={o}>{o}</option>)}
+                {FUELS.map((o) => <option key={o} value={o}>{translateEnum(o, "fuel", i18n.language)}</option>)}
               </select>
             </Field>
-            <Field label="Скоростна кутия">
+            <Field label={t("sell.form.transmission")}>
               <select value={form.transmission} onChange={(e) => set("transmission", e.target.value)} className={inputCls} data-testid="sell-transmission">
-                {TRANSMISSIONS.map((o) => <option key={o}>{o}</option>)}
+                {TRANSMISSIONS.map((o) => <option key={o} value={o}>{translateEnum(o, "transmission", i18n.language)}</option>)}
               </select>
             </Field>
-            <Field label="Тип купе">
+            <Field label={t("sell.form.body_type")}>
               <select value={form.body_type} onChange={(e) => set("body_type", e.target.value)} className={inputCls} data-testid="sell-body-type">
-                {BODY_TYPES.map((o) => <option key={o}>{o}</option>)}
+                {BODY_TYPES.map((o) => <option key={o} value={o}>{translateEnum(o, "body_type", i18n.language)}</option>)}
               </select>
             </Field>
-            <Field label="Мощност (к.с.)">
+            <Field label={t("sell.form.power_hp")}>
               <input type="number" value={form.power_hp} onChange={(e) => set("power_hp", e.target.value)} className={inputCls} />
             </Field>
-            <Field label="Обем (см³)">
+            <Field label={t("sell.form.engine_cc")}>
               <input type="number" value={form.engine_cc} onChange={(e) => set("engine_cc", e.target.value)} className={inputCls} />
             </Field>
-            <Field label="Цвят">
+            <Field label={t("sell.form.colour")}>
               <input value={form.color} onChange={(e) => set("color", e.target.value)} className={inputCls} />
             </Field>
-            <Field label="Регион">
+            <Field label={t("sell.form.region")}>
               <select value={form.region} onChange={(e) => set("region", e.target.value)} className={inputCls}>
-                {REGIONS.map((o) => <option key={o}>{o}</option>)}
+                {REGIONS.map((o) => <option key={o} value={o}>{translateEnum(o, "region", i18n.language)}</option>)}
               </select>
             </Field>
-            <Field label="Град">
+            <Field label={t("sell.form.city")}>
               <input value={form.city} onChange={(e) => set("city", e.target.value)} className={inputCls} />
             </Field>
-            <Field label="Начална цена (EUR)">
+            <Field label={t("sell.form.starting_bid_eur")}>
               <input type="number" required value={form.starting_bid_eur} onChange={(e) => set("starting_bid_eur", e.target.value)} className={inputCls} data-testid="sell-starting-bid" />
             </Field>
-            <Field label="Резервна цена (EUR, незадължителна)">
+            <Field label={t("sell.form.reserve_eur")}>
               <input type="number" value={form.reserve_eur} disabled={form.no_reserve} onChange={(e) => set("reserve_eur", e.target.value)} className={`${inputCls} ${form.no_reserve ? "opacity-50" : ""}`} data-testid="sell-reserve" />
               <label className="mt-2 flex items-center gap-2 text-xs text-[hsl(var(--ink-muted))] cursor-pointer">
                 <input type="checkbox" checked={!!form.no_reserve} onChange={(e) => set("no_reserve", e.target.checked)} data-testid="sell-no-reserve" />
-                Без резервна цена (no-reserve — продава се на най-високия бид)
+                {t("sell.form.no_reserve_label")}
               </label>
             </Field>
-            <Field label="ДДС статус" span={2}>
+            <Field label={t("sell.form.vat_status")} span={2}>
               <div className="rounded-card border border-[hsl(var(--line))] bg-[hsl(var(--surface))] p-4">
                 <div className="flex gap-3 flex-wrap" data-testid="sell-vat-status">
-                  {[{ v: "exempt", l: "Освободена от ДДС" }, { v: "vat_inclusive", l: "Неосвободена от ДДС" }].map((o) => (
+                  {[{ v: "exempt", l: t("sell.form.vat_exempt") }, { v: "vat_inclusive", l: t("sell.form.vat_inclusive") }].map((o) => (
                     <label key={o.v} className={`flex items-center gap-2 px-4 py-2 rounded-card border cursor-pointer text-sm ${form.vat_status === o.v ? "border-[hsl(var(--accent))] bg-white" : "border-[hsl(var(--line))] bg-white"}`} data-testid={`sell-vat-${o.v}`}>
                       <input type="radio" name="vat_status" checked={form.vat_status === o.v} onChange={() => set("vat_status", o.v)} />
                       {o.l}
@@ -323,44 +324,42 @@ export default function SellPage() {
                 {form.vat_status === "vat_inclusive" && (
                   <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="sell-vat-prices">
                     <div>
-                      <label className="overline text-[hsl(var(--ink-muted))] block mb-1.5">Нето цена (EUR, без ДДС)</label>
+                      <label className="overline text-[hsl(var(--ink-muted))] block mb-1.5">{t("sell.form.vat_net_price")}</label>
                       <input type="number" required value={form.price_net_eur} onChange={(e) => set("price_net_eur", e.target.value)} className={inputCls} data-testid="sell-price-net" />
                     </div>
                     <div>
-                      <label className="overline text-[hsl(var(--ink-muted))] block mb-1.5">Бруто цена (EUR, с ДДС)</label>
+                      <label className="overline text-[hsl(var(--ink-muted))] block mb-1.5">{t("sell.form.vat_gross_price")}</label>
                       <input type="number" required value={form.price_gross_eur} onChange={(e) => set("price_gross_eur", e.target.value)} className={inputCls} data-testid="sell-price-gross" />
                     </div>
                   </div>
                 )}
               </div>
             </Field>
-            <Field label="VIN номер (незадължителен, видим само на наддавачи)" span={2}>
-              <input value={form.vin} onChange={(e) => set("vin", e.target.value.toUpperCase())} className={inputCls} maxLength={17} placeholder="напр. WAUZZZ4H9CN045678" data-testid="sell-vin" />
+            <Field label={t("sell.form.vin")} span={2}>
+              <input value={form.vin} onChange={(e) => set("vin", e.target.value.toUpperCase())} className={inputCls} maxLength={17} placeholder={t("sell.form.vin_placeholder")} data-testid="sell-vin" />
             </Field>
             <Field label="" span={2}>
               <div className="rounded-card border border-[hsl(var(--line))] bg-[hsl(var(--surface))] p-4">
-                <div className="overline text-[hsl(var(--accent))] mb-1">Контакт с продавача</div>
-                <p className="text-xs text-[hsl(var(--ink-muted))] mb-3">Нашият екип ще използва тези данни за потвърждение на обявата и организация на огледи. Телефонът и имейлът няма да са публични.</p>
+                <div className="overline text-[hsl(var(--accent))] mb-1">{t("sell.form.contact_overline")}</div>
+                <p className="text-xs text-[hsl(var(--ink-muted))] mb-3">{t("sell.form.contact_hint")}</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="overline text-[hsl(var(--ink-muted))] block mb-1.5">Имейл за контакт</label>
+                    <label className="overline text-[hsl(var(--ink-muted))] block mb-1.5">{t("sell.form.contact_email")}</label>
                     <input type="email" required value={form.contact_email} onChange={(e) => set("contact_email", e.target.value)} className={inputCls} placeholder="name@example.com" data-testid="sell-contact-email" />
                   </div>
                   <div>
-                    <label className="overline text-[hsl(var(--ink-muted))] block mb-1.5">Телефонен номер</label>
+                    <label className="overline text-[hsl(var(--ink-muted))] block mb-1.5">{t("sell.form.contact_phone")}</label>
                     <input type="tel" required value={form.contact_phone} onChange={(e) => set("contact_phone", e.target.value)} className={inputCls} placeholder="+359 88 888 8888" data-testid="sell-contact-phone" />
                   </div>
                 </div>
               </div>
             </Field>
-            <Field label="Снимки на автомобила" span={2}>
+            <Field label={t("sell.form.photos")} span={2}>
               <div className="space-y-3">
-                <div className="text-xs text-[hsl(var(--ink-muted))] leading-relaxed">
-                  Моля качете всички необходими снимки: <strong>минимум 8 екстериорни</strong>, <strong>4 на джанти</strong> (по една от всяка), <strong>1 на предната броня</strong>, <strong>4 интериорни</strong>. Първата екстериорна снимка се ползва като корица.
-                </div>
+                <div className="text-xs text-[hsl(var(--ink-muted))] leading-relaxed">{t("sell.form.photos_hint")}</div>
                 <ImageUploader
-                  label="Екстериор"
-                  helper="Снимки от всички страни на автомобила"
+                  label={t("sell.form.exterior")}
+                  helper={t("sell.form.exterior_helper")}
                   min={8}
                   max={20}
                   images={form.images_exterior}
@@ -371,8 +370,8 @@ export default function SellPage() {
                   availableCategories={IMG_CATEGORIES.filter((c) => c.id !== "images_exterior")}
                 />
                 <ImageUploader
-                  label="Предна броня"
-                  helper="Фронтално, за да се виждат евентуални забележки"
+                  label={t("sell.form.bumper")}
+                  helper={t("sell.form.bumper_helper")}
                   min={1}
                   max={4}
                   images={form.images_bumper}
@@ -383,8 +382,8 @@ export default function SellPage() {
                   availableCategories={IMG_CATEGORIES.filter((c) => c.id !== "images_bumper")}
                 />
                 <ImageUploader
-                  label="Джанти"
-                  helper="По една снимка на всяка джанта (общо 4)"
+                  label={t("sell.form.wheels")}
+                  helper={t("sell.form.wheels_helper")}
                   min={4}
                   max={8}
                   images={form.images_wheels}
@@ -395,8 +394,8 @@ export default function SellPage() {
                   availableCategories={IMG_CATEGORIES.filter((c) => c.id !== "images_wheels")}
                 />
                 <ImageUploader
-                  label="Интериор"
-                  helper="Волан, табло, седалки, заден ред"
+                  label={t("sell.form.interior")}
+                  helper={t("sell.form.interior_helper")}
                   min={4}
                   max={12}
                   images={form.images_interior}
@@ -408,8 +407,8 @@ export default function SellPage() {
                 />
               </div>
             </Field>
-            <Field label="Описание" span={2}>
-              <textarea required value={form.description} onChange={(e) => set("description", e.target.value)} rows={6} className="w-full border border-[hsl(var(--line))] p-3 text-sm" placeholder="Разкажете историята на автомобила, оборудването и състоянието." data-testid="sell-description" />
+            <Field label={t("sell.form.description")} span={2}>
+              <textarea required value={form.description} onChange={(e) => set("description", e.target.value)} rows={6} className="w-full border border-[hsl(var(--line))] p-3 text-sm" placeholder={t("sell.form.description_placeholder")} data-testid="sell-description" />
             </Field>
 
             {err && <p className="md:col-span-2 text-sm text-[hsl(var(--danger))]" data-testid="sell-error">{err}</p>}

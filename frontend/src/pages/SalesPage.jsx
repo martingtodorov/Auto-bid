@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { TrendingUp, BarChart3, Calendar, Crown, Search } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { api, formatEUR, formatKM } from "../lib/apiClient";
 import AuctionCard from "../components/AuctionCard";
 import { setPageMeta, combineJsonLd, buildBreadcrumbs } from "../lib/seo";
 import { useAuth } from "../lib/auth";
+import { translateEnum } from "../lib/carTranslations";
 
 const WINDOW_OPTIONS = [
   { days: 30, label: "30 дни" },
@@ -14,6 +16,7 @@ const WINDOW_OPTIONS = [
 ];
 
 export default function SalesPage() {
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const isPrivileged = user?.role === "admin" || user?.role === "moderator";
   const [stats, setStats] = useState(null);
@@ -215,19 +218,19 @@ export default function SalesPage() {
               />
             </div>
             <select value={filters.make} onChange={(e) => onFilterChange({ make: e.target.value })} className="border border-[hsl(var(--line))] rounded-card px-2 py-2 text-sm bg-white" data-testid="sales-filter-make">
-              <option value="">Марка</option>
+              <option value="">{t("auctions_page.make")}</option>
               {(stats?.by_make?.length ? stats.by_make.map((m) => m.make) : facets.makes).map((name) => (
                 <option key={name} value={name}>{name}</option>
               ))}
             </select>
             <select value={filters.body_type} onChange={(e) => onFilterChange({ body_type: e.target.value })} className="border border-[hsl(var(--line))] rounded-card px-2 py-2 text-sm bg-white" data-testid="sales-filter-body">
-              <option value="">Каросерия</option>
+              <option value="">{t("auctions_page.body_type")}</option>
               {(stats?.by_body_type?.length ? stats.by_body_type.map((b) => b.body_type) : facets.body_types).map((name) => (
-                <option key={name} value={name}>{name}</option>
+                <option key={name} value={name}>{translateEnum(name, "body_type", i18n.language)}</option>
               ))}
             </select>
-            <input type="number" placeholder="Год. от" value={filters.year_min} onChange={(e) => onFilterChange({ year_min: e.target.value })} className="border border-[hsl(var(--line))] rounded-card px-2 py-2 text-sm" data-testid="sales-filter-year-min" />
-            <input type="number" placeholder="Цена до €" value={filters.price_max} onChange={(e) => onFilterChange({ price_max: e.target.value })} className="border border-[hsl(var(--line))] rounded-card px-2 py-2 text-sm" data-testid="sales-filter-price-max" />
+            <input type="number" placeholder={t("auctions_page.year_from")} value={filters.year_min} onChange={(e) => onFilterChange({ year_min: e.target.value })} className="border border-[hsl(var(--line))] rounded-card px-2 py-2 text-sm" data-testid="sales-filter-year-min" />
+            <input type="number" placeholder={t("auctions_page.price_to_eur")} value={filters.price_max} onChange={(e) => onFilterChange({ price_max: e.target.value })} className="border border-[hsl(var(--line))] rounded-card px-2 py-2 text-sm" data-testid="sales-filter-price-max" />
             <button
               onClick={resetFilters}
               className="border border-[hsl(var(--line))] rounded-card px-3 py-2 text-sm bg-white hover:bg-[hsl(var(--surface))]"

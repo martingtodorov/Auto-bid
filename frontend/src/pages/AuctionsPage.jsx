@@ -5,10 +5,11 @@ import { useAuth, formatError } from "../lib/auth";
 import AuctionCard from "../components/AuctionCard";
 import { SlidersHorizontal, X, Search, BookmarkPlus, Check } from "lucide-react";
 import { mergeMakes } from "../lib/makes";
+import { translateEnum } from "../lib/carTranslations";
 import { setPageMeta, resetPageMeta, buildBreadcrumbs } from "../lib/seo";
 
 export default function AuctionsPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -68,12 +69,12 @@ export default function AuctionsPage() {
     } catch (e) { setSaveErr(formatError(e)); }
   };
 
-  const Select = ({ k, label, options }) => (
+  const Select = ({ k, label, options, kind }) => (
     <div>
       <label className="overline text-[hsl(var(--ink-muted))] block mb-2">{label}</label>
       <select value={filters[k]} onChange={(e) => set(k, e.target.value)} className="w-full border border-[hsl(var(--line))] h-10 px-3 text-sm bg-white" data-testid={`filter-${k}`}>
         <option value="">{t("auctions_page.all")}</option>
-        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+        {options.map((o) => <option key={o} value={o}>{kind ? translateEnum(o, kind, i18n.language) : o}</option>)}
       </select>
     </div>
   );
@@ -86,10 +87,10 @@ export default function AuctionsPage() {
       </div>
 
       <Select k="make" label={t("auctions_page.make")} options={mergeMakes(facets.makes)} />
-      <Select k="body_type" label={t("auctions_page.body_type")} options={facets.body_types} />
-      <Select k="fuel" label={t("auctions_page.fuel")} options={facets.fuels} />
-      <Select k="transmission" label={t("auctions_page.transmission")} options={facets.transmissions} />
-      <Select k="region" label={t("auctions_page.region")} options={facets.regions} />
+      <Select k="body_type" label={t("auctions_page.body_type")} options={facets.body_types} kind="body_type" />
+      <Select k="fuel" label={t("auctions_page.fuel")} options={facets.fuels} kind="fuel" />
+      <Select k="transmission" label={t("auctions_page.transmission")} options={facets.transmissions} kind="transmission" />
+      <Select k="region" label={t("auctions_page.region")} options={facets.regions} kind="region" />
 
       <div className="grid grid-cols-2 gap-3">
         <div>
