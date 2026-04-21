@@ -287,6 +287,45 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 - Нови i18n namespaces: `footer`, `watchlist`, `auctions_page`, `my_listings` (с nested `status`), `admin` (с nested `tabs`) в трите locales
 - Тествано с Playwright: RO версията на `/auctions` показва пълно преведен hero, filters, sort, footer и nav. Lei currency се показва вместо лв. Nav links и footer линкове всички преведени.
 
+### Apr 2026 (Phase 7) — Auto-translate + multi-lang CMS + deep UI i18n
+- **Auto-translate на описания (Emergent LLM / Gemini 2.5 Flash)**:
+  - Нов `/app/backend/translate.py` с `translate_text(text, target_lang)` helper
+  - Endpoint `GET /api/auctions/{id}/translate-description?lang=ro|en` — превежда, кешира в DB (`description_ro`, `description_en`), връща JSON `{lang, text, cached}`
+  - Rate-limit 20/min, 30s timeout, 8000 char cap
+  - Translation cache се инвалидира при text-change approve
+  - Frontend `DescriptionWithInteriorShots` — автоматично показва запазен превод при non-BG език, с бутон „Преведи" (и „Auto-translated" badge + „Show original" при успех)
+- **Multi-language CMS pages** (`faq`/`terms`/`fees`/`contacts`/`how_it_works`):
+  - Нови 15 полета в `site_settings` (`<base>_bg`, `<base>_ro`, `<base>_en`) с fallback до legacy non-suffixed field
+  - Frontend helper `pickCmsContent(settings, base, lang)` с chain fallback
+  - Обновени FAQPage, TermsPage, ContactsPage, FeesPage, HowItWorksPage
+  - Admin UI: нов `CmsMultiLangField` компонент с BG/RO/EN тaбове за всяко от 5-те CMS полета (markdown textarea)
+- **Car data translation** (фронтенд-only dictionary в `/app/frontend/src/lib/carTranslations.js`):
+  - Fuels (8), transmissions (7), body types (14), colours (15), regions (27)
+  - `translateEnum(value, kind, lang)` с fallback към raw stringified value
+  - Wired в AuctionCard (fuel + city) и AuctionDetailPage (6 specs полета + subtitle + body_type overline)
+- **Deep UI translation в AuctionDetailPage**:
+  - Share button + link-copied toast
+  - Verified dealer / private seller labels
+  - Buyer's fee label + detail (параметризиран с pct/min/max)
+  - Comment removed message (fixes stale deleted comments loaded from DB)
+  - VIN number label + 3 различни masked-note варианти (anon/live/ended) + request CTA + unmasked badge
+  - Bid hints (Min/step), "No bids yet", "up to credit" hint
+  - Back-to-auctions link, live/connecting/offline статус pill
+  - Spec labels (Year, Mileage, Engine, Power, Colour, Location, HP)
+- **Deep UI translation в MyListingsPage**:
+  - Reserve-not-met seller panel (accept high bid button + counter-offer form + pending counter status)
+  - Promote/text-change/reorder бутони с локализирани titles
+  - Status badge labels чрез `my_listings.status.*` (10 statuses)
+  - Featured badge
+- **Deep UI translation в AuctionCard**:
+  - Sold/Ended/Urgent/Live status pills
+  - Featured + Verified dealer badges
+  - With-reserve / No-reserve chip
+  - Current bid / Sold for label
+  - Fuel + city values
+- Разширени i18n файлове: `spec` namespace (7 keys), auction namespace от 33 → 54 keys, нови `private_person`, `link_copied`, `vin_*` (7 keys)
+- Тестван end-to-end: EN версията на auction detail показва пълен LLM-преведен BMW M240i description (`For sale is a BMW M240i xDrive in excellent condition…`) + преведени всички specs + verified dealer + share listing. Cache работи — втора заявка е instant.
+
 ## 3rd-party integrations status
 - Resend: Configured via env (RESEND_API_KEY), fallback console log
 - Twilio: Configured via env (TWILIO_*), fallback console log

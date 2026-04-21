@@ -1,12 +1,14 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import InfoPage, { InfoSection } from "../components/InfoPage";
 import MarkdownBody from "../components/MarkdownBody";
-import { useSiteSettings } from "../lib/settings";
+import { useSiteSettings, pickCmsContent } from "../lib/settings";
 import { useInfoPageSeo } from "../lib/useInfoPageSeo";
 
 export default function FeesPage() {
+  const { i18n } = useTranslation();
   const settings = useSiteSettings();
-  const custom = settings?.fees_content?.trim();
+  const custom = pickCmsContent(settings, "fees_content", i18n.language);
   const pct = settings?.buyer_fee_pct ?? 2;
   const min = settings?.buyer_fee_min_eur ?? 150;
   const max = settings?.buyer_fee_max_eur ?? 4000;

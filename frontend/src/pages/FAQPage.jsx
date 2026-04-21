@@ -1,7 +1,8 @@
 import React, { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import InfoPage, { InfoSection, FAQItem } from "../components/InfoPage";
 import MarkdownBody from "../components/MarkdownBody";
-import { useSiteSettings } from "../lib/settings";
+import { useSiteSettings, pickCmsContent } from "../lib/settings";
 import { setPageMeta, resetPageMeta, buildBreadcrumbs, buildFaqJsonLd, combineJsonLd } from "../lib/seo";
 
 const DEFAULT_QA = (pct) => [
@@ -36,8 +37,9 @@ function parseFaqMarkdown(md) {
 }
 
 export default function FAQPage() {
+  const { i18n } = useTranslation();
   const settings = useSiteSettings();
-  const custom = settings?.faq_content?.trim();
+  const custom = pickCmsContent(settings, "faq_content", i18n.language);
   const pct = settings?.buyer_fee_pct ?? 2;
 
   const qa = custom ? parseFaqMarkdown(custom) : DEFAULT_QA(pct);

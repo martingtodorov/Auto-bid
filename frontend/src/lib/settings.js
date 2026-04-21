@@ -104,3 +104,20 @@ export function computeBuyerFee(amount, settings) {
   const fmax = Number(settings?.buyer_fee_max_eur ?? 4000);
   return Math.min(fmax, Math.max(fmin, Math.round((Number(amount) || 0) * pct)));
 }
+
+/**
+ * Pick the right CMS text for the active language with graceful fallback chain:
+ *   <base>_<lang> → <base>_bg → <base> (legacy BG field) → ""
+ * `base` is one of: "faq_content", "terms_content", "fees_content",
+ * "contacts_content", "how_it_works_content".
+ */
+export function pickCmsContent(settings, base, lang) {
+  if (!settings) return "";
+  const code = (lang || "bg").slice(0, 2);
+  return (
+    (settings[`${base}_${code}`] || "").trim() ||
+    (settings[`${base}_bg`] || "").trim() ||
+    (settings[base] || "").trim() ||
+    ""
+  );
+}

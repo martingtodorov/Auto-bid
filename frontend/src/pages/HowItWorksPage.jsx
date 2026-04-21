@@ -1,14 +1,16 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Shield, FileCheck, Gavel, Sparkles, TrendingUp, Camera, Users, Award } from "lucide-react";
 import InfoPage from "../components/InfoPage";
 import MarkdownBody from "../components/MarkdownBody";
-import { useSiteSettings } from "../lib/settings";
+import { useSiteSettings, pickCmsContent } from "../lib/settings";
 import { useInfoPageSeo } from "../lib/useInfoPageSeo";
 
 export default function HowItWorksPage() {
+  const { i18n } = useTranslation();
   const settings = useSiteSettings();
-  const custom = settings?.how_it_works_content?.trim();
+  const custom = pickCmsContent(settings, "how_it_works_content", i18n.language);
   useInfoPageSeo({
     title: "Как работи — autobids.bg",
     description: "Как работят онлайн търговете за автомобили в autobids.bg — от подаване на обява до финализиране на сделката.",

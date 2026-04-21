@@ -1,13 +1,15 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { Mail, Phone, MapPin, Clock } from "lucide-react";
 import InfoPage, { InfoSection } from "../components/InfoPage";
 import MarkdownBody from "../components/MarkdownBody";
-import { useSiteSettings } from "../lib/settings";
+import { useSiteSettings, pickCmsContent } from "../lib/settings";
 import { useInfoPageSeo } from "../lib/useInfoPageSeo";
 
 export default function ContactsPage() {
+  const { i18n } = useTranslation();
   const settings = useSiteSettings();
-  const custom = settings?.contacts_content?.trim();
+  const custom = pickCmsContent(settings, "contacts_content", i18n.language);
   useInfoPageSeo({
     title: "Контакти — autobids.bg",
     description: "Свържете се с екипа на autobids.bg — имейл contact@autobids.bg, телефон +359 2 444 2828, София.",

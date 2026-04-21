@@ -3,12 +3,20 @@ import { api } from "../lib/apiClient";
 import { formatError } from "../lib/auth";
 import { refreshSettings } from "../lib/settings";
 
-const CONTENT_FIELDS = [
+// Each CMS content field now has BG/RO/EN variants.  The legacy non-suffixed
+// field (e.g. `faq_content`) is kept for backwards compatibility and is used
+// as fallback when `faq_content_<lang>` is empty.
+const CONTENT_BASES = [
   { key: "how_it_works_content", label: "Как работи", placeholder: "Markdown съдържание за страница „Как работи“" },
-  { key: "faq_content", label: "FAQ — Често задавани въпроси", placeholder: "## Раздел\n\n**Въпрос?**\n\nОтговор…" },
-  { key: "fees_content", label: "Такси и комисионни", placeholder: "Markdown описание на таксите" },
-  { key: "terms_content", label: "Общи условия", placeholder: "Markdown текст на общите условия" },
-  { key: "contacts_content", label: "Контакти", placeholder: "Имейл, телефон, адрес и работно време" },
+  { key: "faq_content",          label: "FAQ — Често задавани въпроси", placeholder: "## Раздел\n\n**Въпрос?**\n\nОтговор…" },
+  { key: "fees_content",         label: "Такси и комисионни", placeholder: "Markdown описание на таксите" },
+  { key: "terms_content",        label: "Общи условия", placeholder: "Markdown текст на общите условия" },
+  { key: "contacts_content",     label: "Контакти", placeholder: "Имейл, телефон, адрес и работно време" },
+];
+const CMS_LANGS = [
+  { code: "bg", flag: "🇧🇬", label: "Български" },
+  { code: "ro", flag: "🇷🇴", label: "Română" },
+  { code: "en", flag: "🇬🇧", label: "English" },
 ];
 
 export default function AdminSettingsTab() {
@@ -36,6 +44,12 @@ export default function AdminSettingsTab() {
         contacts_content: data.contacts_content ?? "",
         fees_content: data.fees_content ?? "",
         how_it_works_content: data.how_it_works_content ?? "",
+        // Multi-language CMS variants (Phase 7)
+        ...Object.fromEntries(
+          CONTENT_BASES.flatMap((f) =>
+            CMS_LANGS.map(({ code }) => [`${f.key}_${code}`, data[`${f.key}_${code}`] ?? ""])
+          )
+        ),
         og_image_url: data.og_image_url ?? "",
         maintenance_mode: !!data.maintenance_mode,
         maintenance_message: data.maintenance_message ?? "",
@@ -66,6 +80,11 @@ export default function AdminSettingsTab() {
         contacts_content: form.contacts_content,
         fees_content: form.fees_content,
         how_it_works_content: form.how_it_works_content,
+        ...Object.fromEntries(
+          CONTENT_BASES.flatMap((f) =>
+            CMS_LANGS.map(({ code }) => [`${f.key}_${code}`, form[`${f.key}_${code}`] ?? ""])
+          )
+        ),
         og_image_url: form.og_image_url,
         maintenance_mode: !!form.maintenance_mode,
         maintenance_message: form.maintenance_message,
@@ -262,20 +281,9 @@ export default function AdminSettingsTab() {
         </div>
       </section>
 
-      {/* Content pages */}
-      {CONTENT_FIELDS.map((f) => (
-        <section key={f.key} className="rounded-card border border-[hsl(var(--line))] bg-white p-6">
-          <h2 className="font-serif text-2xl">{f.label}</h2>
-          <p className="mt-2 text-xs text-[hsl(var(--ink-muted))]">Markdown се поддържа (**удебелено**, *курсив*, ## Заглавие, списъци, [линк](https://…)).</p>
-          <textarea
-            rows={12}
-            value={form[f.key]}
-            placeholder={f.placeholder}
-            onChange={(e) => set(f.key, e.target.value)}
-            className="mt-3 w-full border border-[hsl(var(--line))] p-3 text-sm font-mono"
-            data-testid={`content-${f.key}`}
-          />
-        </section>
+      {/* Content pages — multi-language CMS (Phase 7) */}
+      {CONTENT_BASES.map((f) => (
+        <CmsMultiLangField key={f.key} field={f} form={form} set={set} />
       ))}
 
       <div className="sticky bottom-4 flex justify-end gap-3 items-center">
@@ -300,5 +308,49 @@ function Field({ label, children, testid }) {
       <label className="overline text-[hsl(var(--ink-muted))] block mb-1.5">{label}</label>
       {children}
     </div>
+  );
+}
+
+function CmsMultiLangField({ field, form, set }) {
+  const [active, setActive] = useState("bg");
+  if (!form) return null;
+  return (
+    <section className="rounded-card border border-[hsl(var(--line))] bg-white p-6" data-testid={`cms-${field.key}`}>
+      <div className="flex items-end justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="font-serif text-2xl">{field.label}</h2>
+          <p className="mt-2 text-xs text-[hsl(var(--ink-muted))]">
+            Markdown се поддържа. Поддържат се три езика — BG/RO/EN. Ако дадена езикова версия е празна, автоматично се показва BG версията.
+          </p>
+        </div>
+        <div className="inline-flex rounded-card border border-[hsl(var(--line))] overflow-hidden" data-testid={`cms-tabs-${field.key}`}>
+          {CMS_LANGS.map(({ code, flag, label }, i) => (
+            <button
+              key={code}
+              type="button"
+              onClick={() => setActive(code)}
+              className={`px-3 py-1.5 text-xs flex items-center gap-1.5 ${i > 0 ? "border-l border-[hsl(var(--line))]" : ""} ${active === code ? "bg-[hsl(var(--ink))] text-white" : "bg-white hover:bg-[hsl(var(--surface))]"}`}
+              data-testid={`cms-tab-${field.key}-${code}`}
+            >
+              <span aria-hidden>{flag}</span> {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {CMS_LANGS.map(({ code }) => {
+        const key = `${field.key}_${code}`;
+        return (
+          <textarea
+            key={key}
+            rows={12}
+            value={form[key] ?? ""}
+            placeholder={field.placeholder}
+            onChange={(e) => set(key, e.target.value)}
+            className={`mt-3 w-full border border-[hsl(var(--line))] p-3 text-sm font-mono ${active === code ? "" : "hidden"}`}
+            data-testid={`content-${key}`}
+          />
+        );
+      })}
+    </section>
   );
 }

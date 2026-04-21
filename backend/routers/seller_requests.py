@@ -230,6 +230,9 @@ def register_routes():
                 update["title"] = p["title"]
             if p.get("description"):
                 update["description"] = p["description"]
+                # Invalidate cached translations when source description changes
+                update["description_ro"] = ""
+                update["description_en"] = ""
             if update:
                 await db.auctions.update_one({"id": auction_id}, {"$set": update})
             applied = update

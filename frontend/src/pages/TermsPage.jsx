@@ -1,12 +1,14 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import InfoPage, { InfoSection } from "../components/InfoPage";
 import MarkdownBody from "../components/MarkdownBody";
-import { useSiteSettings } from "../lib/settings";
+import { useSiteSettings, pickCmsContent } from "../lib/settings";
 import { useInfoPageSeo } from "../lib/useInfoPageSeo";
 
 export default function TermsPage() {
+  const { i18n } = useTranslation();
   const settings = useSiteSettings();
-  const custom = settings?.terms_content?.trim();
+  const custom = pickCmsContent(settings, "terms_content", i18n.language);
   useInfoPageSeo({
     title: "Общи условия — autobids.bg",
     description: "Общите условия за ползване на платформата autobids.bg — права, задължения на продавачи и купувачи.",

@@ -511,7 +511,41 @@ async def get_auction(auction_id: str, request: Request):
         if is_privileged:
             public["vin"] = a["vin"].strip().upper()
             public["vin_masked"] = False
+    # Expose cached translations (if any) so the frontend can avoid extra calls
+    public["description_ro"] = a.get("description_ro") or ""
+    public["description_en"] = a.get("description_en") or ""
     return public
+
+
+@api.get("/auctions/{auction_id}/translate-description")
+@limiter.limit("20/minute")
+async def translate_auction_description(
+    auction_id: str, request: Request, lang: str = Query(..., regex="^(ro|en|bg)$"),
+):
+    """Auto-translate auction description into target language, cache result, return it.
+
+    Subsequent calls return the cached value for the same (auction, lang) tuple
+    unless the seller updates the description (which clears cached translations).
+    """
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Обявата не е намерена")
+    if lang == "bg":
+        # Canonical text is already Bulgarian — nothing to do.
+        return {"lang": "bg", "text": a.get("description") or "", "cached": True}
+    cache_key = f"description_{lang}"
+    cached = a.get(cache_key)
+    if cached:
+        return {"lang": lang, "text": cached, "cached": True}
+    source = (a.get("description") or "").strip()
+    if not source:
+        return {"lang": lang, "text": "", "cached": False}
+    from translate import translate_text  # local import to avoid cycles at boot
+    translated = await translate_text(source, lang)
+    if not translated:
+        raise HTTPException(status_code=503, detail="Translation service unavailable")
+    await db.auctions.update_one({"id": auction_id}, {"$set": {cache_key: translated}})
+    return {"lang": lang, "text": translated, "cached": False}
 
 @api.post("/auctions")
 @limiter.limit("10/minute")
@@ -1391,6 +1425,22 @@ async def get_public_settings():
         "contacts_content": s.get("contacts_content"),
         "fees_content": s.get("fees_content"),
         "how_it_works_content": s.get("how_it_works_content"),
+        # Multi-language CMS (falls back to non-suffixed BG version when empty)
+        "faq_content_bg": s.get("faq_content_bg") or s.get("faq_content") or "",
+        "faq_content_ro": s.get("faq_content_ro") or "",
+        "faq_content_en": s.get("faq_content_en") or "",
+        "terms_content_bg": s.get("terms_content_bg") or s.get("terms_content") or "",
+        "terms_content_ro": s.get("terms_content_ro") or "",
+        "terms_content_en": s.get("terms_content_en") or "",
+        "contacts_content_bg": s.get("contacts_content_bg") or s.get("contacts_content") or "",
+        "contacts_content_ro": s.get("contacts_content_ro") or "",
+        "contacts_content_en": s.get("contacts_content_en") or "",
+        "fees_content_bg": s.get("fees_content_bg") or s.get("fees_content") or "",
+        "fees_content_ro": s.get("fees_content_ro") or "",
+        "fees_content_en": s.get("fees_content_en") or "",
+        "how_it_works_content_bg": s.get("how_it_works_content_bg") or s.get("how_it_works_content") or "",
+        "how_it_works_content_ro": s.get("how_it_works_content_ro") or "",
+        "how_it_works_content_en": s.get("how_it_works_content_en") or "",
         "og_image_url": s.get("og_image_url") or "",
         "maintenance_mode": bool(s.get("maintenance_mode")),
         "maintenance_message": s.get("maintenance_message") or "",

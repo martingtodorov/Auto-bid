@@ -213,6 +213,22 @@ class SiteSettingsUpdate(BaseModel):
     contacts_content: Optional[str] = None
     fees_content: Optional[str] = None
     how_it_works_content: Optional[str] = None
+    # Phase 7 — multi-lang CMS (fallback to non-suffixed for BG)
+    faq_content_bg: Optional[str] = None
+    faq_content_ro: Optional[str] = None
+    faq_content_en: Optional[str] = None
+    terms_content_bg: Optional[str] = None
+    terms_content_ro: Optional[str] = None
+    terms_content_en: Optional[str] = None
+    contacts_content_bg: Optional[str] = None
+    contacts_content_ro: Optional[str] = None
+    contacts_content_en: Optional[str] = None
+    fees_content_bg: Optional[str] = None
+    fees_content_ro: Optional[str] = None
+    fees_content_en: Optional[str] = None
+    how_it_works_content_bg: Optional[str] = None
+    how_it_works_content_ro: Optional[str] = None
+    how_it_works_content_en: Optional[str] = None
     # Phase 6 — Multi-language hero text (CMS-editable)
     hero_headline_bg: Optional[str] = None
     hero_subtitle_bg: Optional[str] = None

@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { Calendar, Gauge, Fuel, Settings, MapPin, Palette, Zap, Cog, MessageCircle, Heart, ArrowLeft, Shield, Wifi, Share2 } from "lucide-react";
+import { Calendar, Gauge, Fuel, Settings, MapPin, Palette, Zap, Cog, MessageCircle, Heart, ArrowLeft, Shield, Wifi, Share2, Languages } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, API_BASE, formatEUR, formatLocal, formatKM, timeLeft } from "../lib/apiClient";
+import { translateEnum } from "../lib/carTranslations";
 import { useAuth, formatError } from "../lib/auth";
 import PreauthModal from "../components/PreauthModal";
 import BiddingCreditModal from "../components/BiddingCreditModal";
@@ -267,15 +268,16 @@ export default function AuctionDetailPage() {
   );
   if (!a) return <div className="py-24 text-center">Зареждане…</div>;
 
+  const lng = i18n.language;
   const specs = [
-    { i: Calendar, l: "Година", v: a.year },
-    { i: Gauge, l: "Пробег", v: formatKM(a.mileage_km) },
-    { i: Fuel, l: t("auction.fuel_label"), v: a.fuel },
-    { i: Settings, l: t("auction.transmission_label"), v: a.transmission },
-    { i: Cog, l: "Двигател", v: `${a.engine_cc} см³` },
-    { i: Zap, l: "Мощност", v: `${a.power_hp} к.с.` },
-    { i: Palette, l: "Цвят", v: a.color },
-    { i: MapPin, l: "Локация", v: `${a.city}, обл. ${a.region}` },
+    { i: Calendar, l: t("spec.year", "Година"), v: a.year },
+    { i: Gauge, l: t("spec.mileage", "Пробег"), v: formatKM(a.mileage_km) },
+    { i: Fuel, l: t("auction.fuel_label"), v: translateEnum(a.fuel, "fuel", lng) },
+    { i: Settings, l: t("auction.transmission_label"), v: translateEnum(a.transmission, "transmission", lng) },
+    { i: Cog, l: t("spec.engine", "Двигател"), v: `${a.engine_cc} cm³` },
+    { i: Zap, l: t("spec.power", "Мощност"), v: `${a.power_hp} ${t("spec.hp", "к.с.")}` },
+    { i: Palette, l: t("spec.colour", "Цвят"), v: translateEnum(a.color, "colour", lng) },
+    { i: MapPin, l: t("spec.location", "Локация"), v: `${translateEnum(a.city, "city", lng)}, ${translateEnum(a.region, "region", lng)}` },
   ];
 
   const isLive = a.status === "live";
@@ -287,7 +289,7 @@ export default function AuctionDetailPage() {
     if (!window.confirm("Да се премахне ли този коментар?")) return;
     try {
       await api.delete(`/admin/comments/${commentId}`);
-      setComments((prev) => prev.map((c) => c.id === commentId ? { ...c, deleted: true, text: "Коментарът е премахнат поради неконструктивно съдържание." } : c));
+      setComments((prev) => prev.map((c) => c.id === commentId ? { ...c, deleted: true, text: t("auction.comment_removed") } : c));
     } catch (e) {
       alert(formatError(e));
     }
@@ -308,17 +310,17 @@ export default function AuctionDetailPage() {
 
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-8">
         <Link to="/auctions" className="inline-flex items-center gap-2 text-sm text-[hsl(var(--ink-muted))] hover:text-[hsl(var(--ink))]">
-          <ArrowLeft size={14} /> Обратно към търговете
+          <ArrowLeft size={14} /> {t("auction.back_to_auctions")}
         </Link>
 
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
           <div className="lg:col-span-8">
-            <div className="overline text-[hsl(var(--accent))]">{a.make} · {a.body_type}</div>
+            <div className="overline text-[hsl(var(--accent))]">{a.make} · {translateEnum(a.body_type, "body_type", lng)}</div>
             <h1 className="font-serif text-3xl lg:text-5xl mt-3 tracking-tight leading-tight">{a.title}</h1>
             <div className="mt-3 text-sm text-[hsl(var(--ink-muted))] flex items-center gap-4 flex-wrap">
-              <span>{a.year} · {formatKM(a.mileage_km)} · {a.fuel} · {a.city}</span>
+              <span>{a.year} · {formatKM(a.mileage_km)} · {translateEnum(a.fuel, "fuel", lng)} · {translateEnum(a.city, "city", lng)}</span>
               <span className={`flex items-center gap-1.5 text-xs ${wsStatus === "connected" ? "text-[hsl(var(--accent))]" : "text-[hsl(var(--ink-muted))]"}`} data-testid="ws-status">
-                <Wifi size={11} /> {wsStatus === "connected" ? "На живо" : wsStatus === "connecting" ? "Свързване…" : "Offline"}
+                <Wifi size={11} /> {wsStatus === "connected" ? t("auction.live") : wsStatus === "connecting" ? t("auction.connecting") : t("auction.offline")}
               </span>
             </div>
 
@@ -355,7 +357,7 @@ export default function AuctionDetailPage() {
                 <div className="mt-4 rounded-card border border-[hsl(var(--line))] p-5 flex items-center justify-between gap-3 flex-wrap" data-testid="vin-block">
                   <div>
                     <div className="overline text-[hsl(var(--ink-muted))] flex items-center gap-1.5">
-                      <Shield size={12} /> VIN номер
+                      <Shield size={12} /> {t("auction.vin_number")}
                     </div>
                     <div className="font-mono text-lg mt-1 tracking-wider" data-testid="vin-value">{a.vin}</div>
                     {vinMsg && <div className="text-xs text-[hsl(var(--accent))] mt-2" data-testid="vin-request-msg">{vinMsg}</div>}
@@ -370,19 +372,19 @@ export default function AuctionDetailPage() {
                           className="btn btn-secondary !py-2 !px-4 text-xs flex items-center gap-2 disabled:opacity-50"
                           data-testid="request-vin-btn"
                         >
-                          <Shield size={12} /> {vinRequesting ? "Изпращане…" : "Заяви пълен VIN"}
+                          <Shield size={12} /> {vinRequesting ? t("auction.vin_sending") : t("auction.vin_request_cta")}
                         </button>
                       )}
                       <p className="text-xs text-[hsl(var(--ink-muted))] max-w-[220px]" data-testid="vin-masked-note">
                         {!user
-                          ? "Влезте и заявете VIN или наддайте, за да го видите тук."
+                          ? t("auction.vin_masked_note_anon")
                           : isLive
-                            ? "Заявката изпраща пълния VIN на вашия имейл. Наддаването също го разкрива в обявата."
-                            : "Заявка за VIN е достъпна само при активен търг."}
+                            ? t("auction.vin_masked_note_live")
+                            : t("auction.vin_masked_note_ended")}
                       </p>
                     </div>
                   ) : (
-                    <span className="pill pill-live" data-testid="vin-unmasked-badge">Пълен VIN · разкрит</span>
+                    <span className="pill pill-live" data-testid="vin-unmasked-badge">{t("auction.vin_unmasked")}</span>
                   )}
                 </div>
               )}
@@ -390,7 +392,12 @@ export default function AuctionDetailPage() {
 
             <div className="mt-10">
               <div className="overline text-[hsl(var(--ink-muted))]">{t("auction.editorial_description")}</div>
-              <DescriptionWithInteriorShots description={a.description} interiorImages={a.images_interior || []} />
+              <DescriptionWithInteriorShots
+                auctionId={id}
+                description={a.description}
+                interiorImages={a.images_interior || []}
+                preTranslated={{ ro: a.description_ro || "", en: a.description_en || "" }}
+              />
             </div>
 
             {a.status === "reserve_not_met" && (
@@ -402,7 +409,7 @@ export default function AuctionDetailPage() {
               <h2 className="font-serif text-2xl lg:text-3xl mt-2">{t("auction.bids_history_title")} ({bids.length})</h2>
               <div className="mt-6 rounded-card border border-[hsl(var(--line))] overflow-hidden">
                 {bids.length === 0 ? (
-                  <p className="p-6 text-sm text-[hsl(var(--ink-muted))]">Все още няма наддавания. Бъдете първи.</p>
+                  <p className="p-6 text-sm text-[hsl(var(--ink-muted))]">{t("auction.no_bids_yet")}</p>
                 ) : (
                   bids.map((b) => (
                     <div key={b.id} className="flex items-center justify-between p-4 border-b border-[hsl(var(--line))] last:border-b-0" data-testid={`bid-row-${b.id}`}>
@@ -473,7 +480,9 @@ export default function AuctionDetailPage() {
                         )}
                       </div>
                     </div>
-                    <p className={`mt-3 text-sm leading-relaxed ${c.deleted ? "italic text-[hsl(var(--ink-muted))]" : ""}`}>{c.text}</p>
+                    <p className={`mt-3 text-sm leading-relaxed ${c.deleted ? "italic text-[hsl(var(--ink-muted))]" : ""}`}>
+                      {c.deleted ? t("auction.comment_removed") : c.text}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -543,13 +552,13 @@ export default function AuctionDetailPage() {
                         {placing ? "…" : t("auction.place_bid")}
                       </button>
                     </div>
-                    <p className="text-xs text-[hsl(var(--ink-muted))] mt-2">Минимум €{nextBid.min_next_eur?.toLocaleString("bg-BG")} · стъпка €{nextBid.step_eur?.toLocaleString("bg-BG")}</p>
+                    <p className="text-xs text-[hsl(var(--ink-muted))] mt-2">{t("auction.min_next_bid", { min: nextBid.min_next_eur?.toLocaleString("bg-BG"), step: nextBid.step_eur?.toLocaleString("bg-BG") })}</p>
 
                     <div className="mt-4 p-3 rounded-card bg-[hsl(var(--accent-soft))] border border-[hsl(var(--accent))]/20 flex items-start gap-2">
                       <Shield size={14} className="text-[hsl(var(--accent))] shrink-0 mt-0.5" />
                       <div className="text-xs leading-relaxed">
-                        <div className="font-semibold text-[hsl(var(--accent-ink))]">Такса на купувача {formatEUR(preauthPreview)}</div>
-                        <div className="text-[hsl(var(--ink-muted))] mt-0.5">{settings.buyer_fee_pct}% от наддаването (мин. €{settings.buyer_fee_min_eur}, макс. €{settings.buyer_fee_max_eur}) — блокирани върху картата. При загуба се освобождават изцяло.</div>
+                        <div className="font-semibold text-[hsl(var(--accent-ink))]">{t("auction.buyer_fee_label")} {formatEUR(preauthPreview)}</div>
+                        <div className="text-[hsl(var(--ink-muted))] mt-0.5">{t("auction.buyer_fee_detail", { pct: settings.buyer_fee_pct, min: settings.buyer_fee_min_eur, max: settings.buyer_fee_max_eur })}</div>
                       </div>
                     </div>
 
@@ -559,7 +568,7 @@ export default function AuctionDetailPage() {
                           <div className="font-semibold text-[hsl(var(--accent))] flex items-center gap-1.5">
                             <Zap size={12} /> Активен кредит · {formatEUR(credit.max_amount_eur)}
                           </div>
-                          <div className="text-[hsl(var(--ink-muted))] mt-0.5">Можете да наддавате до тази сума без нови картови транзакции.</div>
+                          <div className="text-[hsl(var(--ink-muted))] mt-0.5">{t("auction.up_to_credit_hint")}</div>
                         </div>
                         <button onClick={() => setShowCredit(true)} className="text-xs font-semibold text-[hsl(var(--accent))] hover:underline shrink-0" data-testid="credit-manage-btn">Управи</button>
                       </div>
@@ -594,7 +603,7 @@ export default function AuctionDetailPage() {
                   <div className="font-serif text-xl mt-2">{a.seller_name}</div>
                 )}
                 <p className="text-xs text-[hsl(var(--ink-muted))] mt-2" data-testid="seller-badge">
-                  {a.seller_is_verified_dealer ? "Проверен дилър" : "Частно лице"} · {a.region}
+                  {a.seller_is_verified_dealer ? t("auction.verified_dealer") : t("auction.private_person", "Частно лице")} · {translateEnum(a.region, "region", i18n.language)}
                 </p>
               </div>
             </div>
@@ -635,14 +644,43 @@ export default function AuctionDetailPage() {
   );
 }
 
-function DescriptionWithInteriorShots({ description, interiorImages }) {
-  const text = (description || "").trim();
+function DescriptionWithInteriorShots({ auctionId, description, interiorImages, preTranslated = {} }) {
+  const { t, i18n } = useTranslation();
+  const lang = (i18n.language || "bg").slice(0, 2);
+  const needsTranslation = lang !== "bg" && !!(description || "").trim();
+  // Show original when: BG, user clicked "show original", or we haven't yet fetched/have no translation.
+  const [showOriginal, setShowOriginal] = React.useState(!needsTranslation);
+  const [translated, setTranslated] = React.useState(preTranslated[lang] || "");
+  const [loadingTrans, setLoadingTrans] = React.useState(false);
+  const [transErr, setTransErr] = React.useState("");
+
+  // Auto-fetch on language change if a cached translation is present on the auction doc
+  React.useEffect(() => {
+    setShowOriginal(!needsTranslation);
+    setTranslated(preTranslated[lang] || "");
+    setTransErr("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lang, auctionId]);
+
+  const requestTranslation = async () => {
+    if (!needsTranslation || translated) { setShowOriginal(false); return; }
+    setLoadingTrans(true); setTransErr("");
+    try {
+      const { data } = await api.get(`/auctions/${auctionId}/translate-description`, { params: { lang } });
+      setTranslated(data?.text || "");
+      setShowOriginal(false);
+    } catch (e) {
+      setTransErr("AI translation temporarily unavailable — showing original.");
+      setShowOriginal(true);
+    } finally { setLoadingTrans(false); }
+  };
+
+  const displayText = (!showOriginal && translated) ? translated : (description || "");
+  const text = displayText.trim();
   const shots = (interiorImages || []).slice(0, 3);
 
-  // Split description into paragraphs on empty lines or fallback to sentence groups
   let paragraphs = text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
   if (paragraphs.length < 2) {
-    // Break by sentences into ~2 balanced chunks
     const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean);
     if (sentences.length >= 2) {
       const mid = Math.ceil(sentences.length / 2);
@@ -652,17 +690,60 @@ function DescriptionWithInteriorShots({ description, interiorImages }) {
     }
   }
 
+  const translateControls = needsTranslation ? (
+    <div className="flex items-center gap-3 flex-wrap mt-4 mb-1" data-testid="translate-controls">
+      {translated ? (
+        <>
+          {showOriginal ? (
+            <button
+              onClick={() => setShowOriginal(false)}
+              className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1.5"
+              data-testid="translate-show-translated"
+            >
+              <Languages size={12} /> {t("auction.translate_to_current")}
+            </button>
+          ) : (
+            <>
+              <span className="pill text-xs text-[hsl(var(--accent))] border-[hsl(var(--accent))]/40 bg-[hsl(var(--accent-soft))]" data-testid="translated-badge">
+                <Languages size={11} /> {t("auction.translated_by_ai")}
+              </span>
+              <button
+                onClick={() => setShowOriginal(true)}
+                className="text-xs underline text-[hsl(var(--ink-muted))] hover:text-[hsl(var(--ink))]"
+                data-testid="translate-show-original"
+              >
+                {t("auction.show_original")}
+              </button>
+            </>
+          )}
+        </>
+      ) : (
+        <button
+          onClick={requestTranslation}
+          disabled={loadingTrans}
+          className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1.5"
+          data-testid="translate-fetch"
+        >
+          <Languages size={12} /> {loadingTrans ? t("auction.translating") : t("auction.translate_to_current")}
+        </button>
+      )}
+      {transErr && <span className="text-xs text-[hsl(var(--danger))]">{transErr}</span>}
+    </div>
+  ) : null;
+
+  const paraBlocks = paragraphs.map((p, i) => (
+    <p key={i} className="text-[15px] leading-[1.7] whitespace-pre-wrap text-[hsl(var(--ink))]/90">{p}</p>
+  ));
+
   if (shots.length === 0) {
     return (
-      <div className="mt-4 max-w-3xl space-y-4" data-testid="auction-description">
-        {paragraphs.map((p, i) => (
-          <p key={i} className="text-[15px] leading-[1.7] whitespace-pre-wrap text-[hsl(var(--ink))]/90">{p}</p>
-        ))}
+      <div className="max-w-3xl" data-testid="auction-description">
+        {translateControls}
+        <div className="mt-4 space-y-4">{paraBlocks}</div>
       </div>
     );
   }
 
-  // Intersperse shots between paragraphs. We place one shot after each paragraph until we run out.
   const blocks = [];
   paragraphs.forEach((p, i) => {
     blocks.push(
@@ -671,34 +752,34 @@ function DescriptionWithInteriorShots({ description, interiorImages }) {
     if (i < shots.length) {
       blocks.push(
         <figure key={`s-${i}`} className="my-2 rounded-card overflow-hidden border border-[hsl(var(--line))] bg-[hsl(var(--surface))]">
-          <img src={shots[i]} alt="Интериор" loading="lazy" className="w-full h-auto object-cover max-h-[480px]" data-testid={`interior-shot-${i}`} />
-          <figcaption className="px-3 py-2 text-xs text-[hsl(var(--ink-muted))] font-mono tracking-wide">Интериор · {i + 1}/{shots.length}</figcaption>
+          <img src={shots[i]} alt="Interior" loading="lazy" className="w-full h-auto object-cover max-h-[480px]" data-testid={`interior-shot-${i}`} />
+          <figcaption className="px-3 py-2 text-xs text-[hsl(var(--ink-muted))] font-mono tracking-wide">{t("spec.interior", "Интериор")} · {i + 1}/{shots.length}</figcaption>
         </figure>
       );
     }
   });
-
-  // If there are leftover shots (more shots than paragraph gaps), append them at the end
   if (shots.length > paragraphs.length) {
     for (let i = paragraphs.length; i < shots.length; i++) {
       blocks.push(
         <figure key={`s-tail-${i}`} className="my-2 rounded-card overflow-hidden border border-[hsl(var(--line))] bg-[hsl(var(--surface))]">
-          <img src={shots[i]} alt="Интериор" loading="lazy" className="w-full h-auto object-cover max-h-[480px]" data-testid={`interior-shot-${i}`} />
-          <figcaption className="px-3 py-2 text-xs text-[hsl(var(--ink-muted))] font-mono tracking-wide">Интериор · {i + 1}/{shots.length}</figcaption>
+          <img src={shots[i]} alt="Interior" loading="lazy" className="w-full h-auto object-cover max-h-[480px]" data-testid={`interior-shot-${i}`} />
+          <figcaption className="px-3 py-2 text-xs text-[hsl(var(--ink-muted))] font-mono tracking-wide">{t("spec.interior", "Интериор")} · {i + 1}/{shots.length}</figcaption>
         </figure>
       );
     }
   }
 
   return (
-    <div className="mt-4 max-w-3xl space-y-4" data-testid="auction-description">
-      {blocks}
+    <div className="max-w-3xl" data-testid="auction-description">
+      {translateControls}
+      <div className="mt-4 space-y-4">{blocks}</div>
     </div>
   );
 }
 
 
 function ShareButton({ auctionId, title }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = React.useState(false);
   const shareUrl = `${window.location.origin}/api/share/auction/${auctionId}`;
 
@@ -715,13 +796,13 @@ function ShareButton({ auctionId, title }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      window.prompt("Копирайте линка:", shareUrl);
+      window.prompt(shareUrl, shareUrl);
     }
   };
 
   return (
     <button onClick={share} className="mt-2 w-full btn btn-secondary flex items-center justify-center gap-2" data-testid="share-button">
-      <Share2 size={14} /> {copied ? "Линкът е копиран" : "Сподели обявата"}
+      <Share2 size={14} /> {copied ? t("auction.link_copied") : t("auction.share_auction")}
     </button>
   );
 }

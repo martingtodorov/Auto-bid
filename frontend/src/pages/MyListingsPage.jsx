@@ -159,32 +159,37 @@ export default function MyListingsPage() {
                           <div className="mt-2 text-sm text-[hsl(var(--ink-muted))]">{a.make} · {a.year} г. · {a.city}</div>
                           {a.status === "rejected" && a.rejected_reason && (
                             <div className="mt-3 text-xs rounded-card bg-[hsl(0_74%_97%)] border border-[hsl(var(--danger))]/30 p-3 text-[hsl(var(--danger))]" data-testid={`reject-reason-${a.id}`}>
-                              <strong>Забележка:</strong> {a.rejected_reason}
+                              <strong>{t("seller.note_for_mod").split(" ")[0]}:</strong> {a.rejected_reason}
                             </div>
                           )}
                           {isRNM && counter !== "pending" && counter !== "accepted" && (
                             <div className="mt-4 p-4 rounded-card bg-[hsl(var(--surface))] border border-[hsl(var(--line))]">
-                              <div className="overline text-[hsl(var(--accent))]">Търгът приключи под резерв</div>
-                              <p className="mt-2 text-sm">Водещата наддавка €{Math.round(a.current_bid_eur).toLocaleString("bg-BG")} не достигна резерва ви от €{Math.round(a.reserve_eur || 0).toLocaleString("bg-BG")}. Можете да приемете, да предложите своя цена, или да оттеглите.</p>
+                              <div className="overline text-[hsl(var(--accent))]">{t("auction.auction_ended_below_reserve")}</div>
+                              <p className="mt-2 text-sm">
+                                {t("auction.auction_ended_below_reserve_hint", {
+                                  bid: formatEUR(a.current_bid_eur),
+                                  reserve: formatEUR(a.reserve_eur || 0),
+                                })}
+                              </p>
                               <div className="mt-3 flex flex-wrap gap-2">
                                 <button onClick={() => acceptHighBid(a.id)} className="btn btn-accent !py-2 !px-4 text-xs flex items-center gap-2" data-testid={`accept-high-${a.id}`}>
-                                  <CheckCircle2 size={13} /> Приеми {formatEUR(a.current_bid_eur)}
+                                  <CheckCircle2 size={13} /> {t("auction.accept_high_bid", { amount: formatEUR(a.current_bid_eur) })}
                                 </button>
                                 <button onClick={() => setCounterFor(a.id)} className="btn btn-primary !py-2 !px-4 text-xs flex items-center gap-2" data-testid={`counter-${a.id}`}>
-                                  <Gift size={13} /> Контраоферта
+                                  <Gift size={13} /> {t("auction.counter_offer_cta")}
                                 </button>
                               </div>
                               {counterFor === a.id && (
                                 <div className="mt-4 flex gap-2">
-                                  <input type="number" value={counterPrice} onChange={(e) => setCounterPrice(e.target.value)} placeholder="Вашата цена в €" className="flex-1 border border-[hsl(var(--line))] h-10 px-3 text-sm" data-testid={`counter-price-${a.id}`} />
-                                  <button onClick={() => sendCounter(a.id)} className="btn btn-accent !py-2 !px-4 text-xs" data-testid={`send-counter-${a.id}`}>Изпрати</button>
-                                  <button onClick={() => { setCounterFor(null); setCounterPrice(""); }} className="btn btn-secondary !py-2 !px-4 text-xs">Отказ</button>
+                                  <input type="number" value={counterPrice} onChange={(e) => setCounterPrice(e.target.value)} placeholder={t("auction.counter_placeholder")} className="flex-1 border border-[hsl(var(--line))] h-10 px-3 text-sm" data-testid={`counter-price-${a.id}`} />
+                                  <button onClick={() => sendCounter(a.id)} className="btn btn-accent !py-2 !px-4 text-xs" data-testid={`send-counter-${a.id}`}>{t("auction.send_counter")}</button>
+                                  <button onClick={() => { setCounterFor(null); setCounterPrice(""); }} className="btn btn-secondary !py-2 !px-4 text-xs">{t("forms.cancel")}</button>
                                 </div>
                               )}
                             </div>
                           )}
                           {counter === "pending" && (
-                            <p className="mt-3 text-xs text-[hsl(var(--ink-muted))]">Очаква отговор за контраоферта €{Math.round(a.counter_offer_eur).toLocaleString("bg-BG")}.</p>
+                            <p className="mt-3 text-xs text-[hsl(var(--ink-muted))]">{t("auction.pending_counter")} · {formatEUR(a.counter_offer_eur)}</p>
                           )}
 
                           <div className="mt-4 flex gap-2 flex-wrap">
@@ -198,18 +203,18 @@ export default function MyListingsPage() {
                                   className="btn btn-secondary !py-2 !px-3 text-xs flex items-center gap-1.5"
                                   data-testid={`reorder-photos-${a.id}`}
                                   disabled={(a.images || []).length < 2}
-                                  title={(a.images || []).length < 2 ? "Трябват поне 2 снимки за пренареждане" : "Пренареди снимките (без одобрение)"}
+                                  title={(a.images || []).length < 2 ? t("seller.reorder_description") : t("seller.reorder_photos")}
                                 >
-                                  <Images size={12} /> Пренареди снимки
+                                  <Images size={12} /> {t("seller.reorder_photos")}
                                 </button>
                                 <button
                                   onClick={() => setModal({ auction: a, mode: "text" })}
                                   className="btn btn-secondary !py-2 !px-3 text-xs flex items-center gap-1.5"
                                   data-testid={`request-text-${a.id}`}
                                   disabled={!!requestsByAuction[a.id]?.text_change}
-                                  title={requestsByAuction[a.id]?.text_change ? "Имате чакаща заявка" : "Заяви ревизия на текста"}
+                                  title={requestsByAuction[a.id]?.text_change ? t("seller.pending_request") : t("seller.text_change_description")}
                                 >
-                                  <FileEdit size={12} /> {requestsByAuction[a.id]?.text_change ? "Чакаща ревизия" : "Заяви ревизия"}
+                                  <FileEdit size={12} /> {requestsByAuction[a.id]?.text_change ? t("seller.pending_request") : t("seller.request_text_change")}
                                 </button>
                                 {!a.featured && (
                                   <button
@@ -217,14 +222,14 @@ export default function MyListingsPage() {
                                     className="btn btn-secondary !py-2 !px-3 text-xs flex items-center gap-1.5 !border-amber-400 !text-amber-700"
                                     data-testid={`request-promote-${a.id}`}
                                     disabled={!!requestsByAuction[a.id]?.promotion}
-                                    title={requestsByAuction[a.id]?.promotion ? "Имате чакаща заявка" : "Заяви промотиране"}
+                                    title={requestsByAuction[a.id]?.promotion ? t("seller.pending_request") : t("seller.promote_description")}
                                   >
-                                    <Star size={12} /> {requestsByAuction[a.id]?.promotion ? "Заявено" : "Промотирай"}
+                                    <Star size={12} /> {requestsByAuction[a.id]?.promotion ? t("seller.pending_request") : t("seller.promote_request")}
                                   </button>
                                 )}
                                 {a.featured && (
                                   <span className="pill text-xs text-amber-700 border-amber-300 bg-amber-50" data-testid={`featured-badge-${a.id}`}>
-                                    <Star size={11} /> Промотирана
+                                    <Star size={11} /> {t("auction.featured_badge")}
                                   </span>
                                 )}
                               </>
