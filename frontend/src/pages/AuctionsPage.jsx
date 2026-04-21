@@ -13,11 +13,11 @@ export default function AuctionsPage() {
   const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [facets, setFacets] = useState({ makes: [], fuels: [], transmissions: [], regions: [], body_types: [] });
+  const [facets, setFacets] = useState({ makes: [], fuels: [], transmissions: [], body_types: [] });
   const [saveMsg, setSaveMsg] = useState("");
   const [saveErr, setSaveErr] = useState("");
   const [filters, setFilters] = useState({
-    make: "", fuel: "", transmission: "", region: "", body_type: "",
+    make: "", fuel: "", transmission: "", body_type: "",
     min_price: "", max_price: "", year_min: "", year_max: "", status: "live", sort: "ending_soon",
     q: "",
   });
@@ -33,7 +33,7 @@ export default function AuctionsPage() {
   useEffect(() => {
     setPageMeta({
       title: "Всички търгове — autobids.bg",
-      description: "Разгледайте всички активни автомобилни търгове в autobids.bg — филтрирайте по марка, година, регион, гориво и цена.",
+      description: "Разгледайте всички активни автомобилни търгове в autobids.bg — филтрирайте по марка, година, гориво и цена.",
       url: window.location.href,
       jsonLd: buildBreadcrumbs([
         { name: "Начало", url: window.location.origin + "/" },
@@ -53,7 +53,7 @@ export default function AuctionsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const reset = () => setFilters({ make: "", fuel: "", transmission: "", region: "", body_type: "", min_price: "", max_price: "", year_min: "", year_max: "", status: "live", sort: "ending_soon", q: "" });
+  const reset = () => setFilters({ make: "", fuel: "", transmission: "", body_type: "", min_price: "", max_price: "", year_min: "", year_max: "", status: "live", sort: "ending_soon", q: "" });
   const set = (k, v) => setFilters((p) => ({ ...p, [k]: v }));
 
   const saveSearch = async () => {
@@ -90,7 +90,6 @@ export default function AuctionsPage() {
       <Select k="body_type" label={t("auctions_page.body_type")} options={facets.body_types} kind="body_type" />
       <Select k="fuel" label={t("auctions_page.fuel")} options={facets.fuels} kind="fuel" />
       <Select k="transmission" label={t("auctions_page.transmission")} options={facets.transmissions} kind="transmission" />
-      <Select k="region" label={t("auctions_page.region")} options={facets.regions} kind="region" />
 
       <div className="grid grid-cols-2 gap-3">
         <div>

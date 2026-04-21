@@ -9,14 +9,6 @@ import ImageUploader from "../components/ImageUploader";
 const FUELS = ["Бензин", "Дизел", "Хибриден", "Електрически", "Газ/Бензин"];
 const TRANSMISSIONS = ["Автоматична", "Ръчна"];
 const BODY_TYPES = ["Седан", "Комби", "Хечбек", "Джип", "Купе", "Кабрио", "Ван", "Пикап"];
-const REGIONS = [
-  "София (град)", "София (област)", "Пловдив", "Варна", "Бургас", "Русе",
-  "Стара Загора", "Плевен", "Сливен", "Добрич", "Шумен", "Хасково",
-  "Перник", "Ямбол", "Пазарджик", "Благоевград", "Велико Търново",
-  "Враца", "Габрово", "Видин", "Монтана", "Кърджали", "Кюстендил",
-  "Ловеч", "Разград", "Силистра", "Смолян", "Търговище",
-];
-
 // Countries stored (and displayed) in English — sorted alphabetically with
 // Bulgaria pinned on top as the default.
 const COUNTRIES = [
@@ -77,7 +69,7 @@ const emptyForm = (user) => ({
   title: "", make: "", model: "", year: 2020, mileage_km: 0,
   fuel: "Бензин", transmission: "Автоматична", body_type: "Седан",
   power_hp: 150, engine_cc: 2000, color: "",
-  region: "София (град)", city: "София", country: "Bulgaria", description: "",
+  city: "София", country: "Bulgaria", description: "",
   vin: "",
   contact_email: user?.email || "",
   contact_phone: "",
@@ -338,13 +330,8 @@ export default function SellPage() {
             <Field label={t("sell.form.colour")}>
               <input value={form.color} onChange={(e) => set("color", e.target.value)} className={inputCls} />
             </Field>
-            <Field label={t("sell.form.region")}>
-              <select value={form.region} onChange={(e) => set("region", e.target.value)} className={inputCls}>
-                {REGIONS.map((o) => <option key={o} value={o}>{translateEnum(o, "region", i18n.language)}</option>)}
-              </select>
-            </Field>
             <Field label={t("sell.form.city")}>
-              <input value={form.city} onChange={(e) => set("city", e.target.value)} className={inputCls} />
+              <input value={form.city} onChange={(e) => set("city", e.target.value)} className={inputCls} data-testid="sell-city" />
             </Field>
             <Field label={t("sell.form.country")}>
               <select value={form.country} onChange={(e) => set("country", e.target.value)} className={inputCls} data-testid="sell-country">

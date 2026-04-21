@@ -603,7 +603,7 @@ export default function AuctionDetailPage() {
                   <div className="font-serif text-xl mt-2">{a.seller_name}</div>
                 )}
                 <p className="text-xs text-[hsl(var(--ink-muted))] mt-2" data-testid="seller-badge">
-                  {a.seller_is_verified_dealer ? t("auction.verified_dealer") : t("auction.private_person", "Частно лице")} · {translateEnum(a.region, "region", i18n.language)}
+                  {a.seller_is_verified_dealer ? t("auction.verified_dealer") : t("auction.private_person", "Частно лице")} · {translateEnum(a.city, "city", i18n.language)}{a.country ? `, ${a.country}` : ""}
                 </p>
               </div>
             </div>

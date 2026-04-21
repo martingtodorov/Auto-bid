@@ -41,7 +41,7 @@ class AuctionCreate(BaseModel):
     power_hp: int
     engine_cc: int
     color: str
-    region: str
+    region: Optional[str] = None
     city: str
     country: Optional[str] = "Bulgaria"
     description: str
