@@ -225,6 +225,35 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
   - Интерактивна форма за оставяне на отзив (само за купувачи с неоценени сделки)
 - Testing: 18/18 backend + пълна frontend Playwright сесия 100% ✅ (`iteration_3.json`)
 
+### Apr 2026 (продължение) — Phase 6: Multi-language + Seller Self-Service + T&C Audit
+- **T&C с device fingerprint audit (P0 fix)**:
+  - `POST /api/auth/register` вече изисква `terms_accepted: true` (400 ако липсва)
+  - При приемане записва в user doc: `terms_accepted_at`, `terms_accepted_ip`, `terms_accepted_user_agent`, `terms_accepted_language`, `terms_version`
+  - Независим immutable запис в `audit_log` с `action=user.terms_accepted` (ZZLD/GDPR доказателство за съгласие)
+  - Frontend `RegisterPage.jsx`: нов задължителен checkbox `[data-testid=register-terms-checkbox]` с линк към `/terms` и `/terms#privacy`; submit disabled докато чек-бокса не е маркиран
+- **Hero CMS (multi-language)**:
+  - 6 нови полета в `site_settings`: `hero_headline_{bg,ro,en}`, `hero_subtitle_{bg,ro,en}`
+  - Editable в Admin → Настройки → „Hero текст на началната страница"
+  - LandingPage.jsx използва CMS стойност за текущия език (falls back на i18n ако празно)
+  - Headline поддържа `<em>` за курсив и newline за пренасяне
+- **Seller Self-Service (с модераторско одобрение)** — нов router `/app/backend/routers/seller_requests.py`:
+  - `POST /api/auctions/{id}/request-promotion` — заявка за промотиране (admin approve → `featured=true`)
+  - `POST /api/auctions/{id}/request-text-change` — заявка за промяна на заглавие/описание (admin approve → прилага)
+  - `PATCH /api/auctions/{id}/reorder-images` — пренареждане на снимки (seller only, no approval нужно; rejects add/remove)
+  - `GET /api/me/seller-requests` + `DELETE /api/me/seller-requests/{id}` (cancel pending)
+  - Admin: `GET /api/admin/seller-requests` + `POST /admin/seller-requests/{id}/approve|reject` с filter по status/type
+  - Frontend: `SellerRequestModal.jsx` (drag-drop reorder + text edit + promote) + нов таб „Заявки" в admin
+- **Admin UI разширение**:
+  - Нов таб „Известия": notification log + CSV transaction export бутон
+  - Нов таб „Имейл шаблони": CRUD на canned emails + „Изпрати тест" форма
+  - Нов таб „Заявки": seller-requests queue с approve/reject actions
+- **i18n пълно покритие**:
+  - Нов `en.json` locale (пълен)
+  - Разширени `bg.json` и `ro.json` (nav, hero, landing steps, forms, auth, auction, cta, footer, seller)
+  - `LanguageSwitcher` показва BG/RO/EN + достъпен в Nav (desktop + mobile)
+  - LandingPage + Nav + RegisterPage изцяло преведени
+- **Testing**: `iteration_8.json` — Backend 28/31 passed (2 skipped fixture-related, 1 minor `/health` 404), Frontend 100% critical flows. 0 critical, 0 action items.
+
 ## 3rd-party integrations status
 - Resend: Configured via env (RESEND_API_KEY), fallback console log
 - Twilio: Configured via env (TWILIO_*), fallback console log
