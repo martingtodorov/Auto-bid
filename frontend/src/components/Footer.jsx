@@ -1,14 +1,16 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { brandTldForLang } from "../i18n";
 
 export default function Footer() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const brandTld = brandTldForLang(i18n.resolvedLanguage || i18n.language);
   return (
     <footer className="rule-t bg-[hsl(var(--surface))]" data-testid="site-footer">
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-16 grid grid-cols-2 md:grid-cols-4 gap-10">
         <div className="col-span-2 md:col-span-1">
-          <div className="font-serif text-2xl tracking-tight">autobids<span className="text-[hsl(var(--accent))]">.bg</span></div>
+          <div className="font-serif text-2xl tracking-tight">Auto<span className="text-[hsl(var(--accent))]">&amp;</span>Bid<span className="text-[hsl(var(--accent))]">{brandTld}</span></div>
           <p className="mt-4 text-sm text-[hsl(var(--ink-muted))] max-w-xs leading-relaxed">
             {t("footer.brand_tagline")}
           </p>

@@ -4,13 +4,15 @@ import { Menu, X, User, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../lib/auth";
 import LanguageSwitcher from "./LanguageSwitcher";
+import { brandTldForLang } from "../i18n";
 
 export default function Nav() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const navigate = useNavigate();
+  const brandTld = brandTldForLang(i18n.resolvedLanguage || i18n.language);
 
   const links = [
     { to: "/auctions", label: t("nav.auctions") },
@@ -31,7 +33,7 @@ export default function Nav() {
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10">
         <div className="flex items-center justify-between h-16 gap-6">
           <Link to="/" className="flex items-center gap-2 shrink-0 mr-2 md:mr-6" data-testid="brand-logo">
-            <span className="font-serif text-2xl tracking-tight">autobids<span className="text-[hsl(var(--accent))]">.bg</span></span>
+            <span className="font-serif text-2xl tracking-tight">Auto<span className="text-[hsl(var(--accent))]">&amp;</span>Bid<span className="text-[hsl(var(--accent))]">{brandTld}</span></span>
           </Link>
 
           <nav className="hidden md:flex items-center gap-5 lg:gap-7 shrink-0">
