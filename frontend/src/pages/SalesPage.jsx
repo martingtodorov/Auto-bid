@@ -17,6 +17,7 @@ const WINDOW_OPTIONS = [
 
 export default function SalesPage() {
   const { t, i18n } = useTranslation();
+  const brand = useBrandName();
   const { user } = useAuth();
   const isPrivileged = user?.role === "admin" || user?.role === "moderator";
   const [stats, setStats] = useState(null);
@@ -32,15 +33,15 @@ export default function SalesPage() {
   // SEO
   useEffect(() => {
     setPageMeta({
-      title: "Архив продажби и пазарни статистики — autobids.bg",
-      description: "Реални цени на продадени автомобили в autobids.bg. Средни цени по марка, месечни тенденции и публичен архив на приключилите сделки.",
+      title: `Архив продажби и пазарни статистики — ${brand}`,
+      description: `Реални цени на продадени автомобили в ${brand}. Средни цени по марка, месечни тенденции и публичен архив на приключилите сделки.`,
       url: window.location.href,
       jsonLd: combineJsonLd(buildBreadcrumbs([
         { name: "Начало", url: window.location.origin },
         { name: "Продадени", url: window.location.href },
       ])),
     });
-  }, []);
+  }, [brand]);
 
   // Stats (admin/moderator only — regular users don't need platform analytics)
   useEffect(() => {

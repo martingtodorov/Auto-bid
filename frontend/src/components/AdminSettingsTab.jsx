@@ -182,7 +182,7 @@ export default function AdminSettingsTab() {
               type="url"
               value={form.og_image_url}
               onChange={(e) => set("og_image_url", e.target.value)}
-              placeholder="https://autobids.bg/brand/og.jpg"
+              placeholder="https://auto-bid.bg/brand/og.jpg"
               className="w-full border border-[hsl(var(--line))] h-11 px-3 text-sm font-mono"
               data-testid="seo-og-image-input"
             />

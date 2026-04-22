@@ -12,6 +12,7 @@ import NegotiationPortal from "../components/NegotiationPortal";
 import Lightbox from "../components/Lightbox";
 import { useSiteSettings, computeBuyerFee } from "../lib/settings";
 import { setPageMeta, resetPageMeta, buildVehicleJsonLd, buildBreadcrumbs, combineJsonLd } from "../lib/seo";
+import { brandNameForLang } from "../i18n/index";
 
 export default function AuctionDetailPage() {
   const { id } = useParams();
@@ -130,8 +131,9 @@ export default function AuctionDetailPage() {
       { name: a.title, url },
     ]);
     const vehicle = buildVehicleJsonLd(a, url);
+    const brand = brandNameForLang(i18n.resolvedLanguage || i18n.language);
     setPageMeta({
-      title: `${a.title} — autobids.bg`,
+      title: `${a.title} — ${brand}`,
       description: a.description,
       image: a.images?.[0],
       url,
@@ -779,12 +781,13 @@ function DescriptionWithInteriorShots({ auctionId, description, interiorImages, 
 
 
 function ShareButton({ auctionId, title }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const brand = brandNameForLang(i18n.resolvedLanguage || i18n.language);
   const [copied, setCopied] = React.useState(false);
   const shareUrl = `${window.location.origin}/api/share/auction/${auctionId}`;
 
   const share = async () => {
-    const data = { title: title || "autobids.bg", url: shareUrl };
+    const data = { title: title || brand, url: shareUrl };
     try {
       if (navigator.share) {
         await navigator.share(data);

@@ -5,14 +5,16 @@ import InfoPage, { InfoSection } from "../components/InfoPage";
 import MarkdownBody from "../components/MarkdownBody";
 import { useSiteSettings, pickCmsContent } from "../lib/settings";
 import { useInfoPageSeo } from "../lib/useInfoPageSeo";
+import { useBrandName } from "../lib/brand";
 
 export default function ContactsPage() {
   const { i18n } = useTranslation();
+  const brand = useBrandName();
   const settings = useSiteSettings();
   const custom = pickCmsContent(settings, "contacts_content", i18n.language);
   useInfoPageSeo({
-    title: "Контакти — autobids.bg",
-    description: "Свържете се с екипа на autobids.bg — имейл contact@autobids.bg, телефон +359 2 444 2828, София.",
+    title: `Контакти — ${brand}`,
+    description: `Свържете се с екипа на ${brand} — имейл contact@autobids.bg, телефон +359 2 444 2828, София.`,
     path: "/contacts",
     crumb: "Контакти",
   });

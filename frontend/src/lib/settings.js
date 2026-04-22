@@ -10,7 +10,7 @@ const DEFAULTS = {
   buyer_fee_pct: 2.0,
   buyer_fee_min_eur: 150,
   buyer_fee_max_eur: 4000,
-  seo_title: "autobids.bg — Автомобилни търгове",
+  seo_title: "Auto&Bid.bg — Автомобилни търгове",
   seo_description: "",
   google_site_verification: "",
   bing_site_verification: "",

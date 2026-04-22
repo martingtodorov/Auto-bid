@@ -6,14 +6,16 @@ import InfoPage from "../components/InfoPage";
 import MarkdownBody from "../components/MarkdownBody";
 import { useSiteSettings, pickCmsContent } from "../lib/settings";
 import { useInfoPageSeo } from "../lib/useInfoPageSeo";
+import { useBrandName } from "../lib/brand";
 
 export default function HowItWorksPage() {
   const { i18n } = useTranslation();
+  const brand = useBrandName();
   const settings = useSiteSettings();
   const custom = pickCmsContent(settings, "how_it_works_content", i18n.language);
   useInfoPageSeo({
-    title: "Как работи — autobids.bg",
-    description: "Как работят онлайн търговете за автомобили в autobids.bg — от подаване на обява до финализиране на сделката.",
+    title: `Как работи — ${brand}`,
+    description: `Как работят онлайн търговете за автомобили в ${brand} — от подаване на обява до финализиране на сделката.`,
     path: "/how-it-works",
     crumb: "Как работи",
   });
@@ -24,10 +26,10 @@ export default function HowItWorksPage() {
       </InfoPage>
     );
   }
-  return <DefaultHowItWorks pct={settings?.buyer_fee_pct ?? 2} />;
+  return <DefaultHowItWorks pct={settings?.buyer_fee_pct ?? 2} brand={brand} />;
 }
 
-function DefaultHowItWorks({ pct }) {
+function DefaultHowItWorks({ pct, brand }) {
   return (
     <main data-testid="how-it-works-page">
       <section className="rule-b">
@@ -37,7 +39,7 @@ function DefaultHowItWorks({ pct }) {
             Наддаване, както<br/><em>трябва да бъде.</em>
           </h1>
           <p className="mt-8 text-lg text-[hsl(var(--ink-muted))] max-w-2xl mx-auto leading-relaxed">
-            autobids.bg съчетава редакционния подход на американския Bring a Trailer с българската автомобилна общност.
+            {brand} съчетава редакционния подход на американския Bring a Trailer с българската автомобилна общност.
           </p>
         </div>
       </section>

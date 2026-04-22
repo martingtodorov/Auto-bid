@@ -4,17 +4,19 @@ import InfoPage, { InfoSection } from "../components/InfoPage";
 import MarkdownBody from "../components/MarkdownBody";
 import { useSiteSettings, pickCmsContent } from "../lib/settings";
 import { useInfoPageSeo } from "../lib/useInfoPageSeo";
+import { useBrandName } from "../lib/brand";
 
 export default function FeesPage() {
   const { i18n } = useTranslation();
+  const brand = useBrandName();
   const settings = useSiteSettings();
   const custom = pickCmsContent(settings, "fees_content", i18n.language);
   const pct = settings?.buyer_fee_pct ?? 2;
   const min = settings?.buyer_fee_min_eur ?? 150;
   const max = settings?.buyer_fee_max_eur ?? 4000;
   useInfoPageSeo({
-    title: "Такси и комисионни — autobids.bg",
-    description: `autobids.bg: ${pct}% buyer's premium (мин. €${min}, макс. €${max}). Безплатно за продавачите — без скрити такси.`,
+    title: `Такси и комисионни — ${brand}`,
+    description: `${brand}: ${pct}% buyer's premium (мин. €${min}, макс. €${max}). Безплатно за продавачите — без скрити такси.`,
     path: "/fees",
     crumb: "Такси",
   });

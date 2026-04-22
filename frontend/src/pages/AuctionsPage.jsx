@@ -7,9 +7,11 @@ import { SlidersHorizontal, X, Search, BookmarkPlus, Check } from "lucide-react"
 import { mergeMakes } from "../lib/makes";
 import { translateEnum } from "../lib/carTranslations";
 import { setPageMeta, resetPageMeta, buildBreadcrumbs } from "../lib/seo";
+import { useBrandName } from "../lib/brand";
 
 export default function AuctionsPage() {
   const { t, i18n } = useTranslation();
+  const brand = useBrandName();
   const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -32,8 +34,8 @@ export default function AuctionsPage() {
 
   useEffect(() => {
     setPageMeta({
-      title: "Всички търгове — autobids.bg",
-      description: "Разгледайте всички активни автомобилни търгове в autobids.bg — филтрирайте по марка, година, гориво и цена.",
+      title: `Всички търгове — ${brand}`,
+      description: `Разгледайте всички активни автомобилни търгове в ${brand} — филтрирайте по марка, година, гориво и цена.`,
       url: window.location.href,
       jsonLd: buildBreadcrumbs([
         { name: "Начало", url: window.location.origin + "/" },
@@ -41,7 +43,7 @@ export default function AuctionsPage() {
       ]),
     });
     return () => resetPageMeta();
-  }, []);
+  }, [brand]);
 
   const load = useCallback(async () => {
     setLoading(true);

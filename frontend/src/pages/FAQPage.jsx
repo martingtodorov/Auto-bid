@@ -4,10 +4,11 @@ import InfoPage, { InfoSection, FAQItem } from "../components/InfoPage";
 import MarkdownBody from "../components/MarkdownBody";
 import { useSiteSettings, pickCmsContent } from "../lib/settings";
 import { setPageMeta, resetPageMeta, buildBreadcrumbs, buildFaqJsonLd, combineJsonLd } from "../lib/seo";
+import { useBrandName } from "../lib/brand";
 
-const DEFAULT_QA = (pct) => [
+const DEFAULT_QA = (pct, brand) => [
   { q: "Как да наддавам?", a: `Регистрирайте се, добавете платежен метод за pre-authorization и натиснете „Наддай" на всяка активна обява. При всяка наддавка се блокират ${pct}% от сумата като buyer's premium.` },
-  { q: "Какво е pre-authorization?", a: `Това е временно блокиране (не плащане) на ${pct}% от наддаваната сума върху вашата карта. Ако спечелите търга, тези ${pct}% се прилагат като комисионна към autobids.bg. Ако не спечелите — сумата се освобождава автоматично в рамките на 5–7 работни дни.` },
+  { q: "Какво е pre-authorization?", a: `Това е временно блокиране (не плащане) на ${pct}% от наддаваната сума върху вашата карта. Ако спечелите търга, тези ${pct}% се прилагат като комисионна към ${brand}. Ако не спечелите — сумата се освобождава автоматично в рамките на 5–7 работни дни.` },
   { q: "Какво става, когато наддавам в последните минути?", a: "Ако нова наддавка постъпи по-малко от 2 минути преди края, търгът автоматично се удължава с 2 минути. Така никой не губи автомобил заради мрежови забавяния." },
   { q: "Мога ли да оттегля наддавка?", a: "Не, наддаванията са обвързващи. Подайте оферта само ако сте готови да платите заявената сума." },
   { q: "Колко струва да подам автомобил?", a: "Подаването, промотирането и приключването на обява са абсолютно безплатни за продавачите — без такси, без абонаменти и без скрити комисионни, независимо от изхода на търга." },
@@ -38,11 +39,12 @@ function parseFaqMarkdown(md) {
 
 export default function FAQPage() {
   const { i18n } = useTranslation();
+  const brand = useBrandName();
   const settings = useSiteSettings();
   const custom = pickCmsContent(settings, "faq_content", i18n.language);
   const pct = settings?.buyer_fee_pct ?? 2;
 
-  const qa = custom ? parseFaqMarkdown(custom) : DEFAULT_QA(pct);
+  const qa = custom ? parseFaqMarkdown(custom) : DEFAULT_QA(pct, brand);
 
   useEffect(() => {
     const url = window.location.origin + "/faq";
@@ -53,13 +55,13 @@ export default function FAQPage() {
     ]);
     const faq = buildFaqJsonLd(qa);
     setPageMeta({
-      title: "Често задавани въпроси — autobids.bg",
-      description: "Отговори на най-честите въпроси за наддаването, продаването и сделките в autobids.bg.",
+      title: `Често задавани въпроси — ${brand}`,
+      description: `Отговори на най-честите въпроси за наддаването, продаването и сделките в ${brand}.`,
       url,
       jsonLd: combineJsonLd(faq, breadcrumbs),
     });
     return () => resetPageMeta();
-  }, [qa.length, pct]);
+  }, [qa.length, pct, brand]);
 
   return (
     <InfoPage overline="Помощ" title="Често задавани въпроси">
@@ -68,15 +70,15 @@ export default function FAQPage() {
       ) : (
         <>
           <p className="text-lg text-[hsl(var(--ink-muted))]">
-            Отговори на най-честите въпроси за наддаването, продаването и сделките в autobids.bg.
+            Отговори на най-честите въпроси за наддаването, продаването и сделките в {brand}.
           </p>
           <InfoSection title="Наддаване">
-            {DEFAULT_QA(pct).slice(0, 4).map((it, i) => (
+            {DEFAULT_QA(pct, brand).slice(0, 4).map((it, i) => (
               <FAQItem key={i} q={it.q} a={it.a} />
             ))}
           </InfoSection>
           <InfoSection title="Продаване">
-            {DEFAULT_QA(pct).slice(4).map((it, i) => (
+            {DEFAULT_QA(pct, brand).slice(4).map((it, i) => (
               <FAQItem key={i} q={it.q} a={it.a} />
             ))}
           </InfoSection>

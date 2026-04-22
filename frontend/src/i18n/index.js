@@ -9,11 +9,11 @@ import en from "./locales/en.json";
 /**
  * Domain → language mapping.
  * Configurable via env variables (set at build time):
- *   REACT_APP_DOMAIN_BG=autobids.bg
- *   REACT_APP_DOMAIN_RO=autobids.ro
- *   REACT_APP_DOMAIN_EN=autobids.com
+ *   REACT_APP_DOMAIN_BG=auto-bid.bg
+ *   REACT_APP_DOMAIN_RO=auto-bid.ro
+ *   REACT_APP_DOMAIN_EN=auto-bid.com
  * Defaults assume the three TLD variants that follow the brand convention.
- * A match is "endsWith" so staging/preview subdomains (e.g. `preview.autobids.ro`) work too.
+ * A match is "endsWith" so staging/preview subdomains (e.g. `preview.auto-bid.ro`) work too.
  */
 const DOMAIN_BG = (process.env.REACT_APP_DOMAIN_BG || "auto-bid.bg").toLowerCase();
 const DOMAIN_RO = (process.env.REACT_APP_DOMAIN_RO || "auto-bid.ro").toLowerCase();
@@ -27,6 +27,11 @@ export function brandTldForLang(code) {
   if (c === "ro") return ".ro";
   if (c === "en") return ".com";
   return ".bg";
+}
+
+/** Full brand display name for the given language — e.g. "Auto&Bid.bg". */
+export function brandNameForLang(code) {
+  return `Auto&Bid${brandTldForLang(code)}`;
 }
 
 /**

@@ -5,9 +5,11 @@ import { api, formatEUR } from "../lib/apiClient";
 import AuctionCard from "../components/AuctionCard";
 import SellerReviews, { StarRating } from "../components/SellerReviews";
 import { setPageMeta, combineJsonLd, buildBreadcrumbs } from "../lib/seo";
+import { useBrandName } from "../lib/brand";
 
 export default function ProfilePage() {
   const { userId } = useParams();
+  const brand = useBrandName();
   const [data, setData] = useState(null);
   const [tab, setTab] = useState("sales");
   const [reviewCount, setReviewCount] = useState(null);
@@ -61,7 +63,7 @@ export default function ProfilePage() {
       title, description: desc, url,
       jsonLd: combineJsonLd(personLd, crumbs),
     });
-  }, [data]);
+  }, [data, brand]);
 
   if (err) return (
     <main className="py-24 text-center" data-testid="profile-error">
@@ -87,7 +89,7 @@ export default function ProfilePage() {
               {user.name.charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-[260px]">
-              <div className="overline text-[hsl(var(--accent))]">{user.role === "admin" ? "autobids.bg екип" : "Член на общността"}</div>
+              <div className="overline text-[hsl(var(--accent))]">{user.role === "admin" ? `${brand} екип` : "Член на общността"}</div>
               <h1 className="font-serif text-4xl lg:text-5xl tracking-tight mt-3">{user.name}</h1>
               <div className="mt-3 text-sm text-[hsl(var(--ink-muted))] flex items-center gap-4 flex-wrap">
                 <span className="flex items-center gap-1.5"><Calendar size={13} /> Член от {memberYear}</span>
