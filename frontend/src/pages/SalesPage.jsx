@@ -9,11 +9,11 @@ import { useAuth } from "../lib/auth";
 import { translateEnum } from "../lib/carTranslations";
 import { useBrandName } from "../lib/brand";
 
-const WINDOW_OPTIONS = [
-  { days: 30, label: "30 дни" },
-  { days: 90, label: "90 дни" },
-  { days: 365, label: "12 месеца" },
-  { days: null, label: "От старт" },
+const WINDOW_OPTIONS = (t) => [
+  { days: 30, label: t("sales_list.window_30") },
+  { days: 90, label: t("sales_list.window_90") },
+  { days: 365, label: t("sales_list.window_365") },
+  { days: null, label: t("sales_list.window_all") },
 ];
 
 export default function SalesPage() {
@@ -88,23 +88,21 @@ export default function SalesPage() {
       {/* Hero / KPIs */}
       <section className="rule-b hero-ambient">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-12 lg:py-14">
-          <div className="overline text-[hsl(var(--accent))]">Архив</div>
+          <div className="overline text-[hsl(var(--accent))]">{t("sales_list.overline_archive")}</div>
           <h1 className="font-serif text-4xl lg:text-5xl tracking-tight mt-3" data-testid="sales-title">
-            {isPrivileged ? "Архив на продажбите" : "Продадени автомобили"}
+            {isPrivileged ? t("sales_list.title_priv") : t("sales_list.title_public")}
           </h1>
           <p className="mt-3 text-sm text-[hsl(var(--ink-muted))] max-w-2xl">
-            {isPrivileged
-              ? "Прозрачни цени на реално продадени автомобили — средни стойности, месечни тенденции и топ марки."
-              : "Разгледайте приключилите успешно търгове — подбрани, документирани и предадени на новите им собственици."}
+            {isPrivileged ? t("sales_list.subtitle_priv") : t("sales_list.subtitle_public")}
           </p>
 
           {isPrivileged && (
             <>
               {/* Window toggle */}
               <div className="mt-6 inline-flex rounded-card border border-[hsl(var(--line))] overflow-hidden bg-white" data-testid="stats-window-toggle">
-                {WINDOW_OPTIONS.map((o, i) => (
+                {WINDOW_OPTIONS(t).map((o, i) => (
                   <button
-                    key={o.label}
+                    key={o.days || "all"}
                     onClick={() => setWindowDays(o.days)}
                     className={`px-4 py-2 text-xs font-medium ${i > 0 ? "border-l border-[hsl(var(--line))]" : ""} ${windowDays === o.days ? "bg-[hsl(var(--ink))] text-white" : "hover:bg-[hsl(var(--surface))]"}`}
                     data-testid={`stats-window-${o.days || "all"}`}
@@ -114,10 +112,10 @@ export default function SalesPage() {
 
               {/* KPIs */}
               <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-0 border border-[hsl(var(--line))] bg-white rounded-card overflow-hidden" data-testid="sales-kpis">
-                <KPI label="Приключили сделки" value={stats ? stats.total_count : "—"} sub={stats?.total_count ? "продадени автомобили" : "няма данни"} />
-                <KPI label="Общ обем" value={stats ? formatEUR(stats.total_volume_eur) : "—"} sub="стойност на сделките" />
-                <KPI label="Средна цена" value={stats ? formatEUR(stats.avg_price_eur) : "—"} sub={stats ? `медиана ${formatEUR(stats.median_price_eur)}` : "—"} />
-                <KPI label="Най-висока продажба" value={stats ? formatEUR(stats.max_price_eur) : "—"} sub={stats?.highest_sale?.title || "—"} last />
+                <KPI label={t("sales_list.kpi_total")} value={stats ? stats.total_count : "—"} sub={stats?.total_count ? t("sales_list.kpi_total_sub") : t("sales_list.kpi_no_data")} />
+                <KPI label={t("sales_list.kpi_volume")} value={stats ? formatEUR(stats.total_volume_eur) : "—"} sub={t("sales_list.kpi_volume_sub")} />
+                <KPI label={t("sales_list.kpi_avg")} value={stats ? formatEUR(stats.avg_price_eur) : "—"} sub={stats ? t("sales_list.kpi_median", { val: formatEUR(stats.median_price_eur) }) : "—"} />
+                <KPI label={t("sales_list.kpi_highest")} value={stats ? formatEUR(stats.max_price_eur) : "—"} sub={stats?.highest_sale?.title || "—"} last />
               </div>
 
               {/* Highest sale spotlight */}
@@ -133,7 +131,7 @@ export default function SalesPage() {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 overline text-[hsl(var(--accent))]"><Crown size={12} /> Рекорд за периода</div>
+                    <div className="flex items-center gap-1.5 overline text-[hsl(var(--accent))]"><Crown size={12} /> {t("sales_list.record_period")}</div>
                     <div className="font-serif text-lg mt-1 truncate">{stats.highest_sale.title}</div>
                   </div>
                   <div className="font-serif text-2xl text-right">{formatEUR(stats.highest_sale.current_bid_eur)}</div>
@@ -149,8 +147,8 @@ export default function SalesPage() {
         <section className="rule-b" data-testid="sales-charts-section">
           <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-14 grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="rounded-card border border-[hsl(var(--line))] bg-white p-6" data-testid="chart-by-make">
-              <div className="flex items-center gap-2 overline text-[hsl(var(--accent))]"><BarChart3 size={14} /> Топ марки</div>
-              <h2 className="font-serif text-2xl mt-2">По брой сделки</h2>
+              <div className="flex items-center gap-2 overline text-[hsl(var(--accent))]"><BarChart3 size={14} /> {t("sales_list.top_makes_overline")}</div>
+              <h2 className="font-serif text-2xl mt-2">{t("sales_list.top_makes_title")}</h2>
               <ul className="mt-5 space-y-2.5">
                 {(stats?.by_make || []).map((m) => (
                   <li key={m.make} className="flex items-center gap-3">
@@ -162,16 +160,16 @@ export default function SalesPage() {
                     <span className="text-xs w-24 text-right text-[hsl(var(--ink-muted))] hidden sm:block">{formatEUR(m.avg_eur)}</span>
                   </li>
                 ))}
-                {!stats?.by_make?.length && <li className="text-sm text-[hsl(var(--ink-muted))]">Няма данни за избрания период.</li>}
+                {!stats?.by_make?.length && <li className="text-sm text-[hsl(var(--ink-muted))]">{t("sales_list.no_period_data")}</li>}
               </ul>
             </div>
 
             <div className="rounded-card border border-[hsl(var(--line))] bg-white p-6" data-testid="chart-monthly">
-              <div className="flex items-center gap-2 overline text-[hsl(var(--accent))]"><Calendar size={14} /> Месечна тенденция</div>
-              <h2 className="font-serif text-2xl mt-2">Средна цена</h2>
+              <div className="flex items-center gap-2 overline text-[hsl(var(--accent))]"><Calendar size={14} /> {t("sales_list.monthly_overline")}</div>
+              <h2 className="font-serif text-2xl mt-2">{t("sales_list.monthly_title")}</h2>
               <div className="mt-5 flex items-end gap-1.5 h-40">
                 {(stats?.by_month || []).map((m) => (
-                  <div key={m.month} className="flex-1 flex flex-col items-center justify-end group" title={`${m.month}: ${formatEUR(m.avg_eur)} (${m.count} сделки)`}>
+                  <div key={m.month} className="flex-1 flex flex-col items-center justify-end group" title={t("sales_list.bar_month_title", { month: m.month, avg: formatEUR(m.avg_eur), count: m.count })}>
                     <div
                       className="w-full bg-[hsl(var(--ink))] group-hover:bg-[hsl(var(--accent))] transition-colors rounded-t"
                       style={{ height: `${(m.avg_eur / monthMax) * 100}%`, minHeight: "2px" }}
@@ -179,7 +177,7 @@ export default function SalesPage() {
                     <span className="mt-1 text-[10px] text-[hsl(var(--ink-muted))] font-mono">{m.month.slice(5)}</span>
                   </div>
                 ))}
-                {!stats?.by_month?.length && <div className="w-full text-sm text-[hsl(var(--ink-muted))]">Няма данни.</div>}
+                {!stats?.by_month?.length && <div className="w-full text-sm text-[hsl(var(--ink-muted))]">{t("sales_list.no_data")}</div>}
               </div>
             </div>
           </div>
@@ -191,8 +189,8 @@ export default function SalesPage() {
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-14">
           <div className="flex items-end justify-between gap-4 flex-wrap">
             <div>
-              <div className="overline text-[hsl(var(--accent))]">Всички сделки</div>
-              <h2 className="font-serif text-3xl lg:text-4xl tracking-tight mt-3">Последни продажби {total ? `(${total})` : ""}</h2>
+              <div className="overline text-[hsl(var(--accent))]">{t("sales_list.section_overline")}</div>
+              <h2 className="font-serif text-3xl lg:text-4xl tracking-tight mt-3">{t("sales_list.section_title")} {total ? `(${total})` : ""}</h2>
             </div>
             <select
               value={sort}
@@ -200,10 +198,10 @@ export default function SalesPage() {
               className="border border-[hsl(var(--line))] rounded-card px-3 py-2 bg-white text-sm"
               data-testid="sales-sort"
             >
-              <option value="recent">Най-скорошни</option>
-              <option value="oldest">Най-стари</option>
-              <option value="price_desc">Цена ↓</option>
-              <option value="price_asc">Цена ↑</option>
+              <option value="recent">{t("sales_list.sort_recent")}</option>
+              <option value="oldest">{t("sales_list.sort_oldest")}</option>
+              <option value="price_desc">{t("sales_list.sort_price_desc")}</option>
+              <option value="price_asc">{t("sales_list.sort_price_asc")}</option>
             </select>
           </div>
 
@@ -214,7 +212,7 @@ export default function SalesPage() {
               <input
                 value={filters.q}
                 onChange={(e) => onFilterChange({ q: e.target.value })}
-                placeholder="Търси по марка / модел…"
+                placeholder={t("sales_list.search_placeholder")}
                 className="w-full border border-[hsl(var(--line))] rounded-card pl-9 pr-3 py-2 text-sm"
                 data-testid="sales-filter-q"
               />
@@ -237,18 +235,18 @@ export default function SalesPage() {
               onClick={resetFilters}
               className="border border-[hsl(var(--line))] rounded-card px-3 py-2 text-sm bg-white hover:bg-[hsl(var(--surface))]"
               data-testid="sales-filter-reset"
-            >Изчисти</button>
+            >{t("sales_list.reset")}</button>
           </div>
 
           {/* List */}
           <div className="mt-8">
             {loading ? (
-              <div className="py-20 text-center text-sm text-[hsl(var(--ink-muted))]">Зареждане…</div>
+              <div className="py-20 text-center text-sm text-[hsl(var(--ink-muted))]">{t("sales_list.loading")}</div>
             ) : items.length === 0 ? (
               <div className="py-20 text-center rounded-card border border-[hsl(var(--line))] bg-white" data-testid="sales-empty">
                 <TrendingUp size={28} className="mx-auto text-[hsl(var(--ink-muted))]" />
-                <p className="font-serif text-xl mt-3">Няма намерени сделки</p>
-                <p className="mt-1 text-sm text-[hsl(var(--ink-muted))]">Променете филтрите, за да видите повече.</p>
+                <p className="font-serif text-xl mt-3">{t("sales_list.empty_title")}</p>
+                <p className="mt-1 text-sm text-[hsl(var(--ink-muted))]">{t("sales_list.empty_hint")}</p>
               </div>
             ) : (
               <>
@@ -257,18 +255,18 @@ export default function SalesPage() {
                 </div>
                 {total > LIMIT && (
                   <div className="mt-10 flex items-center justify-between" data-testid="sales-pagination">
-                    <span className="text-sm text-[hsl(var(--ink-muted))]">Показани {offset + 1}–{Math.min(offset + items.length, total)} от {total}</span>
+                    <span className="text-sm text-[hsl(var(--ink-muted))]">{t("sales_list.pagination_shown", { from: offset + 1, to: Math.min(offset + items.length, total), total })}</span>
                     <div className="flex gap-2">
                       <button
                         disabled={offset === 0}
                         onClick={() => setOffset((o) => Math.max(0, o - LIMIT))}
                         className="px-3 py-1.5 border border-[hsl(var(--line))] rounded-card text-sm bg-white disabled:opacity-40"
-                      >Предишна</button>
+                      >{t("sales_list.prev")}</button>
                       <button
                         disabled={offset + LIMIT >= total}
                         onClick={() => setOffset((o) => o + LIMIT)}
                         className="px-3 py-1.5 border border-[hsl(var(--line))] rounded-card text-sm bg-white disabled:opacity-40"
-                      >Следваща</button>
+                      >{t("sales_list.next")}</button>
                     </div>
                   </div>
                 )}

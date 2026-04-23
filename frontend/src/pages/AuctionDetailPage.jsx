@@ -423,7 +423,7 @@ export default function AuctionDetailPage() {
                         )}
                         <div className="text-xs text-[hsl(var(--ink-muted))] font-mono">
                           {new Date(b.created_at).toLocaleString(intlLocale(i18n.language))}
-                          {b.preauth_status === "authorized" && <span className="ml-2 text-[hsl(var(--accent))]">· preauth активен</span>}
+                          {b.preauth_status === "authorized" && <span className="ml-2 text-[hsl(var(--accent))]">· {t("auction.preauth_active")}</span>}
                         </div>
                       </div>
                       <div className="font-serif text-xl">{formatEUR(b.amount_eur)}</div>
@@ -568,7 +568,7 @@ export default function AuctionDetailPage() {
                       <div className="mt-3 p-3 rounded-card bg-white border border-[hsl(var(--accent))]/40 flex items-start justify-between gap-2" data-testid="credit-active-badge">
                         <div className="text-xs leading-relaxed">
                           <div className="font-semibold text-[hsl(var(--accent))] flex items-center gap-1.5">
-                            <Zap size={12} /> Активен кредит · {formatEUR(credit.max_amount_eur)}
+                            <Zap size={12} /> {t("auction.active_credit_short")} · {formatEUR(credit.max_amount_eur)}
                           </div>
                           <div className="text-[hsl(var(--ink-muted))] mt-0.5">{t("auction.up_to_credit_hint")}</div>
                         </div>

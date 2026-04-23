@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Shield, FileCheck, Gavel, Sparkles, TrendingUp, Camera, Users, Award } from "lucide-react";
+import { Shield, FileCheck, Gavel, Sparkles } from "lucide-react";
 import InfoPage from "../components/InfoPage";
 import MarkdownBody from "../components/MarkdownBody";
 import { useSiteSettings, pickCmsContent } from "../lib/settings";
@@ -9,37 +9,43 @@ import { useInfoPageSeo } from "../lib/useInfoPageSeo";
 import { useBrandName } from "../lib/brand";
 
 export default function HowItWorksPage() {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const brand = useBrandName();
   const settings = useSiteSettings();
   const custom = pickCmsContent(settings, "how_it_works_content", i18n.language);
   useInfoPageSeo({
-    title: `Как работи — ${brand}`,
-    description: `Как работят онлайн търговете за автомобили в ${brand} — от подаване на обява до финализиране на сделката.`,
+    title: `${t("nav.how_it_works", "Как работи")} — ${brand}`,
+    description: t("how_it_works.intro_body", { brand }),
     path: "/how-it-works",
-    crumb: "Как работи",
+    crumb: t("nav.how_it_works", "Как работи"),
   });
   if (custom) {
     return (
-      <InfoPage overline="Прозрачни търгове" title="Как работи">
+      <InfoPage overline={t("how_it_works.overline")} title={t("nav.how_it_works", "Как работи")}>
         <MarkdownBody>{custom}</MarkdownBody>
       </InfoPage>
     );
   }
-  return <DefaultHowItWorks pct={settings?.buyer_fee_pct ?? 2} brand={brand} />;
+  return <DefaultHowItWorks pct={settings?.buyer_fee_pct ?? 2} brand={brand} t={t} />;
 }
 
-function DefaultHowItWorks({ pct, brand }) {
+function DefaultHowItWorks({ pct, brand, t }) {
+  const steps = [
+    { n: "01", i: Shield, t: t("how_it_works.step_01_t"), d: t("how_it_works.step_01_d") },
+    { n: "02", i: FileCheck, t: t("how_it_works.step_02_t"), d: t("how_it_works.step_02_d") },
+    { n: "03", i: Gavel, t: t("how_it_works.step_03_t"), d: t("how_it_works.step_03_d") },
+    { n: "04", i: Sparkles, t: t("how_it_works.step_04_t"), d: t("how_it_works.step_04_d") },
+  ];
   return (
     <main data-testid="how-it-works-page">
       <section className="rule-b">
         <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-10 py-20 lg:py-28 text-center">
-          <div className="overline text-[hsl(var(--accent))]">Прозрачни търгове</div>
+          <div className="overline text-[hsl(var(--accent))]">{t("how_it_works.overline")}</div>
           <h1 className="hero-headline text-5xl lg:text-7xl mt-5">
-            Наддаване, както<br/><em>трябва да бъде.</em>
+            {t("how_it_works.hero_headline_1")}<br/><em>{t("how_it_works.hero_headline_2")}</em>
           </h1>
           <p className="mt-8 text-lg text-[hsl(var(--ink-muted))] max-w-2xl mx-auto leading-relaxed">
-            {brand} съчетава редакционния подход на американския Bring a Trailer с българската автомобилна общност.
+            {t("how_it_works.intro_body", { brand })}
           </p>
         </div>
       </section>
@@ -47,12 +53,7 @@ function DefaultHowItWorks({ pct, brand }) {
       <section className="rule-b bg-[hsl(var(--surface))]">
         <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-10 py-16 lg:py-24">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-0 border border-[hsl(var(--line))] bg-white">
-            {[
-              { n: "01", i: Shield, t: "Регистрация", d: "Създайте безплатен акаунт. Потвърждаваме самоличността с кратка верификация преди първата наддавка." },
-              { n: "02", i: FileCheck, t: "Проучване", d: "Всеки автомобил преминава фото отчет от 60+ снимки, независима техническа проверка и VIN декодиране." },
-              { n: "03", i: Gavel, t: "Наддаване", d: "Седемдневен онлайн търг. Последните 2 минути автоматично удължават продължителността при нова наддавка." },
-              { n: "04", i: Sparkles, t: "Финализиране", d: "Свързваме победителя с продавача. Помощ за плащане, транспорт и регистрация — всичко на едно място." },
-            ].map((s, i) => (
+            {steps.map((s, i) => (
               <div key={i} className="p-10 rule-b md:border-r md:border-[hsl(var(--line))] md:[&:nth-child(2n)]:border-r-0 md:[&:nth-last-child(-n+2)]:border-b-0">
                 <div className="font-mono text-xs text-[hsl(var(--accent))]">{s.n}</div>
                 <s.i size={28} className="mt-4 text-[hsl(var(--ink))]" />
@@ -66,23 +67,23 @@ function DefaultHowItWorks({ pct, brand }) {
 
       <section className="rule-b">
         <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-10 py-16 lg:py-24">
-          <div className="overline text-[hsl(var(--accent))]">Такси</div>
-          <h2 className="font-serif text-3xl lg:text-5xl mt-3">Проста структура на таксите</h2>
+          <div className="overline text-[hsl(var(--accent))]">{t("how_it_works.fees_overline")}</div>
+          <h2 className="font-serif text-3xl lg:text-5xl mt-3">{t("how_it_works.fees_title")}</h2>
           <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-0 border border-[hsl(var(--line))]">
             <div className="p-8 border-b md:border-b-0 md:border-r border-[hsl(var(--line))]">
-              <div className="overline text-[hsl(var(--ink-muted))]">Купувач</div>
+              <div className="overline text-[hsl(var(--ink-muted))]">{t("how_it_works.fee_buyer")}</div>
               <div className="font-serif text-5xl mt-3">{pct}%</div>
-              <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">Buyer's premium при спечелен търг. {pct}% pre-authorization се блокира при всяка наддавка и се прилага като комисионна при победа.</p>
+              <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">{t("how_it_works.fee_buyer_body", { pct })}</p>
             </div>
             <div className="p-8 border-b md:border-b-0 md:border-r border-[hsl(var(--line))]">
-              <div className="overline text-[hsl(var(--ink-muted))]">Продавач</div>
+              <div className="overline text-[hsl(var(--ink-muted))]">{t("how_it_works.fee_seller")}</div>
               <div className="font-serif text-5xl mt-3">€0</div>
-              <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">Безплатно публикуване, одобрение, промотиране и финализиране на обявата — независимо от изхода на търга.</p>
+              <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">{t("how_it_works.fee_seller_body")}</p>
             </div>
             <div className="p-8">
-              <div className="overline text-[hsl(var(--ink-muted))]">Неуспешен търг</div>
+              <div className="overline text-[hsl(var(--ink-muted))]">{t("how_it_works.fee_failed")}</div>
               <div className="font-serif text-5xl mt-3">€0</div>
-              <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">Нулева такса, ако не бъде достигната резервната цена или при отказ на сделка.</p>
+              <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">{t("how_it_works.fee_failed_body")}</p>
             </div>
           </div>
         </div>
@@ -90,8 +91,8 @@ function DefaultHowItWorks({ pct, brand }) {
 
       <section className="bg-[hsl(var(--ink))] text-white">
         <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-10 py-20 flex flex-col md:flex-row items-center justify-between gap-8">
-          <h2 className="hero-headline text-4xl lg:text-5xl">Готов за първата наддавка?</h2>
-          <Link to="/register" className="btn !border-white bg-white !text-[hsl(var(--ink))] hover:!bg-[hsl(var(--accent))] hover:!text-white hover:!border-[hsl(var(--accent))]">Създай акаунт</Link>
+          <h2 className="hero-headline text-4xl lg:text-5xl">{t("how_it_works.cta_title")}</h2>
+          <Link to="/register" className="btn !border-white bg-white !text-[hsl(var(--ink))] hover:!bg-[hsl(var(--accent))] hover:!text-white hover:!border-[hsl(var(--accent))]">{t("how_it_works.cta_btn")}</Link>
         </div>
       </section>
     </main>

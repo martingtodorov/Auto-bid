@@ -8,6 +8,7 @@ import LiveTicker from "./components/LiveTicker";
 import Footer from "./components/Footer";
 import CookieConsentBanner from "./components/CookieConsentBanner";
 import MaintenanceBanner from "./components/MaintenanceBanner";
+import ScrollToTop from "./components/ScrollToTop";
 import LandingPage from "./pages/LandingPage";
 import AuctionsPage from "./pages/AuctionsPage";
 import AuctionDetailPage from "./pages/AuctionDetailPage";
@@ -32,6 +33,7 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <ScrollToTop />
         <div className="min-h-screen flex flex-col bg-white">
           <MaintenanceBanner />
           <LiveTicker />
