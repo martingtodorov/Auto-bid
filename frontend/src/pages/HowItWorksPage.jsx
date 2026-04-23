@@ -65,7 +65,7 @@ function DefaultHowItWorks({ pct, brand, t }) {
         </div>
       </section>
 
-      <section className="rule-b">
+      <section id="fees" className="rule-b">
         <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-10 py-16 lg:py-24">
           <div className="overline text-[hsl(var(--accent))]">{t("how_it_works.fees_overline")}</div>
           <h2 className="font-serif text-3xl lg:text-5xl mt-3">{t("how_it_works.fees_title")}</h2>

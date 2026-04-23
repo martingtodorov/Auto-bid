@@ -30,7 +30,7 @@ export default function Footer() {
           <div className="overline text-[hsl(var(--ink-muted))]">{t("footer.col_help")}</div>
           <ul className="mt-4 space-y-2 text-sm">
             <li><Link to="/faq" className="hover:text-[hsl(var(--accent))]" data-testid="footer-faq">{t("footer.faq")}</Link></li>
-            <li><Link to="/fees" className="hover:text-[hsl(var(--accent))]" data-testid="footer-fees">{t("footer.fees")}</Link></li>
+            <li><Link to="/how-it-works#fees" className="hover:text-[hsl(var(--accent))]" data-testid="footer-fees">{t("footer.fees")}</Link></li>
             <li><Link to="/contacts" className="hover:text-[hsl(var(--accent))]" data-testid="footer-contacts">{t("footer.contact")}</Link></li>
             <li><Link to="/terms" className="hover:text-[hsl(var(--accent))]" data-testid="footer-terms">{t("footer.terms")}</Link></li>
           </ul>

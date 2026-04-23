@@ -220,6 +220,10 @@
     "cta_title": "Gata de prima ta licitare?",
     "cta_btn": "Creează cont"
   },
+  "onboarding_cta": {
+    "intro": "Nou pe {{brand}}?",
+    "link": "Învață cum funcționează"
+  },
   "sales_list": {
     "overline_archive": "Arhivă",
     "title_priv": "Arhiva vânzărilor",

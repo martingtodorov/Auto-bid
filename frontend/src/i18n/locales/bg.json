@@ -220,6 +220,10 @@
     "cta_title": "Готов за първата наддавка?",
     "cta_btn": "Създай акаунт"
   },
+  "onboarding_cta": {
+    "intro": "Нов в {{brand}}?",
+    "link": "Научи как работи"
+  },
   "sales_list": {
     "overline_archive": "Архив",
     "title_priv": "Архив на продажбите",

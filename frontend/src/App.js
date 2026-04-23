@@ -1,14 +1,16 @@
 import React from "react";
 import "@/App.css";
 import "./i18n";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./lib/auth";
 import Nav from "./components/Nav";
 import LiveTicker from "./components/LiveTicker";
 import Footer from "./components/Footer";
 import CookieConsentBanner from "./components/CookieConsentBanner";
+import OnboardingCta from "./components/OnboardingCta";
 import MaintenanceBanner from "./components/MaintenanceBanner";
 import ScrollToTop from "./components/ScrollToTop";
+// Legacy /fees page removed — merged into /how-it-works. Kept redirect for inbound links.
 import LandingPage from "./pages/LandingPage";
 import AuctionsPage from "./pages/AuctionsPage";
 import AuctionDetailPage from "./pages/AuctionDetailPage";
@@ -25,7 +27,7 @@ import MyListingsPage from "./pages/MyListingsPage";
 import ProfilePage from "./pages/ProfilePage";
 import AccountSettingsPage from "./pages/AccountSettingsPage";
 import FAQPage from "./pages/FAQPage";
-import FeesPage from "./pages/FeesPage";
+// FeesPage merged into HowItWorksPage — redirect kept in routes.
 import ContactsPage from "./pages/ContactsPage";
 import TermsPage from "./pages/TermsPage";
 
@@ -38,6 +40,7 @@ function App() {
           <MaintenanceBanner />
           <LiveTicker />
           <Nav />
+          <OnboardingCta />
           <div className="flex-1">
             <Routes>
               <Route path="/" element={<LandingPage />} />
@@ -56,7 +59,7 @@ function App() {
               <Route path="/profile/:userId" element={<ProfilePage />} />
               <Route path="/settings" element={<AccountSettingsPage />} />
               <Route path="/faq" element={<FAQPage />} />
-              <Route path="/fees" element={<FeesPage />} />
+              <Route path="/fees" element={<Navigate to="/how-it-works#fees" replace />} />
               <Route path="/contacts" element={<ContactsPage />} />
               <Route path="/terms" element={<TermsPage />} />
               <Route path="*" element={<LandingPage />} />

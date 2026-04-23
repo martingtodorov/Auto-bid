@@ -220,6 +220,10 @@
     "cta_title": "Ready for your first bid?",
     "cta_btn": "Create account"
   },
+  "onboarding_cta": {
+    "intro": "New to {{brand}}?",
+    "link": "Learn how it works"
+  },
   "sales_list": {
     "overline_archive": "Archive",
     "title_priv": "Sales archive",

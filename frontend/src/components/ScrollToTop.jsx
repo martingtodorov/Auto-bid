@@ -9,7 +9,14 @@ import { useLocation } from "react-router-dom";
 export default function ScrollToTop() {
   const { pathname, hash } = useLocation();
   useEffect(() => {
-    if (hash) return;
+    if (hash) {
+      // Defer to next tick so the destination component has mounted
+      const t = setTimeout(() => {
+        const el = document.querySelector(hash);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 100);
+      return () => clearTimeout(t);
+    }
     try { window.scrollTo({ top: 0, left: 0, behavior: "auto" }); } catch { window.scrollTo(0, 0); }
   }, [pathname, hash]);
   return null;
