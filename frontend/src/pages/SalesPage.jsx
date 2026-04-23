@@ -7,6 +7,7 @@ import AuctionCard from "../components/AuctionCard";
 import { setPageMeta, combineJsonLd, buildBreadcrumbs } from "../lib/seo";
 import { useAuth } from "../lib/auth";
 import { translateEnum } from "../lib/carTranslations";
+import { useBrandName } from "../lib/brand";
 
 const WINDOW_OPTIONS = [
   { days: 30, label: "30 дни" },
