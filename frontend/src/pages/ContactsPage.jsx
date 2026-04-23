@@ -14,7 +14,7 @@ export default function ContactsPage() {
   const custom = pickCmsContent(settings, "contacts_content", i18n.language);
   useInfoPageSeo({
     title: `Контакти — ${brand}`,
-    description: `Свържете се с екипа на ${brand} — имейл contact@autobids.bg, телефон +359 2 444 2828, София.`,
+    description: `Свържете се с екипа на ${brand} — team@autoandbid.com, тел. +359 87 827 9269, ул. Карнеги 11А, София.`,
     path: "/contacts",
     crumb: "Контакти",
   });
@@ -26,26 +26,27 @@ export default function ContactsPage() {
 }
 
 function DefaultContacts() {
+  const mapsUrl = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent("ул. Карнеги 11А, София, България");
   return (
     <>
       <p className="text-lg text-[hsl(var(--ink-muted))]">Нашият екип отговаря в рамките на 1 работен ден.</p>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <ContactCard icon={Mail} label="Имейл" value="contact@autobids.bg" href="mailto:contact@autobids.bg" note="За общи запитвания и поддръжка" />
-        <ContactCard icon={Phone} label="Телефон" value="+359 2 444 2828" href="tel:+35924442828" note="Понеделник–Петък · 9:00–18:00" />
-        <ContactCard icon={MapPin} label="Адрес" value="ул. Шишман 18, 1000 София" note="Срещи по предварителна уговорка" />
-        <ContactCard icon={Clock} label="Работно време" value="Пн–Пт: 9:00–18:00" note="Съб: 10:00–14:00 (само онлайн)" />
+        <ContactCard icon={Mail} label="Имейл" value="team@autoandbid.com" href="mailto:team@autoandbid.com" note="За общи запитвания и поддръжка" />
+        <ContactCard icon={Phone} label="Телефон" value="+359 87 827 9269" href="tel:+359878279269" note="Понеделник–Петък · 10:00–17:00" />
+        <ContactCard icon={MapPin} label="Адрес" value="ул. Карнеги 11А, София, България" href={mapsUrl} external note="Отвори в Google Maps · срещи по предварителна уговорка" />
+        <ContactCard icon={Clock} label="Работно време" value="Пн–Пт: 10:00–17:00" note="Събота и неделя — почивни" />
       </div>
       <InfoSection title="Специализирани запитвания">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div className="rounded-card border border-[hsl(var(--line))] bg-white p-5">
             <div className="overline text-[hsl(var(--accent))]">Партньорства и дилъри</div>
             <p className="mt-2 text-sm">Интересувате се от статус „Проверен дилър“ или обемна продажба?</p>
-            <a href="mailto:dealers@autobids.bg" className="mt-3 inline-block text-sm font-semibold text-[hsl(var(--accent))] hover:underline">dealers@autobids.bg →</a>
+            <a href="mailto:team@autoandbid.com" className="mt-3 inline-block text-sm font-semibold text-[hsl(var(--accent))] hover:underline">team@autoandbid.com →</a>
           </div>
           <div className="rounded-card border border-[hsl(var(--line))] bg-white p-5">
             <div className="overline text-[hsl(var(--accent))]">Преса и медии</div>
             <p className="mt-2 text-sm">За интервюта, доклади и статистики.</p>
-            <a href="mailto:press@autobids.bg" className="mt-3 inline-block text-sm font-semibold text-[hsl(var(--accent))] hover:underline">press@autobids.bg →</a>
+            <a href="mailto:team@autoandbid.com" className="mt-3 inline-block text-sm font-semibold text-[hsl(var(--accent))] hover:underline">team@autoandbid.com →</a>
           </div>
         </div>
       </InfoSection>
@@ -53,7 +54,7 @@ function DefaultContacts() {
   );
 }
 
-function ContactCard({ icon: Icon, label, value, note, href }) {
+function ContactCard({ icon: Icon, label, value, note, href, external }) {
   const content = (
     <>
       <div className="flex items-center gap-3">
@@ -67,5 +68,9 @@ function ContactCard({ icon: Icon, label, value, note, href }) {
     </>
   );
   const cls = "block rounded-card border border-[hsl(var(--line))] bg-white p-5 transition hover:border-[hsl(var(--accent))]";
-  return href ? <a href={href} className={cls}>{content}</a> : <div className={cls}>{content}</div>;
+  if (href) {
+    const extraProps = external ? { target: "_blank", rel: "noopener noreferrer" } : {};
+    return <a href={href} className={cls} {...extraProps}>{content}</a>;
+  }
+  return <div className={cls}>{content}</div>;
 }
