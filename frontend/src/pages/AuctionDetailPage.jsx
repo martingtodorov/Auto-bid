@@ -394,6 +394,7 @@ export default function AuctionDetailPage() {
 
             <div className="mt-10">
               <div className="overline text-[hsl(var(--ink-muted))]">{t("auction.editorial_description")}</div>
+              <h2 className="sr-only">{t("auction.editorial_description")} — {a.title}</h2>
               <DescriptionWithInteriorShots
                 auctionId={id}
                 description={a.description}
@@ -579,9 +580,11 @@ export default function AuctionDetailPage() {
               <div className="rounded-card border border-[hsl(var(--line))] p-6 bg-[hsl(var(--surface))]">
                 <div className="overline text-[hsl(var(--ink-muted))]">{t("auction.seller")}</div>
                 {a.seller_id && a.seller_id !== "platform" ? (
-                  <Link to={`/profile/${a.seller_id}`} className="font-serif text-xl mt-2 block hover:text-[hsl(var(--accent))]" data-testid="seller-link">{a.seller_name}</Link>
+                  <h2 className="font-serif text-xl mt-2">
+                    <Link to={`/profile/${a.seller_id}`} className="block hover:text-[hsl(var(--accent))]" data-testid="seller-link">{a.seller_name}</Link>
+                  </h2>
                 ) : (
-                  <div className="font-serif text-xl mt-2">{a.seller_name}</div>
+                  <h2 className="font-serif text-xl mt-2">{a.seller_name}</h2>
                 )}
                 <p className="text-xs text-[hsl(var(--ink-muted))] mt-2" data-testid="seller-badge">
                   {a.seller_is_verified_dealer ? t("auction.verified_dealer") : t("auction.private_person", "Частно лице")} · {translateEnum(a.city, "city", i18n.language)}{a.country ? `, ${a.country}` : ""}

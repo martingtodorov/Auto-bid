@@ -95,7 +95,7 @@ export default function LandingPage() {
                   <div className="mt-3 flex items-end justify-between gap-4">
                     <div>
                       <div className="overline text-[hsl(var(--accent))]">{t("hero.featured_listing")}</div>
-                      <h3 className="font-serif text-xl lg:text-2xl mt-1.5 tracking-tight">{hero.title}</h3>
+                      <h2 className="font-serif text-xl lg:text-2xl mt-1.5 tracking-tight">{hero.title}</h2>
                       <div className="text-sm text-[hsl(var(--ink-muted))] mt-1.5">
                         {hero.year} · {translateEnum(hero.city, "city", i18n.language)} · {translateEnum(hero.fuel, "fuel", i18n.language)}
                       </div>
