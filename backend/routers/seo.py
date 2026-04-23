@@ -15,25 +15,62 @@ router = APIRouter()
 
 
 def _json_ld_vehicle(a: dict, url: str) -> str:
-    """Build schema.org Vehicle structured data for a listing."""
+    """Build schema.org Vehicle structured data for a listing.
+
+    Includes rich-result Offer data (price, currency, availability, priceValidUntil,
+    itemCondition, seller) so Google can render Rich Snippets (price/availability).
+    """
+    # Availability mapping across auction lifecycle
+    status = a.get("status")
+    availability = "https://schema.org/InStock"
+    if status in ("ended", "sold"):
+        availability = "https://schema.org/SoldOut"
+    elif status in ("cancelled", "archived"):
+        availability = "https://schema.org/Discontinued"
+    elif status in ("scheduled", "upcoming"):
+        availability = "https://schema.org/PreOrder"
+
+    # Price: prefer current bid, fall back to starting bid
+    price_value = a.get("current_bid_eur") or a.get("starting_bid_eur") or 0
+    try:
+        price_value = float(price_value)
+    except (TypeError, ValueError):
+        price_value = 0.0
+
+    site_origin = url.split("/auctions/")[0] if "/auctions/" in url else url
+    seller = (
+        {"@type": "Person", "name": a.get("seller_name")}
+        if a.get("seller_name")
+        else {"@type": "Organization", "name": "Auto&Bid", "url": site_origin}
+    )
+
     offers = {
         "@type": "Offer",
         "priceCurrency": "EUR",
-        "price": float(a.get("current_bid_eur", 0)),
+        "price": price_value,
         "url": url,
-        "availability": "https://schema.org/InStock" if a.get("status") == "live" else "https://schema.org/SoldOut",
+        "availability": availability,
+        "itemCondition": "https://schema.org/UsedCondition",
+        "seller": seller,
     }
+    if a.get("ends_at"):
+        offers["priceValidUntil"] = a.get("ends_at")
+
     data = {
         "@context": "https://schema.org",
         "@type": "Vehicle",
         "name": a.get("title", ""),
-        "brand": {"@type": "Brand", "name": a.get("make", "")},
+        "brand": {"@type": "Brand", "name": a.get("make", "")} if a.get("make") else None,
+        "manufacturer": {"@type": "Organization", "name": a.get("make")} if a.get("make") else None,
         "model": a.get("model", ""),
+        "vehicleModelDate": a.get("year"),
         "modelDate": a.get("year"),
+        "productionDate": str(a.get("year")) if a.get("year") else None,
         "bodyType": a.get("body_type"),
         "fuelType": a.get("fuel"),
         "vehicleTransmission": a.get("transmission"),
         "color": a.get("color"),
+        "vehicleIdentificationNumber": a.get("vin"),
         "mileageFromOdometer": {
             "@type": "QuantitativeValue", "value": a.get("mileage_km"), "unitCode": "KMT",
         } if a.get("mileage_km") else None,
@@ -42,7 +79,7 @@ def _json_ld_vehicle(a: dict, url: str) -> str:
             "engineDisplacement": {"@type": "QuantitativeValue", "value": a.get("engine_cc"), "unitCode": "CMQ"},
             "enginePower": {"@type": "QuantitativeValue", "value": a.get("power_hp"), "unitCode": "BHP"},
         } if a.get("engine_cc") else None,
-        "image": (a.get("images") or [None])[0],
+        "image": [img for img in (a.get("images") or []) if img and not img.startswith("data:")][:6] or None,
         "description": (a.get("description") or "")[:600],
         "url": url,
         "offers": offers,

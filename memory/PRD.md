@@ -354,3 +354,30 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 - Всички backend routes трябва да са с `/api` префикс
 - `_auction_status()` е computed при четене — stored статуси: pending/rejected/withdrawn/removed/sold/reserve_not_met/ended/live
 - При създаване на нови компоненти с форми: НИКОГА не дефинирайте sub-компоненти ВЪТРЕ в родителския компонент (причинява loss of focus bug)
+
+---
+
+## 2026-02-23 — Rich Price / Rich Snippets за SEO (DONE)
+**Цел**: По-силна индексация в Google и показване на Rich Snippets (цена, наличност) за всяка страница на търг.
+
+**Промени:**
+- `/app/frontend/src/lib/seo.js` → `buildVehicleJsonLd`:
+  - `offers.itemCondition` = `UsedCondition`
+  - `offers.priceValidUntil` = `a.ends_at` (ISO timestamp)
+  - `offers.seller` = Person (seller_name) или Organization (Auto&Bid)
+  - `offers.priceSpecification` (когато има reserve_eur)
+  - Properly-mapped availability: live → InStock, ended/sold → SoldOut, scheduled → PreOrder, cancelled → Discontinued
+  - `vehicleIdentificationNumber` (VIN)
+  - `manufacturer`, `productionDate`, `vehicleModelDate`
+  - `image` e масив от до 6 снимки (не само първата)
+  - Price fallback: `current_bid_eur` → `starting_bid_eur`
+- `/app/backend/routers/seo.py` → `_json_ld_vehicle` (SSR за /api/share/auction/{id}):
+  - Същата структура както frontend за crawlers, които не изпълняват JS
+
+**Тест**: curl към `/api/share/auction/{id}` → валиден JSON-LD с price=24000, priceCurrency=EUR, priceValidUntil=2026-04-27, itemCondition=UsedCondition, availability=InStock, VIN=WBA2J71040VA53204. Lint passed.
+
+## Remaining backlog (P1–P3)
+- Real Stripe API keys (изчаква user keys)
+- "Buy Now" за търгове (P2)
+- CAPTCHA (Cloudflare Turnstile) на регистрация (P3)
+- PostgreSQL миграция: **НЕ се прави** (user decision — остава MongoDB)

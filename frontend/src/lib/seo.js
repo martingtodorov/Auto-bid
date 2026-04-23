@@ -77,33 +77,82 @@ export function resetPageMeta() {
 }
 
 // Build schema.org Vehicle JSON-LD for an auction detail page.
+// Includes rich-result Offer data (price, currency, availability, priceValidUntil,
+// itemCondition, seller) so Google can render Rich Snippets (price, availability).
 export function buildVehicleJsonLd(a, url) {
   if (!a) return null;
+
+  // --- Availability mapping for auction lifecycle --------------------------
+  // live / scheduled => InStock (biddable or soon-biddable)
+  // ended (sold)     => SoldOut
+  // cancelled/other  => Discontinued
+  let availability = "https://schema.org/InStock";
+  if (a.status === "ended" || a.status === "sold") availability = "https://schema.org/SoldOut";
+  else if (a.status === "cancelled" || a.status === "archived") availability = "https://schema.org/Discontinued";
+  else if (a.status === "scheduled" || a.status === "upcoming") availability = "https://schema.org/PreOrder";
+
+  // --- Price: prefer current_bid_eur, fall back to starting_bid_eur --------
+  const priceValue = Number(a.current_bid_eur ?? a.starting_bid_eur ?? 0);
+  const hasPrice = Number.isFinite(priceValue) && priceValue > 0;
+
+  // --- Seller block (Organization fallback to Auto&Bid marketplace) --------
+  const seller = a.seller_name
+    ? { "@type": "Person", name: a.seller_name }
+    : { "@type": "Organization", name: "Auto&Bid", url: window.location.origin };
+
+  // --- Offer with Rich Price ------------------------------------------------
+  const offer = {
+    "@type": "Offer",
+    priceCurrency: "EUR",
+    price: hasPrice ? priceValue : undefined,
+    url,
+    availability,
+    itemCondition: "https://schema.org/UsedCondition",
+    seller,
+  };
+  if (a.ends_at) offer.priceValidUntil = a.ends_at; // ISO timestamp -> auction end
+  if (a.reserve_eur && !a.no_reserve) {
+    // Expose reserve as a PriceSpecification range hint (min = current, max = reserve)
+    offer.priceSpecification = {
+      "@type": "PriceSpecification",
+      priceCurrency: "EUR",
+      price: hasPrice ? priceValue : a.reserve_eur,
+      minPrice: hasPrice ? priceValue : a.starting_bid_eur,
+      valueAddedTaxIncluded: a.vat_status === "vat_included",
+    };
+  }
+  Object.keys(offer).forEach((k) => offer[k] === undefined && delete offer[k]);
+
+  // --- Vehicle core ---------------------------------------------------------
   const data = {
     "@context": "https://schema.org",
     "@type": "Vehicle",
     name: a.title,
-    brand: { "@type": "Brand", name: a.make },
+    brand: a.make ? { "@type": "Brand", name: a.make } : undefined,
     model: a.model,
+    manufacturer: a.make ? { "@type": "Organization", name: a.make } : undefined,
+    vehicleModelDate: a.year,
     modelDate: a.year,
+    productionDate: a.year ? `${a.year}` : undefined,
     bodyType: a.body_type,
     fuelType: a.fuel,
     vehicleTransmission: a.transmission,
     color: a.color,
-    image: (a.images || [])[0],
+    image: (a.images || []).slice(0, 6),
     description: (a.description || "").slice(0, 600),
     url,
-    offers: {
-      "@type": "Offer",
-      priceCurrency: "EUR",
-      price: a.current_bid_eur,
-      url,
-      availability: a.status === "live" ? "https://schema.org/InStock" : "https://schema.org/SoldOut",
-    },
+    offers: offer,
   };
+
+  // VIN — unique identifier, huge SEO signal
+  if (a.vin) data.vehicleIdentificationNumber = a.vin;
+
+  // Mileage
   if (a.mileage_km) {
     data.mileageFromOdometer = { "@type": "QuantitativeValue", value: a.mileage_km, unitCode: "KMT" };
   }
+
+  // Engine / Power
   if (a.engine_cc) {
     data.vehicleEngine = {
       "@type": "EngineSpecification",
@@ -113,7 +162,12 @@ export function buildVehicleJsonLd(a, url) {
       data.vehicleEngine.enginePower = { "@type": "QuantitativeValue", value: a.power_hp, unitCode: "BHP" };
     }
   }
-  // Clean undefined
+
+  // Number of doors / drive config when known
+  if (a.doors) data.numberOfDoors = a.doors;
+  if (a.drive_type) data.driveWheelConfiguration = a.drive_type;
+
+  // Clean top-level undefined
   Object.keys(data).forEach((k) => data[k] === undefined && delete data[k]);
   return data;
 }
