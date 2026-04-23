@@ -457,35 +457,14 @@ export default function AuctionDetailPage() {
 
               <div className="mt-6 space-y-5">
                 {comments.map((c) => (
-                  <div key={c.id} className={`rounded-card border border-[hsl(var(--line))] p-5 ${c.deleted ? "bg-[hsl(var(--surface))] opacity-70" : ""}`} data-testid={`comment-${c.id}`}>
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {c.user_id && !c.deleted ? (
-                          <Link to={`/profile/${c.user_id}`} className="text-sm font-semibold hover:text-[hsl(var(--accent))]">{c.user_name}</Link>
-                        ) : (
-                          <div className="text-sm font-semibold">{c.deleted ? "—" : c.user_name}</div>
-                        )}
-                        {c.is_owner && !c.deleted && (
-                          <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[hsl(var(--accent))] text-white" data-testid={`comment-owner-badge-${c.id}`}>Продавач</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <div className="text-xs text-[hsl(var(--ink-muted))] font-mono">{new Date(c.created_at).toLocaleString(intlLocale(i18n.language))}</div>
-                        {isAdmin && !c.deleted && (
-                          <button
-                            onClick={() => deleteComment(c.id)}
-                            className="text-xs text-[hsl(var(--danger))] hover:underline"
-                            data-testid={`admin-delete-comment-${c.id}`}
-                          >
-                            Изтрий
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    <p className={`mt-3 text-sm leading-relaxed ${c.deleted ? "italic text-[hsl(var(--ink-muted))]" : ""}`}>
-                      {c.deleted ? t("auction.comment_removed") : c.text}
-                    </p>
-                  </div>
+                  <CommentItem
+                    key={c.id}
+                    c={c}
+                    t={t}
+                    i18nLang={i18n.language}
+                    isAdmin={isAdmin}
+                    onDelete={() => deleteComment(c.id)}
+                  />
                 ))}
               </div>
             </div>
@@ -618,11 +597,11 @@ export default function AuctionDetailPage() {
           <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-16">
             <div className="flex items-end justify-between gap-6 flex-wrap">
               <div>
-                <div className="overline text-[hsl(var(--accent))]">Също виж</div>
-                <h2 className="font-serif text-3xl lg:text-4xl mt-2 tracking-tight">Подобни обяви</h2>
+                <div className="overline text-[hsl(var(--accent))]">{t("auction.also_see")}</div>
+                <h2 className="font-serif text-3xl lg:text-4xl mt-2 tracking-tight">{t("auction.similar_listings")}</h2>
               </div>
               <Link to="/auctions" className="text-sm font-semibold text-[hsl(var(--accent))] hover:underline">
-                Виж всички търгове →
+                {t("auction.view_all_auctions")} →
               </Link>
             </div>
             <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -779,6 +758,96 @@ function DescriptionWithInteriorShots({ auctionId, description, interiorImages, 
   );
 }
 
+
+function CommentItem({ c, t, i18nLang, isAdmin, onDelete }) {
+  const lang = (i18nLang || "bg").slice(0, 2);
+  // If the comment ships with a pre-translated value for the current locale, use it
+  const preTranslated = c[`text_${lang}`];
+  const [translated, setTranslated] = React.useState(preTranslated || "");
+  const [showOriginal, setShowOriginal] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  const [err, setErr] = React.useState("");
+
+  const source = c.text || "";
+  // Heuristic: offer translation when viewer's UI language is not BG and the
+  // raw text contains Cyrillic letters (assumed Bulgarian origin) or the other way around.
+  const hasCyrillic = /[А-Яа-яЁё]/.test(source);
+  const hasLatin = /[A-Za-z]/.test(source);
+  const needsTranslation = !c.deleted && (
+    (lang !== "bg" && hasCyrillic) ||
+    (lang === "bg" && hasLatin && !hasCyrillic)
+  );
+
+  const runTranslate = async () => {
+    if (translated) { setShowOriginal(false); return; }
+    setLoading(true); setErr("");
+    try {
+      const { data } = await api.get(`/comments/${c.id}/translate`, { params: { lang } });
+      setTranslated(data.text || "");
+    } catch (e) {
+      setErr(formatError(e));
+    } finally { setLoading(false); }
+  };
+
+  const displayText = (!showOriginal && translated) ? translated : source;
+
+  return (
+    <div className={`rounded-card border border-[hsl(var(--line))] p-5 ${c.deleted ? "bg-[hsl(var(--surface))] opacity-70" : ""}`} data-testid={`comment-${c.id}`}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          {c.user_id && !c.deleted ? (
+            <Link to={`/profile/${c.user_id}`} className="text-sm font-semibold hover:text-[hsl(var(--accent))]">{c.user_name}</Link>
+          ) : (
+            <div className="text-sm font-semibold">{c.deleted ? "—" : c.user_name}</div>
+          )}
+          {c.is_owner && !c.deleted && (
+            <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[hsl(var(--accent))] text-white" data-testid={`comment-owner-badge-${c.id}`}>{t("auction.seller_short", "Продавач")}</span>
+          )}
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="text-xs text-[hsl(var(--ink-muted))] font-mono">{new Date(c.created_at).toLocaleString(intlLocale(i18nLang))}</div>
+          {isAdmin && !c.deleted && (
+            <button
+              onClick={onDelete}
+              className="text-xs text-[hsl(var(--danger))] hover:underline"
+              data-testid={`admin-delete-comment-${c.id}`}
+            >
+              {t("auction.delete", "Изтрий")}
+            </button>
+          )}
+        </div>
+      </div>
+      <p className={`mt-3 text-sm leading-relaxed ${c.deleted ? "italic text-[hsl(var(--ink-muted))]" : ""}`}>
+        {c.deleted ? t("auction.comment_removed") : displayText}
+      </p>
+      {needsTranslation && (
+        <div className="mt-3 flex items-center gap-2 flex-wrap text-xs" data-testid={`comment-translate-controls-${c.id}`}>
+          {translated ? (
+            showOriginal ? (
+              <button onClick={() => setShowOriginal(false)} className="inline-flex items-center gap-1 text-[hsl(var(--accent))] hover:underline" data-testid={`comment-show-translated-${c.id}`}>
+                <Languages size={11} /> {t("auction.translate_to_current")}
+              </button>
+            ) : (
+              <>
+                <span className="inline-flex items-center gap-1 text-[hsl(var(--accent))]" data-testid={`comment-translated-badge-${c.id}`}>
+                  <Languages size={11} /> {t("auction.translated_by_ai")}
+                </span>
+                <button onClick={() => setShowOriginal(true)} className="text-[hsl(var(--ink-muted))] hover:underline" data-testid={`comment-show-original-${c.id}`}>
+                  {t("auction.show_original")}
+                </button>
+              </>
+            )
+          ) : (
+            <button onClick={runTranslate} disabled={loading} className="inline-flex items-center gap-1 text-[hsl(var(--accent))] hover:underline disabled:opacity-50" data-testid={`comment-translate-${c.id}`}>
+              <Languages size={11} /> {loading ? t("auction.translating") : t("auction.translate_to_current")}
+            </button>
+          )}
+          {err && <span className="text-[hsl(var(--danger))]">{err}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ShareButton({ auctionId, title }) {
   const { t, i18n } = useTranslation();

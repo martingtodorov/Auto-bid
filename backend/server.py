@@ -1356,6 +1356,28 @@ def _public_comment(c: dict, auction: dict) -> dict:
     return d
 
 
+@api.get("/comments/{comment_id}/translate")
+@limiter.limit("30/minute")
+async def translate_comment(comment_id: str, request: Request, lang: str = Query(..., regex="^(ro|en|bg)$")):
+    """Auto-translate a single comment into target language and cache result on the comment doc."""
+    c = await db.comments.find_one({"id": comment_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    cache_key = f"text_{lang}"
+    cached = c.get(cache_key)
+    if cached:
+        return {"lang": lang, "text": cached, "cached": True}
+    source = (c.get("text") or "").strip()
+    if not source:
+        return {"lang": lang, "text": "", "cached": False}
+    from translate import translate_text
+    translated = await translate_text(source, lang)
+    if not translated:
+        raise HTTPException(status_code=503, detail="Translation service unavailable")
+    await db.comments.update_one({"id": comment_id}, {"$set": {cache_key: translated}})
+    return {"lang": lang, "text": translated, "cached": False}
+
+
 @api.get("/auctions/{auction_id}/comments")
 async def list_comments(auction_id: str):
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0, "seller_id": 1})
