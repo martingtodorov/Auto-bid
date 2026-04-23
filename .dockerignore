@@ -1,0 +1,13 @@
+.git/
+.github/
+node_modules/
+build/
+__pycache__/
+.venv/
+.env
+.env.local
+*.log
+test_reports/
+memory/
+docker-compose.yml
+.dockerignore

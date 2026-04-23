@@ -523,6 +523,23 @@ async def get_auction(auction_id: str, request: Request):
     return public
 
 
+@api.get("/healthz")
+async def healthz():
+    """Simple liveness probe for container orchestrators. Does not touch Mongo
+    to avoid cascade failures — use `/readyz` for readiness with DB ping."""
+    return {"status": "ok"}
+
+
+@api.get("/readyz")
+async def readyz():
+    """Readiness probe: verifies MongoDB connectivity."""
+    try:
+        await db.command("ping")
+        return {"status": "ready"}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"db unavailable: {e}")
+
+
 @api.get("/auctions/{auction_id}/translate-description")
 @limiter.limit("20/minute")
 async def translate_auction_description(
@@ -607,6 +624,10 @@ async def create_auction(request: Request, payload: AuctionCreate, user: dict = 
     now = datetime.now(timezone.utc)
     ends_at = now + timedelta(days=payload.duration_days)
     doc = payload.model_dump()
+    # Offload images to configured storage backend (inline|s3). Runs in a
+    # worker thread so a slow S3 upload doesn't stall the event loop.
+    from storage import store_images
+    merged = await asyncio.to_thread(store_images, merged)
     doc["images"] = merged
 
     # ---- VAT validation ----

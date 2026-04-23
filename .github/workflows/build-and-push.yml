@@ -1,0 +1,78 @@
+# GitHub Actions — Build + push Docker images to GHCR on push to `main`.
+#
+# Secrets required on the repo:
+#   (none — GITHUB_TOKEN has push access to GHCR by default)
+#
+# Env vars you may want to tweak:
+#   REGISTRY     ghcr.io by default; replace with docker.io / your private reg
+#   IMAGE_OWNER  `${{ github.repository_owner }}` works for GHCR
+#
+# Downstream: your PaaS / VPS just needs to `docker compose pull && up -d`
+# once this workflow finishes.
+
+name: build-and-push
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: ${{ github.repository_owner }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - service: backend
+            context: ./backend
+          - service: frontend
+            context: ./frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/autoandbid-${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+          # Frontend consumes REACT_APP_* vars at build time. Configure these
+          # as repository/organization-level variables (not secrets — they are
+          # public in the JS bundle).
+          build-args: |
+            REACT_APP_BACKEND_URL=${{ vars.REACT_APP_BACKEND_URL }}
+            REACT_APP_DOMAIN_BG=${{ vars.REACT_APP_DOMAIN_BG }}
+            REACT_APP_DOMAIN_RO=${{ vars.REACT_APP_DOMAIN_RO }}
+            REACT_APP_DOMAIN_EN=${{ vars.REACT_APP_DOMAIN_EN }}

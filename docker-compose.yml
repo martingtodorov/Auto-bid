@@ -1,0 +1,138 @@
+# Production docker-compose for self-hosted deployments.
+#
+#   docker compose --profile prod up -d --build
+#
+# Services (default profile: prod):
+#   backend     FastAPI, listens on 8001 inside the network
+#   frontend    nginx static+proxy, published on ${PUBLIC_HTTP_PORT:-80}
+#   mongo       official image with persistent volume
+#   minio       optional S3-compatible object storage for uploads
+#
+# The `tools` profile (mongo-express, minio console) is opt-in for debugging:
+#   docker compose --profile prod --profile tools up -d
+#
+# Environment is loaded from ./.env (copy .env.example and fill in the blanks).
+# ---------------------------------------------------------------------------
+version: "3.9"
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    profiles: ["prod", "dev"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${DB_NAME}
+    volumes:
+      - mongo_data:/data/db
+    # Only exposed inside the compose network by default. Uncomment to debug.
+    # ports: ["27017:27017"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    profiles: ["prod", "dev"]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # One-shot init container: creates the S3 bucket if it does not exist.
+  minio-setup:
+    image: minio/mc:latest
+    profiles: ["prod", "dev"]
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
+      S3_BUCKET: ${S3_BUCKET}
+    entrypoint: |
+      /bin/sh -c "
+        set -e
+        mc alias set local http://minio:9000 $$S3_ACCESS_KEY_ID $$S3_SECRET_ACCESS_KEY
+        mc mb --ignore-existing local/$$S3_BUCKET
+        mc anonymous set download local/$$S3_BUCKET
+        echo 'MinIO bucket ready: '$$S3_BUCKET
+      "
+
+  backend:
+    build: ./backend
+    image: autoandbid/backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    profiles: ["prod", "dev"]
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGO_URL: mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongo:27017/${DB_NAME}?authSource=admin
+      DB_NAME: ${DB_NAME}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      APP_URL: ${APP_URL}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+      # Optional integrations — leave blank to disable.
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      SENDER_EMAIL: ${SENDER_EMAIL:-}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
+      EMERGENT_LLM_KEY: ${EMERGENT_LLM_KEY:-}
+      # Storage
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-inline}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
+      S3_ACL: ${S3_ACL:-public-read}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8001/api/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    # No ports published: frontend reverse-proxies /api.
+    expose:
+      - "8001"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        REACT_APP_BACKEND_URL: ${REACT_APP_BACKEND_URL}
+        REACT_APP_DOMAIN_BG: ${REACT_APP_DOMAIN_BG:-auto-bid.bg}
+        REACT_APP_DOMAIN_RO: ${REACT_APP_DOMAIN_RO:-auto-bid.ro}
+        REACT_APP_DOMAIN_EN: ${REACT_APP_DOMAIN_EN:-auto-bid.com}
+    image: autoandbid/frontend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    profiles: ["prod", "dev"]
+    depends_on:
+      - backend
+    environment:
+      BACKEND_HOST: backend:8001
+    ports:
+      - "${PUBLIC_HTTP_PORT:-80}:80"
+
+volumes:
+  mongo_data:
+  minio_data:
