@@ -144,8 +144,7 @@ export function buildVehicleJsonLd(a, url) {
     offers: offer,
   };
 
-  // VIN — unique identifier, huge SEO signal
-  if (a.vin) data.vehicleIdentificationNumber = a.vin;
+  // VIN умишлено НЕ се включва в публичния JSON-LD (privacy).
 
   // Mileage
   if (a.mileage_km) {

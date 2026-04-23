@@ -70,7 +70,6 @@ def _json_ld_vehicle(a: dict, url: str) -> str:
         "fuelType": a.get("fuel"),
         "vehicleTransmission": a.get("transmission"),
         "color": a.get("color"),
-        "vehicleIdentificationNumber": a.get("vin"),
         "mileageFromOdometer": {
             "@type": "QuantitativeValue", "value": a.get("mileage_km"), "unitCode": "KMT",
         } if a.get("mileage_km") else None,
