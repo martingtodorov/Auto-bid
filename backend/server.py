@@ -508,10 +508,11 @@ async def get_auction(auction_id: str, request: Request):
     else:
         seller = await db.users.find_one({"id": seller_id}, {"_id": 0, "is_verified_dealer": 1}) if seller_id else None
         public["seller_is_verified_dealer"] = bool(seller and seller.get("is_verified_dealer"))
-    # Reveal full VIN to: seller, admin, or anyone who placed a bid on this auction
+    # Reveal full VIN to: seller, admin (always), or bidders (only while auction is live).
+    # On ended/sold/cancelled auctions the VIN stays masked for bidders — privacy of the sold vehicle.
     if a.get("vin") and viewer:
         is_privileged = viewer.get("role") == "admin" or viewer.get("id") == a.get("seller_id")
-        if not is_privileged:
+        if not is_privileged and _auction_status(a) == "live":
             has_bid = await db.bids.find_one({"auction_id": auction_id, "user_id": viewer["id"]}, {"_id": 0, "id": 1})
             is_privileged = bool(has_bid)
         if is_privileged:
