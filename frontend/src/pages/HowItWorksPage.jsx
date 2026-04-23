@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Shield, FileCheck, Gavel, Sparkles } from "lucide-react";
+import { Shield, FileCheck, Gavel, Sparkles, UserCheck, Lock, Zap, Clock, KeyRound, Handshake, Gavel as GavelIcon, CheckCircle2 } from "lucide-react";
 import InfoPage from "../components/InfoPage";
 import MarkdownBody from "../components/MarkdownBody";
 import { useSiteSettings, pickCmsContent } from "../lib/settings";
@@ -36,6 +36,16 @@ function DefaultHowItWorks({ pct, brand, t }) {
     { n: "03", i: Gavel, t: t("how_it_works.step_03_t"), d: t("how_it_works.step_03_d") },
     { n: "04", i: Sparkles, t: t("how_it_works.step_04_t"), d: t("how_it_works.step_04_d") },
   ];
+  const bidRules = [
+    { i: UserCheck, t: t("bidding_logic.b1_t"), d: t("bidding_logic.b1_d") },
+    { i: Lock, t: t("bidding_logic.b2_t"), d: t("bidding_logic.b2_d", { pct, feeMin: 150, feeMax: 4000 }) },
+    { i: Zap, t: t("bidding_logic.b3_t"), d: t("bidding_logic.b3_d") },
+    { i: Clock, t: t("bidding_logic.b4_t"), d: t("bidding_logic.b4_d") },
+    { i: KeyRound, t: t("bidding_logic.b5_t"), d: t("bidding_logic.b5_d") },
+    { i: Handshake, t: t("bidding_logic.b6_t"), d: t("bidding_logic.b6_d") },
+    { i: GavelIcon, t: t("bidding_logic.b7_t"), d: t("bidding_logic.b7_d") },
+    { i: CheckCircle2, t: t("bidding_logic.b8_t"), d: t("bidding_logic.b8_d", { brand }) },
+  ];
   return (
     <main data-testid="how-it-works-page">
       <section className="rule-b">
@@ -62,6 +72,31 @@ function DefaultHowItWorks({ pct, brand, t }) {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section id="bidding" className="rule-b">
+        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-10 py-16 lg:py-24">
+          <div className="overline text-[hsl(var(--accent))]">{t("bidding_logic.overline")}</div>
+          <h2 className="font-serif text-3xl lg:text-5xl mt-3">{t("bidding_logic.title")}</h2>
+          <p className="mt-5 text-base text-[hsl(var(--ink-muted))] max-w-3xl leading-relaxed">{t("bidding_logic.intro")}</p>
+          <ol className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-0 border border-[hsl(var(--line))] bg-white">
+            {bidRules.map((r, i) => (
+              <li
+                key={i}
+                className="p-7 rule-b md:border-r md:border-[hsl(var(--line))] md:[&:nth-child(2n)]:border-r-0 md:[&:nth-last-child(-n+2)]:border-b-0"
+                data-testid={`bid-rule-${i + 1}`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-[hsl(var(--accent-soft))] flex items-center justify-center text-[hsl(var(--accent))] shrink-0">
+                    <r.i size={17} />
+                  </div>
+                  <h3 className="font-serif text-xl">{r.t}</h3>
+                </div>
+                <p className="mt-3 text-sm text-[hsl(var(--ink-muted))] leading-relaxed">{r.d}</p>
+              </li>
+            ))}
+          </ol>
         </div>
       </section>
 

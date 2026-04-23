@@ -220,6 +220,27 @@
     "cta_title": "Ready for your first bid?",
     "cta_btn": "Create account"
   },
+  "bidding_logic": {
+    "overline": "Bidding process",
+    "title": "How bidding actually works",
+    "intro": "Every auction is a binding transaction between seller and winner. Here's what happens step-by-step — from the first bid to settlement.",
+    "b1_t": "Verification before your first bid",
+    "b1_d": "Before you can bid, we require identity confirmation and a valid payment card. This protects us from fake bids and spam.",
+    "b2_t": "Pre-authorization on every bid",
+    "b2_d": "Each time you bid, we hold {{pct}}% of your bid amount (min. €{{feeMin}}, max. €{{feeMax}}) on your card. This is NOT a payment — the money stays yours and is released automatically if you get outbid.",
+    "b3_t": "Bidding credit (optional)",
+    "b3_d": "You can authorise your maximum once and then bid freely up to that limit without new card transactions. The credit can only be raised to a higher number. If you're outbid it's released in full. You can release it yourself with one confirmation.",
+    "b4_t": "Auto-extend (soft close)",
+    "b4_d": "If a new bid is placed in the final 2 minutes, the timer is extended by another 2 minutes. This defeats sniping and gives everyone an equal chance.",
+    "b5_t": "With reserve / no reserve",
+    "b5_d": "A reserve is a hidden minimum price below which the seller isn't obliged to sell. „No-reserve\" auctions sell to the highest bid. „With reserve\" — if the reserve isn't met, the auction moves to direct negotiation.",
+    "b6_t": "Negotiation if the reserve isn't met",
+    "b6_d": "If the reserve isn't met, we open a 72-hour window (3 × 24 hours) for direct negotiation between the seller and the highest bidder. The seller can accept the bid or make a counter-offer. If they agree — the deal closes; if not — the auction closes without a buyer.",
+    "b7_t": "Bid commitment",
+    "b7_d": "Every bid is irrevocable and legally binding. Winning means you commit to completing the transaction. Bids can only be retracted by our team and only when a technical error is proven.",
+    "b8_t": "Winning and fee capture",
+    "b8_d": "When you win, the pre-authorised amount is captured as a real buyer's fee payment to {{brand}}. We then connect you directly with the seller — the car payment itself happens between the two of you (bank transfer or escrow)."
+  },
   "onboarding_cta": {
     "intro": "New to {{brand}}?",
     "link": "Learn how it works"

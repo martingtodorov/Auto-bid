@@ -220,6 +220,27 @@
     "cta_title": "Gata de prima ta licitare?",
     "cta_btn": "Creează cont"
   },
+  "bidding_logic": {
+    "overline": "Procesul de licitare",
+    "title": "Cum funcționează exact licitarea",
+    "intro": "Fiecare licitație este o tranzacție obligatorie între vânzător și câștigător. Iată ce se întâmplă pas cu pas — de la prima ofertă până la finalizare.",
+    "b1_t": "Verificare înainte de prima ofertă",
+    "b1_d": "Înainte de a putea licita, solicităm confirmarea identității și un card de plată valid. Asta ne protejează de oferte false și spam.",
+    "b2_t": "Pre-autorizare la fiecare ofertă",
+    "b2_d": "La fiecare licitare blocăm {{pct}}% din valoarea ofertei tale (minim €{{feeMin}}, maxim €{{feeMax}}) pe cardul tău. Aceasta NU este o plată — suma rămâne a ta și se eliberează automat dacă ești depășit.",
+    "b3_t": "Credit de licitare (opțional)",
+    "b3_d": "Poți autoriza maximul tău o singură dată și apoi să licitezi liber până la această limită fără tranzacții noi pe card. Creditul poate fi mărit doar cu o sumă mai mare. La depășire se eliberează integral. Îl poți elibera singur cu o confirmare.",
+    "b4_t": "Extindere automată (soft close)",
+    "b4_d": "Dacă o ofertă nouă este plasată în ultimele 2 minute ale licitației, cronometrul se prelungește cu încă 2 minute. Asta oprește „sniping“-ul și oferă șanse egale tuturor ofertanților.",
+    "b5_t": "Cu rezervă / fără rezervă",
+    "b5_d": "Prețul de rezervă este o sumă minimă ascunsă sub care vânzătorul nu este obligat să vândă. Licitațiile „fără rezervă“ se vând la cea mai mare ofertă. La cele „cu rezervă“ — dacă rezerva nu este atinsă, licitația trece în negociere.",
+    "b6_t": "Negociere dacă rezerva nu este atinsă",
+    "b6_d": "Dacă prețul de rezervă nu este atins, deschidem o fereastră de 72 de ore (3 × 24 de ore) pentru negociere directă între vânzător și câștigător. Vânzătorul poate accepta oferta sau poate face o contraofertă. Dacă se ajunge la acord — tranzacția se încheie; dacă nu — licitația se închide fără cumpărător.",
+    "b7_t": "Angajament la ofertă",
+    "b7_d": "Fiecare ofertă depusă este irevocabilă și obligatorie din punct de vedere juridic. Dacă câștigi licitația, îți asumi obligația de a finaliza tranzacția. Ofertele pot fi retrase doar de echipa noastră și doar în caz de eroare tehnică dovedită.",
+    "b8_t": "Câștig și reținerea comisionului",
+    "b8_d": "La câștig, pre-autorizarea blocată devine o plată reală a comisionului de cumpărător către {{brand}}. Te conectăm direct cu vânzătorul — plata mașinii are loc între voi doi (transfer bancar sau escrow)."
+  },
   "onboarding_cta": {
     "intro": "Nou pe {{brand}}?",
     "link": "Învață cum funcționează"
