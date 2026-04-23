@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { Navigate, Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../lib/auth";
 import { api, formatEUR } from "../lib/apiClient";
 
 export default function DashboardPage() {
+  const { t } = useTranslation();
   const { user, loading } = useAuth();
   const [bids, setBids] = useState([]);
 
@@ -12,7 +14,7 @@ export default function DashboardPage() {
     api.get("/me/bids").then((r) => setBids(r.data));
   }, [user]);
 
-  if (loading) return <div className="py-24 text-center">Зареждане…</div>;
+  if (loading) return <div className="py-24 text-center">{t("common.loading")}</div>;
   if (!user) return <Navigate to="/login?next=/dashboard" replace />;
 
   return (

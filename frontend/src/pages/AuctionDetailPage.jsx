@@ -268,7 +268,7 @@ export default function AuctionDetailPage() {
       <Link to="/auctions" className="btn btn-primary mt-8 inline-flex">Към всички търгове</Link>
     </main>
   );
-  if (!a) return <div className="py-24 text-center">Зареждане…</div>;
+  if (!a) return <div className="py-24 text-center">{t("common.loading")}</div>;
 
   const lng = i18n.language;
   const specs = [
@@ -330,7 +330,7 @@ export default function AuctionDetailPage() {
               <img src={a.images?.[photoIdx]} alt={a.title} className="w-full h-full object-cover transition group-hover:scale-[1.02]" />
               {a.images?.length > 0 && (
                 <div className="absolute bottom-3 right-3 px-2.5 py-1 rounded-full bg-black/55 text-white text-xs font-mono opacity-0 group-hover:opacity-100 transition pointer-events-none">
-                  {photoIdx + 1} / {a.images.length} · Увеличи
+                  {photoIdx + 1} / {a.images.length} · {t("common.zoom")}
                 </div>
               )}
             </div>

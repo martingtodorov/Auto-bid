@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Star, MessageSquare, Check } from "lucide-react";
 import { api } from "../lib/apiClient";
 import { useAuth } from "../lib/auth";
@@ -144,6 +145,7 @@ function ReviewForm({ sellerId, reviewable, onSubmitted }) {
 }
 
 export default function SellerReviews({ sellerId, rating }) {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [reviewable, setReviewable] = useState([]);
@@ -213,7 +215,7 @@ export default function SellerReviews({ sellerId, rating }) {
 
       {/* List */}
       {loading ? (
-        <div className="py-16 text-center text-sm text-[hsl(var(--ink-muted))]">Зареждане…</div>
+        <div className="py-16 text-center text-sm text-[hsl(var(--ink-muted))]">{t("common.loading")}</div>
       ) : items.length === 0 ? (
         <div className="py-16 text-center rounded-card border border-[hsl(var(--line))]" data-testid="reviews-empty">
           <MessageSquare size={28} className="mx-auto text-[hsl(var(--ink-muted))]" />

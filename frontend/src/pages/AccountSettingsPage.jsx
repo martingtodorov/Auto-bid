@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { Navigate, Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Phone, Bell, Trash2, BookmarkPlus } from "lucide-react";
 import { useAuth, formatError } from "../lib/auth";
 import { api } from "../lib/apiClient";
 import TwoFactorSection from "../components/TwoFactorSection";
 
 export default function AccountSettingsPage() {
+  const { t } = useTranslation();
   const { user, loading, refresh } = useAuth();
   const [phone, setPhone] = useState("");
   const [smsOpt, setSmsOpt] = useState(false);
@@ -26,7 +28,7 @@ export default function AccountSettingsPage() {
     catch (e) { setSearches([]); }
   };
 
-  if (loading) return <div className="py-24 text-center">Зареждане…</div>;
+  if (loading) return <div className="py-24 text-center">{t("common.loading")}</div>;
   if (!user) return <Navigate to="/login?next=/settings" replace />;
 
   const save = async () => {

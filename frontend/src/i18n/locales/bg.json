@@ -1,6 +1,8 @@
 {
   "common": {
-    "min_short": "мин."
+    "min_short": "мин.",
+    "loading": "Зареждане…",
+    "zoom": "Увеличи"
   },
   "nav": {
     "home": "Начало",

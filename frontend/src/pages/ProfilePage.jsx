@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Award, ShoppingBag, Calendar, TrendingUp, AlertCircle, Star } from "lucide-react";
 import { api, formatEUR } from "../lib/apiClient";
 import AuctionCard from "../components/AuctionCard";
@@ -8,6 +9,7 @@ import { setPageMeta, combineJsonLd, buildBreadcrumbs } from "../lib/seo";
 import { useBrandName } from "../lib/brand";
 
 export default function ProfilePage() {
+  const { t } = useTranslation();
   const { userId } = useParams();
   const brand = useBrandName();
   const [data, setData] = useState(null);
@@ -71,7 +73,7 @@ export default function ProfilePage() {
       <h1 className="font-serif text-3xl mt-4">{err}</h1>
     </main>
   );
-  if (!data) return <div className="py-24 text-center">Зареждане…</div>;
+  if (!data) return <div className="py-24 text-center">{t("common.loading")}</div>;
 
   const { user, stats, listings_sold, purchases, active_listings, rating } = data;
   const memberYear = new Date(user.member_since).getFullYear();

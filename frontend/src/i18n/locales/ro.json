@@ -1,6 +1,8 @@
 {
   "common": {
-    "min_short": "min."
+    "min_short": "min.",
+    "loading": "Se încarcă…",
+    "zoom": "Mărește"
   },
   "nav": {
     "home": "Acasă",
