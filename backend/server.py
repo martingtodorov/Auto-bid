@@ -1102,22 +1102,6 @@ async def list_bids(auction_id: str):
     return await bidding_svc.list_bids(auction_id, limit=50)
 
 
-@api.get("/auctions/{auction_id}/bid-history")
-async def auction_bid_history(auction_id: str):
-    """Public chronological bid history for charts. Returns oldest → newest.
-    Includes the auction's starting_bid_eur as the chart's anchor point."""
-    from services import bidding as bidding_svc
-    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0, "starting_bid_eur": 1, "created_at": 1})
-    if not a:
-        raise HTTPException(status_code=404, detail="Търгът не е намерен")
-    history = await bidding_svc.get_bid_history(auction_id, limit=500)
-    return {
-        "starting_bid_eur": float(a.get("starting_bid_eur", 0)),
-        "starts_at": a.get("created_at"),
-        "history": history,
-    }
-
-
 # ---- Bidding Credit (pre-authorization for multiple bids) ----
 @api.get("/auctions/{auction_id}/bidding-credit")
 async def get_my_credit(auction_id: str, user: dict = Depends(get_current_user)):
@@ -1302,6 +1286,18 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
                 await email_outbid(prev_user["email"], prev_user["name"], a["title"], auction_id, amount)
             except Exception as e:
                 logger.error("email_outbid failed: %s", e)
+            # Web Push — outbid notification
+            try:
+                from services import push as push_svc
+                await push_svc.send_to_user(
+                    prev_high,
+                    title=f"Надминати сте · {a['title'][:60]}",
+                    body=f"Ново наддаване €{int(amount):,}. Все още можете да отговорите.",
+                    url=f"/auctions/{auction_id}",
+                    tag=f"outbid-{auction_id}",
+                )
+            except Exception as e:
+                logger.error("push outbid failed: %s", e)
 
     # Mirror denormalised fields onto the Mongo auction so the rest of the app
     # (filters, listings, sorting, sitemap) keeps working without a join.
@@ -1335,6 +1331,19 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
                 await email_seller_new_bid(seller["email"], seller.get("name", ""), a["title"], auction_id, user["name"], amount, result["bid_count"])
             except Exception as e:
                 logger.error("email_seller_new_bid failed: %s", e)
+        # Web Push — your car got a bid
+        if seller_id:
+            try:
+                from services import push as push_svc
+                await push_svc.send_to_user(
+                    seller_id,
+                    title=f"Нова наддавка · {a['title'][:60]}",
+                    body=f"{user['name']} наддаде €{int(amount):,}. Общо {result['bid_count']} наддавания.",
+                    url=f"/auctions/{auction_id}",
+                    tag=f"seller-bid-{auction_id}",
+                )
+            except Exception as e:
+                logger.error("push seller_new_bid failed: %s", e)
 
     # FOMO SMS blast in final 5 minutes
     new_ends_at = datetime.fromisoformat(new_ends_at_iso.replace("Z", "+00:00"))
@@ -1913,6 +1922,19 @@ async def notify_matching_saved_searches(auction: dict):
                     await send_email(u["email"], f"Нова обява · {auction['title']}", html)
                 except Exception as e:
                     logger.error("saved search email failed: %s", e)
+            # Web Push — saved-search match
+            if u:
+                try:
+                    from services import push as push_svc
+                    await push_svc.send_to_user(
+                        s["user_id"],
+                        title=f"Нова обява · {s['name']}",
+                        body=f"{auction['title']} · от €{int(auction.get('starting_bid_eur', 0)):,}",
+                        url=f"/auctions/{auction['id']}",
+                        tag=f"saved-{s['id']}",
+                    )
+                except Exception as e:
+                    logger.error("push saved_search failed: %s", e)
 
 
 # ---- Seller listing management ----
@@ -2556,6 +2578,9 @@ async def on_startup():
     await db.auctions.create_index([("status", 1), ("ends_at", 1)])
     # NOTE: legacy Mongo `bids` index kept for old archive data; new bids live in Postgres.
     await db.bids.create_index("auction_id")
+    # Web Push subscriptions (one-doc-per-endpoint)
+    await db.push_subscriptions.create_index("endpoint", unique=True)
+    await db.push_subscriptions.create_index("user_id")
     await db.comments.create_index("auction_id")
     await db.watches.create_index([("user_id", 1), ("auction_id", 1)])
     await db.bidding_credits.create_index([("auction_id", 1), ("user_id", 1)])
@@ -2730,6 +2755,7 @@ from routers import auth as _auth_router  # noqa: E402
 from routers import reviews as _reviews_router  # noqa: E402
 from routers import admin as _admin_router  # noqa: E402
 from routers import seller_requests as _seller_requests_router  # noqa: E402
+from routers import push as _push_router  # noqa: E402
 
 # Wire up injected deps for the negotiation router
 _neg_router.configure(
@@ -2778,6 +2804,7 @@ api.include_router(_auth_router.router)
 api.include_router(_reviews_router.router)
 api.include_router(_admin_router.router)
 api.include_router(_seller_requests_router.router)
+api.include_router(_push_router.register_push_routes(get_current_user))
 
 app.include_router(api)
 

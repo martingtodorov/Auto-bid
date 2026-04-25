@@ -5,6 +5,7 @@ import { Phone, Bell, Trash2, BookmarkPlus } from "lucide-react";
 import { useAuth, formatError } from "../lib/auth";
 import { api } from "../lib/apiClient";
 import TwoFactorSection from "../components/TwoFactorSection";
+import PushSettings from "../components/PushSettings";
 
 export default function AccountSettingsPage() {
   const { t } = useTranslation();
@@ -128,6 +129,10 @@ export default function AccountSettingsPage() {
         </section>
 
         <TwoFactorSection />
+
+        <div className="mt-8">
+          <PushSettings />
+        </div>
 
         <DangerZone />
       </div>

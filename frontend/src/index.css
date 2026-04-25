@@ -36,7 +36,67 @@
     --input: var(--line);
     --ring: var(--ink);
     --radius: 10px;
+
+    color-scheme: light;
 }
+
+/* ------------------------------------------------------------------ */
+/* Dark theme — applied via `data-theme="dark"` on <html>.            */
+/* Same HSL variables; rest of the app reads `hsl(var(--…))`          */
+/* ------------------------------------------------------------------ */
+html[data-theme="dark"] {
+    --bg: 222 22% 8%;
+    --surface: 222 18% 12%;
+    --surface-2: 222 16% 16%;
+    --ink: 220 15% 94%;
+    --ink-muted: 220 8% 64%;
+    --line: 220 14% 22%;
+    --accent: 158 50% 48%;
+    --accent-ink: 158 60% 60%;
+    --accent-soft: 158 30% 16%;
+    --danger: 0 70% 58%;
+    --success: 142 55% 50%;
+    --primary-foreground: 222 22% 8%;
+    --accent-foreground: 222 22% 8%;
+    --destructive-foreground: 0 0% 100%;
+
+    color-scheme: dark;
+}
+
+/* Image readability under dark theme */
+html[data-theme="dark"] img:not([data-no-dim]) { filter: brightness(0.92); }
+
+/* ------------------------------------------------------------------ */
+/* Dark-mode overrides for hardcoded Tailwind colour utilities.       */
+/* The codebase uses both CSS-var classes (preferred) and hardcoded    */
+/* `bg-white`/`text-black`/`bg-gray-*`. Remap them under dark theme.   */
+/* ------------------------------------------------------------------ */
+html[data-theme="dark"] .bg-white { background-color: hsl(var(--bg)) !important; }
+html[data-theme="dark"] .text-black { color: hsl(var(--ink)) !important; }
+html[data-theme="dark"] .bg-black { background-color: #000 !important; }
+html[data-theme="dark"] .bg-gray-50 { background-color: hsl(var(--surface)) !important; }
+html[data-theme="dark"] .bg-gray-100 { background-color: hsl(var(--surface)) !important; }
+html[data-theme="dark"] .bg-gray-200 { background-color: hsl(var(--surface-2)) !important; }
+html[data-theme="dark"] .bg-slate-50 { background-color: hsl(var(--surface)) !important; }
+html[data-theme="dark"] .bg-slate-100 { background-color: hsl(var(--surface)) !important; }
+html[data-theme="dark"] .text-gray-500,
+html[data-theme="dark"] .text-gray-600,
+html[data-theme="dark"] .text-gray-700 { color: hsl(var(--ink-muted)) !important; }
+html[data-theme="dark"] .text-gray-800,
+html[data-theme="dark"] .text-gray-900 { color: hsl(var(--ink)) !important; }
+html[data-theme="dark"] .border-gray-100,
+html[data-theme="dark"] .border-gray-200,
+html[data-theme="dark"] .border-gray-300 { border-color: hsl(var(--line)) !important; }
+/* Inputs in dark mode — Tailwind defaults to white background */
+html[data-theme="dark"] input,
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] select {
+    background-color: hsl(var(--surface)) !important;
+    color: hsl(var(--ink));
+}
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder { color: hsl(var(--ink-muted)); }
+
 
 * { border-color: hsl(var(--border)); }
 

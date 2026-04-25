@@ -4,6 +4,7 @@ import { Menu, X, User, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../lib/auth";
 import LanguageSwitcher from "./LanguageSwitcher";
+import ThemeToggle from "./ThemeToggle";
 import { brandTldForLang } from "../i18n";
 
 export default function Nav() {
@@ -65,6 +66,7 @@ export default function Nav() {
 
           <div className="hidden md:flex items-center gap-3 lg:gap-4 shrink-0">
             <LanguageSwitcher className="hidden lg:inline-flex" />
+            <ThemeToggle />
             {user ? (
               <>
                 {(user.role === "admin" || user.role === "moderator") && (
@@ -112,7 +114,10 @@ export default function Nav() {
 
             <div className="flex items-center justify-between pb-2">
               <span className="text-xs text-[hsl(var(--ink-muted))]">Език / Limbă / Language</span>
-              <LanguageSwitcher />
+              <div className="flex items-center gap-2">
+                <ThemeToggle />
+                <LanguageSwitcher />
+              </div>
             </div>
 
             {links.map((l) => (

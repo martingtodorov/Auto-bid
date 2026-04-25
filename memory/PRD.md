@@ -417,3 +417,36 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 **Race-condition тест**: 3 паралелни POST /bids от различни потребители със същата сума → точно един успява, останалите получават "min next bid" грешка с обновената стойност. Verified ✅
 
 **Стара Mongo `bids` колекция**: запазена недокосната като archive (старите данни не се мигрират — само нови бидове отиват в Postgres). Index запазен.
+
+## 2026-02-23 — Dark mode + Web Push notifications (DONE)
+
+### Dark mode
+- Three-state theme toggle (light / dark / system) в header (`/app/frontend/src/components/ThemeToggle.jsx`)
+- `data-theme="dark"` атрибут на `<html>`; CSS променливи се обновяват автоматично
+- Mobile address-bar tint via `<meta name="theme-color">`
+- Boot-time theme apply (no flash) — `bootTheme()` в `index.js`
+- Persist в `localStorage` (`ab.theme`); следва OS-level промени когато е "system"
+- CSS overrides за hardcoded `bg-white`/`text-gray-*`/`border-gray-*` Tailwind classes под `html[data-theme="dark"]`
+- Image `filter: brightness(0.92)` под dark theme за по-добро четене
+
+### Web Push notifications (W3C Push API + VAPID)
+**Backend:**
+- `pywebpush` либ (раз b64url VAPID keys в `.env`: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_CONTACT_EMAIL`)
+- `services/push.py` — save_subscription, send_to_user (auto-prune 404/410 endpoints)
+- `routers/push.py` — GET /api/push/public-key, POST /api/push/subscribe, /unsubscribe, /test
+- Index: `db.push_subscriptions` (endpoint unique, user_id)
+- **Triggers**: place_bid → outbid push (prev_high) + seller-got-bid push; notify_matching_saved_searches → saved-search match push
+
+**Frontend:**
+- `/public/sw.js` — service worker (push event handler + notificationclick)
+- `/public/manifest.webmanifest` + 192/512 PNG icons + iOS meta tags (Add to Home Screen)
+- `/src/lib/push.js` — pushAvailableHere() detection, subscribePush, unsubscribePush, sendTestPush
+- `/src/components/PushSettings.jsx` — настройки с 5 състояния (loading/unsupported/ios-pwa-needed/default/denied/subscribed)
+- Wired в `AccountSettingsPage.jsx`
+
+**iOS support**: 16.4+, изисква Add to Home Screen (PWA install). UI-то показва инструкции.
+
+**Тествано**: VAPID JWT успешно подписан, push изпратен към FCM/Mozilla endpoints, 410 responses се pruне правилно.
+
+### Removed
+- `BidHistoryChart` компонент + `/api/auctions/{id}/bid-history` endpoint + `chart_*` i18n ключове
