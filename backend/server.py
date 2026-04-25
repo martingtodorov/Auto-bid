@@ -513,8 +513,8 @@ async def get_auction(auction_id: str, request: Request):
     if a.get("vin") and viewer:
         is_privileged = viewer.get("role") == "admin" or viewer.get("id") == a.get("seller_id")
         if not is_privileged and _auction_status(a) == "live":
-            has_bid = await db.bids.find_one({"auction_id": auction_id, "user_id": viewer["id"]}, {"_id": 0, "id": 1})
-            is_privileged = bool(has_bid)
+            from services import bidding as bidding_svc
+            is_privileged = await bidding_svc.has_user_bid(auction_id, viewer["id"])
         if is_privileged:
             public["vin"] = a["vin"].strip().upper()
             public["vin_masked"] = False
@@ -1098,8 +1098,8 @@ async def import_from_mobile_bg(request: Request, payload: MobileBgImport, user:
 # ---- Bids ----
 @api.get("/auctions/{auction_id}/bids")
 async def list_bids(auction_id: str):
-    items = await db.bids.find({"auction_id": auction_id}, {"_id": 0}).sort("amount_eur", -1).limit(50).to_list(50)
-    return items
+    from services import bidding as bidding_svc
+    return await bidding_svc.list_bids(auction_id, limit=50)
 
 
 # ---- Bidding Credit (pre-authorization for multiple bids) ----
@@ -1189,12 +1189,16 @@ async def release_my_credit(auction_id: str, user: dict = Depends(get_current_us
 @limiter.limit("30/minute")
 async def place_bid(request: Request, auction_id: str, payload: BidCreate, user: dict = Depends(get_current_user)):
     """
-    Direct bidding (BaT-style):
-      • payload.amount_eur becomes the visible bid immediately.
-      • Minimum next bid = current + variable step (see _bid_step).
+    Direct bidding (BaT-style) — ACID-correct via PostgreSQL.
+
+      • amount_eur is the visible bid; minimum = current + variable step (_bid_step)
+      • Concurrent bidders for the same auction are serialised via SELECT FOR UPDATE
+        on the bid_state row, so two near-simultaneous bids cannot both win.
       • Hard anti-sniping: any bid in final 2 min resets timer to 2 min.
       • Card hold = buyer fee (5% of bid, min €150, max €4,000).
     """
+    from services import bidding as bidding_svc
+
     a = await db.auctions.find_one({"id": auction_id})
     if not a:
         raise HTTPException(status_code=404, detail="Търгът не е намерен")
@@ -1210,13 +1214,7 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
     if blk:
         raise HTTPException(status_code=403, detail="Не можете да наддавате за тази обява — достъпът е ограничен.")
 
-    current = float(a["current_bid_eur"])
-    step = _bid_step(current)
-    min_next = current + step
     amount = float(payload.amount_eur)
-    if amount < min_next:
-        raise HTTPException(status_code=400, detail=f"Минималната следваща наддавка е €{int(min_next)}")
-
     now = datetime.now(timezone.utc)
 
     # Bidding credit or fresh preauth?
@@ -1229,22 +1227,55 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
         raise HTTPException(status_code=402, detail="Необходима е валидна карта за наддаване")
 
     bid_id = str(uuid.uuid4())
-    fee_amount = _buyer_fee(amount)   # card hold = buyer fee
+    fee_amount = _buyer_fee(amount)
 
-    # Release this user's previous active preauths on this auction (only if not credit)
+    # Release this user's previous active preauths on this auction (only if not credit-backed)
     if not credit_covers:
-        await db.bids.update_many(
-            {"auction_id": auction_id, "user_id": user["id"], "preauth_status": "authorized"},
-            {"$set": {"preauth_status": "released", "preauth_released_at": now.isoformat()}},
-        )
+        await bidding_svc.release_user_active_preauths(auction_id, user["id"])
 
-    # Release previous leader's preauth/credit + email them
+    if credit_covers:
+        preauth_id = credit["preauth_id"]
+        preauth_status_val = "credit_backed"
+        card_last4 = credit.get("card_last4")
+        credit_id_val = credit["id"]
+    else:
+        preauth_id = f"mock_pi_{uuid.uuid4().hex[:16]}"
+        preauth_status_val = "authorized"
+        card_last4 = payload.payment_method_id[-4:] if payload.payment_method_id else None
+        credit_id_val = None
+
+    # ACID-correct placement (locks bid_state, validates, inserts, updates)
+    try:
+        result = await bidding_svc.place_bid(
+            auction_id=auction_id,
+            user_id=user["id"],
+            user_name=user["name"],
+            amount_eur=amount,
+            bid_id=bid_id,
+            preauth_id=preauth_id,
+            preauth_status=preauth_status_val,
+            preauth_amount_eur=fee_amount,
+            card_last4=card_last4,
+            credit_id=credit_id_val,
+            fallback_starting_bid_eur=float(a.get("current_bid_eur", 0)),
+            fallback_ends_at=datetime.fromisoformat(a["ends_at"]),
+            bid_step_fn=_bid_step,
+            extension_minutes=2,
+        )
+    except ValueError as ve:
+        # min_bid:<value>
+        if str(ve).startswith("min_bid:"):
+            min_next = float(str(ve).split(":", 1)[1])
+            raise HTTPException(status_code=400, detail=f"Минималната следваща наддавка е €{int(min_next)}")
+        raise
+
+    triggered_extension = result["triggered_extension"]
+    new_ends_at_iso = result["ends_at"]
+
+    # Release previous leader's preauth/credit + email them (Postgres + Mongo)
     prev_high = a.get("high_bidder_id")
     if prev_high and prev_high != user["id"]:
-        await db.bids.update_many(
-            {"auction_id": auction_id, "user_id": prev_high, "preauth_status": "authorized"},
-            {"$set": {"preauth_status": "released", "preauth_released_at": now.isoformat()}},
-        )
+        await bidding_svc.release_user_active_preauths(auction_id, prev_high)
         await db.bidding_credits.update_many(
             {"auction_id": auction_id, "user_id": prev_high, "status": "authorized"},
             {"$set": {"status": "released", "released_at": now.isoformat()}},
@@ -1256,53 +1287,26 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
             except Exception as e:
                 logger.error("email_outbid failed: %s", e)
 
-    if credit_covers:
-        bid_doc = {
-            "id": bid_id, "auction_id": auction_id,
-            "user_id": user["id"], "user_name": user["name"],
-            "amount_eur": amount,
-            "created_at": now.isoformat(),
-            "preauth_id": credit["preauth_id"], "preauth_status": "credit_backed",
-            "preauth_amount_eur": fee_amount,
-            "card_last4": credit.get("card_last4"), "credit_id": credit["id"],
-        }
-    else:
-        bid_doc = {
-            "id": bid_id, "auction_id": auction_id,
-            "user_id": user["id"], "user_name": user["name"],
-            "amount_eur": amount,
-            "created_at": now.isoformat(),
-            "preauth_id": f"mock_pi_{uuid.uuid4().hex[:16]}",
-            "preauth_status": "authorized",
-            "preauth_amount_eur": fee_amount,
-            "card_last4": payload.payment_method_id[-4:] if payload.payment_method_id else None,
-        }
-    await db.bids.insert_one(bid_doc)
-
-    ends_at = datetime.fromisoformat(a["ends_at"])
-    triggered_extension = (ends_at - now).total_seconds() < 120
+    # Mirror denormalised fields onto the Mongo auction so the rest of the app
+    # (filters, listings, sorting, sitemap) keeps working without a join.
     update = {
         "current_bid_eur": amount,
-        "bid_count": int(a.get("bid_count", 0)) + 1,
+        "bid_count": result["bid_count"],
         "high_bidder_id": user["id"],
         "high_bidder_name": user["name"],
     }
-    # Hard anti-sniping: any bid in the final 2 min resets the clock to 2 min from now.
     if triggered_extension:
-        update["ends_at"] = (now + timedelta(minutes=2)).isoformat()
+        update["ends_at"] = new_ends_at_iso
     await db.auctions.update_one({"id": auction_id}, {"$set": update})
-    # Flag the bid for audit (Phase 3)
-    if triggered_extension:
-        await db.bids.update_one({"id": bid_id}, {"$set": {"triggered_extension": True}})
 
-    public_bid = {k: v for k, v in bid_doc.items() if k != "_id"}
+    public_bid = result["bid"]
     await hub.broadcast(auction_id, {
         "type": "bid",
         "auction_id": auction_id,
         "current_bid_eur": amount,
         "high_bidder_name": user["name"],
-        "bid_count": update["bid_count"],
-        "ends_at": update.get("ends_at", a["ends_at"]),
+        "bid_count": result["bid_count"],
+        "ends_at": new_ends_at_iso,
         "bid": {k: public_bid.get(k) for k in ("id", "user_id", "user_name", "amount_eur", "created_at")},
     })
 
@@ -1312,18 +1316,15 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
         seller = await db.users.find_one({"id": seller_id}, {"_id": 0})
         if seller and seller.get("email"):
             try:
-                await email_seller_new_bid(seller["email"], seller.get("name", ""), a["title"], auction_id, user["name"], amount, update["bid_count"])
+                await email_seller_new_bid(seller["email"], seller.get("name", ""), a["title"], auction_id, user["name"], amount, result["bid_count"])
             except Exception as e:
                 logger.error("email_seller_new_bid failed: %s", e)
 
     # FOMO SMS blast in final 5 minutes
-    new_ends_at = datetime.fromisoformat(update.get("ends_at", a["ends_at"]))
+    new_ends_at = datetime.fromisoformat(new_ends_at_iso.replace("Z", "+00:00"))
     seconds_left = (new_ends_at - now).total_seconds()
     if seconds_left <= 300:
-        recipient_ids: set = set()
-        async for b in db.bids.find({"auction_id": auction_id}, {"_id": 0, "user_id": 1}).limit(500):
-            if b["user_id"] != user["id"]:
-                recipient_ids.add(b["user_id"])
+        recipient_ids = set(await bidding_svc.collect_bidder_ids(auction_id, exclude_user_id=user["id"], limit=500))
         async for w in db.watches.find({"auction_id": auction_id}, {"_id": 0, "user_id": 1}).limit(500):
             if w["user_id"] != user["id"]:
                 recipient_ids.add(w["user_id"])
@@ -1617,14 +1618,12 @@ async def admin_reject(auction_id: str, payload: AdminDecision, _admin: dict = D
 @api.post("/admin/auctions/{auction_id}/finalize")
 async def admin_finalize(auction_id: str, _admin: dict = Depends(require_admin)):
     """Releases ALL preauths (no commission captured) and marks auction as sold."""
+    from services import bidding as bidding_svc
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     if not a:
         raise HTTPException(status_code=404, detail="Обявата не е намерена")
     now_iso = datetime.now(timezone.utc).isoformat()
-    await db.bids.update_many(
-        {"auction_id": auction_id, "preauth_status": "authorized"},
-        {"$set": {"preauth_status": "released", "preauth_released_at": now_iso}},
-    )
+    await bidding_svc.release_all_active_preauths(auction_id)
     # Release all bidding credits too
     await db.bidding_credits.update_many(
         {"auction_id": auction_id, "status": "authorized"},
@@ -1645,6 +1644,7 @@ async def admin_finalize(auction_id: str, _admin: dict = Depends(require_admin))
 @api.post("/admin/auctions/{auction_id}/capture-premium")
 async def admin_capture_premium(auction_id: str, _admin: dict = Depends(require_admin)):
     """Captures winner's 2% pre-authorization as buyer's premium. Releases losing bidders' preauths."""
+    from services import bidding as bidding_svc
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     if not a:
         raise HTTPException(status_code=404, detail="Обявата не е намерена")
@@ -1665,29 +1665,18 @@ async def admin_capture_premium(auction_id: str, _admin: dict = Depends(require_
                 {"id": winner_credit["id"]},
                 {"$set": {"status": "captured", "captured_at": now_iso, "captured_amount_eur": captured_amount}},
             )
-            # Mark the winning bid linked to this credit
-            await db.bids.update_many(
-                {"auction_id": auction_id, "user_id": winner_id, "credit_id": winner_credit["id"]},
-                {"$set": {"preauth_status": "captured", "preauth_captured_at": now_iso}},
-            )
+            # Mark the winning bid linked to this credit (in Postgres)
+            winner_bid = await bidding_svc.get_winning_bid(auction_id)
+            if winner_bid and winner_bid.get("user_id") == winner_id and winner_bid.get("credit_id") == winner_credit["id"]:
+                await bidding_svc.mark_winner_capture(auction_id, winner_bid["id"], captured_amount)
         else:
-            winner_bid = await db.bids.find_one(
-                {"auction_id": auction_id, "user_id": winner_id, "preauth_status": "authorized"},
-                {"_id": 0},
-                sort=[("amount_eur", -1)],
-            )
-            if winner_bid:
-                captured_amount = float(winner_bid.get("preauth_amount_eur", 0.0))
-                await db.bids.update_one(
-                    {"id": winner_bid["id"]},
-                    {"$set": {"preauth_status": "captured", "preauth_captured_at": now_iso}},
-                )
+            winner_bid = await bidding_svc.get_winning_bid(auction_id)
+            if winner_bid and winner_bid.get("user_id") == winner_id and winner_bid.get("preauth_status") == "authorized":
+                captured_amount = float(winner_bid.get("preauth_amount_eur") or 0.0)
+                await bidding_svc.mark_winner_capture(auction_id, winner_bid["id"], captured_amount)
 
     # Release all OTHER authorized preauths and credits
-    await db.bids.update_many(
-        {"auction_id": auction_id, "preauth_status": "authorized"},
-        {"$set": {"preauth_status": "released", "preauth_released_at": now_iso}},
-    )
+    await bidding_svc.release_all_active_preauths(auction_id)
     await db.bidding_credits.update_many(
         {"auction_id": auction_id, "status": "authorized"},
         {"$set": {"status": "released", "released_at": now_iso}},
@@ -1711,6 +1700,7 @@ async def admin_capture_premium(auction_id: str, _admin: dict = Depends(require_
 
 @api.get("/admin/sold")
 async def admin_sold(_admin: dict = Depends(require_admin_or_moderator)):
+    from services import bidding as bidding_svc
     items = await db.auctions.find({"status": "sold"}, {"_id": 0}).sort("finalized_at", -1).to_list(500)
     # Enrich with winner info and current premium state
     enriched = []
@@ -1718,11 +1708,7 @@ async def admin_sold(_admin: dict = Depends(require_admin_or_moderator)):
         winner = None
         if a.get("high_bidder_id"):
             winner = await db.users.find_one({"id": a["high_bidder_id"]}, {"_id": 0, "password_hash": 0})
-        winning_bid = await db.bids.find_one(
-            {"auction_id": a["id"], "user_id": a.get("high_bidder_id")},
-            {"_id": 0},
-            sort=[("amount_eur", -1)],
-        )
+        winning_bid = await bidding_svc.get_winning_bid(a["id"])
         enriched.append({
             **a,
             "winner_email": winner.get("email") if winner else None,
@@ -1767,8 +1753,9 @@ async def request_vin(auction_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="За този автомобил VIN не е наличен")
     if a.get("seller_id") == user["id"] or user.get("role") == "admin":
         raise HTTPException(status_code=400, detail="Вие вече имате достъп до пълния VIN")
-    already_bid = await db.bids.find_one({"auction_id": auction_id, "user_id": user["id"]}, {"_id": 0, "id": 1})
-    if already_bid:
+    from services import bidding as _bidding_svc
+    already_bid_flag = await _bidding_svc.has_user_bid(auction_id, user["id"])
+    if already_bid_flag:
         raise HTTPException(status_code=400, detail="Вие вече сте наддавали — пълният VIN е видим в обявата")
     existing = await db.vin_requests.find_one({"auction_id": auction_id, "user_id": user["id"]})
     if existing:
@@ -1812,8 +1799,8 @@ async def my_watchlist(user: dict = Depends(get_current_user)):
 
 @api.get("/me/bids")
 async def my_bids(user: dict = Depends(get_current_user)):
-    bids = await db.bids.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).limit(200).to_list(200)
-    return bids
+    from services import bidding as bidding_svc
+    return await bidding_svc.list_user_bids(user["id"], limit=200)
 
 @api.get("/me/listings")
 async def my_listings(user: dict = Depends(get_current_user)):
@@ -1960,10 +1947,8 @@ async def withdraw_listing(auction_id: str, user: dict = Depends(get_current_use
         if status == "live" and int(a.get("bid_count", 0)) > 0:
             raise HTTPException(status_code=400, detail="Обявата не може да бъде оттеглена с активни наддавания. Свържете се с екипа.")
 
-    await db.bids.update_many(
-        {"auction_id": auction_id, "preauth_status": "authorized"},
-        {"$set": {"preauth_status": "released", "preauth_released_at": datetime.now(timezone.utc).isoformat()}},
-    )
+    from services import bidding as bidding_svc
+    await bidding_svc.release_all_active_preauths(auction_id)
     await db.auctions.update_one({"id": auction_id}, {"$set": {"status": "withdrawn"}})
     return {"ok": True}
 
@@ -2049,10 +2034,8 @@ async def admin_remove_auction(auction_id: str, _admin: dict = Depends(require_a
     if not a:
         raise HTTPException(status_code=404, detail="Обявата не е намерена")
     now_iso = datetime.now(timezone.utc).isoformat()
-    await db.bids.update_many(
-        {"auction_id": auction_id, "preauth_status": "authorized"},
-        {"$set": {"preauth_status": "released", "preauth_released_at": now_iso}},
-    )
+    from services import bidding as bidding_svc
+    await bidding_svc.release_all_active_preauths(auction_id)
     await db.auctions.update_one(
         {"id": auction_id},
         {"$set": {"status": "removed", "removed_at": now_iso}},
@@ -2086,17 +2069,15 @@ async def admin_hard_delete_auction(auction_id: str, _admin: dict = Depends(requ
     if not a:
         raise HTTPException(status_code=404, detail="Обявата не е намерена")
     now_iso = datetime.now(timezone.utc).isoformat()
+    from services import bidding as bidding_svc
     # Release active credit/preauth mocks before wiping
-    await db.bids.update_many(
-        {"auction_id": auction_id, "preauth_status": "authorized"},
-        {"$set": {"preauth_status": "released", "preauth_released_at": now_iso}},
-    )
+    await bidding_svc.release_all_active_preauths(auction_id)
     await db.bidding_credits.update_many(
         {"auction_id": auction_id, "status": "authorized"},
         {"$set": {"status": "released", "released_at": now_iso}},
     )
     # Cascade delete
-    res_bids = await db.bids.delete_many({"auction_id": auction_id})
+    res_bids_count = await bidding_svc.delete_bids_for_auction(auction_id)
     res_comments = await db.comments.delete_many({"auction_id": auction_id})
     res_watches = await db.watches.delete_many({"auction_id": auction_id})
     res_credits = await db.bidding_credits.delete_many({"auction_id": auction_id})
@@ -2106,7 +2087,7 @@ async def admin_hard_delete_auction(auction_id: str, _admin: dict = Depends(requ
         "ok": True,
         "deleted": {
             "auction": 1,
-            "bids": res_bids.deleted_count,
+            "bids": res_bids_count,
             "comments": res_comments.deleted_count,
             "watches": res_watches.deleted_count,
             "bidding_credits": res_credits.deleted_count,
@@ -2557,12 +2538,16 @@ async def on_startup():
     await db.users.create_index("email", unique=True)
     await db.auctions.create_index("id", unique=True)
     await db.auctions.create_index([("status", 1), ("ends_at", 1)])
+    # NOTE: legacy Mongo `bids` index kept for old archive data; new bids live in Postgres.
     await db.bids.create_index("auction_id")
     await db.comments.create_index("auction_id")
     await db.watches.create_index([("user_id", 1), ("auction_id", 1)])
     await db.bidding_credits.create_index([("auction_id", 1), ("user_id", 1)])
     await db.makes.create_index("name", unique=True)
     await db.audit_log.create_index([("at", -1)])
+    # PostgreSQL bidding subsystem (see services/bidding.py)
+    from db_pg import init_pg_schema
+    await init_pg_schema()
     await _load_settings_cache()
     await seed_admin()
     await seed()
@@ -2691,10 +2676,8 @@ async def _finalize_expired_auctions_once():
             {"$set": {"status": "sold", "finalized_at": now_iso}},
         )
         # Release losing bidders' preauths (keep winner's active for capture)
-        await db.bids.update_many(
-            {"auction_id": auction_id, "preauth_status": "authorized", "user_id": {"$ne": a["high_bidder_id"]}},
-            {"$set": {"preauth_status": "released", "preauth_released_at": now_iso}},
-        )
+        from services import bidding as bidding_svc
+        await bidding_svc.release_losing_preauths(auction_id, a["high_bidder_id"])
         await db.bidding_credits.update_many(
             {"auction_id": auction_id, "status": "authorized", "user_id": {"$ne": a["high_bidder_id"]}},
             {"$set": {"status": "released", "released_at": now_iso}},
@@ -2710,8 +2693,9 @@ async def _finalize_expired_auctions_once():
 
 @api.post("/admin/reseed")
 async def reseed():
+    from services import bidding as bidding_svc
     await db.auctions.delete_many({})
-    await db.bids.delete_many({})
+    await bidding_svc.delete_all_bids()
     await db.comments.delete_many({})
     await db.watches.delete_many({})
     await seed()

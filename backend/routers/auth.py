@@ -292,7 +292,8 @@ def register_routes():
         Keeps auctions as ledger records (seller anonymized). Clears bids/comments/watches/saved searches/credits/VIN requests/reviews.
         """
         uid = user["id"]
-        bids = await db.bids.delete_many({"user_id": uid})
+        from services import bidding as bidding_svc
+        bids_count = await bidding_svc.delete_bids_for_user(uid)
         comments = await db.comments.delete_many({"user_id": uid})
         watches = await db.watches.delete_many({"user_id": uid})
         saved = await db.saved_searches.delete_many({"user_id": uid})
@@ -307,7 +308,7 @@ def register_routes():
         return {
             "ok": True,
             "deleted": {
-                "bids": bids.deleted_count, "comments": comments.deleted_count, "watches": watches.deleted_count,
+                "bids": bids_count, "comments": comments.deleted_count, "watches": watches.deleted_count,
                 "saved_searches": saved.deleted_count, "credits": credits.deleted_count,
                 "vin_requests": vins.deleted_count, "reviews": reviews.deleted_count, "notes": notes.deleted_count,
             },

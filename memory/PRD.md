@@ -381,3 +381,39 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 - "Buy Now" за търгове (P2)
 - CAPTCHA (Cloudflare Turnstile) на регистрация (P3)
 - PostgreSQL миграция: **НЕ се прави** (user decision — остава MongoDB)
+
+## 2026-02-23 — Hybrid PostgreSQL bidding subsystem (DONE)
+
+**Защо**: Bid placement сега е ACID-correct → нулеви race conditions при едновременни наддавачи. Postgres се използва САМО за бидове; всичко останало (auctions, users, comments, watches, credits) остава в MongoDB.
+
+**Нова инфраструктура:**
+- PostgreSQL 15 supervisor програма (preview env) + `postgres:15-alpine` service в `docker-compose.yml`
+- `POSTGRES_URL` env var в backend/.env и docker-compose
+- Tables: `bids` (append-only история) + `bid_state` (per-auction state, locked via SELECT FOR UPDATE)
+
+**Нови файлове:**
+- `/app/backend/db_pg.py` — async engine + session factory (SQLAlchemy 2.0 async)
+- `/app/backend/models_pg.py` — SQLAlchemy ORM (Bid, BidState)
+- `/app/backend/services/bidding.py` — всички bid операции (place_bid, list_bids, has_user_bid, release_*, capture, delete_*)
+
+**Migrated endpoints**: 
+- POST `/api/auctions/{id}/bids` — място на бида с FOR UPDATE lock + min-bid revalidation вътре в транзакцията
+- GET `/api/auctions/{id}/bids` 
+- GET `/api/me/bids`
+- POST `/api/admin/auctions/{id}/finalize`
+- POST `/api/admin/auctions/{id}/capture-premium`
+- POST `/api/admin/auctions/{id}/remove`
+- POST `/api/admin/auctions/{id}/withdraw`
+- DELETE `/api/admin/auctions/{id}` (cascade)
+- GET `/api/admin/auctions/{id}/bids` + POST `/api/admin/bids/{id}/invalidate`
+- GET `/api/admin/sold` (winning bid lookup)
+- GET `/api/admin/stats` (count_bids)
+- DELETE `/api/auth/me` + DELETE `/api/admin/users/{id}` (cascade delete bids)
+- POST `/api/auctions/{id}/request-vin` (already_bid check)
+- VIN reveal logic в `_assemble_auction_public`
+
+**Sync model**: PostgreSQL = source of truth for bids. Mongo `auction.current_bid_eur`, `bid_count`, `high_bidder_*`, `ends_at` се обновяват post-commit за да продължат filter/sort/sitemap да работят без join.
+
+**Race-condition тест**: 3 паралелни POST /bids от различни потребители със същата сума → точно един успява, останалите получават "min next bid" грешка с обновената стойност. Verified ✅
+
+**Стара Mongo `bids` колекция**: запазена недокосната като archive (старите данни не се мигрират — само нови бидове отиват в Postgres). Index запазен.

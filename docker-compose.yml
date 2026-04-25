@@ -73,6 +73,23 @@ services:
         echo 'MinIO bucket ready: '$$S3_BUCKET
       "
 
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    profiles: ["prod", "dev"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-autobid}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-autobid_bids}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # ACID-correct bidding lives here (services/bidding.py); auctions stay in Mongo.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-autobid} -d $${POSTGRES_DB:-autobid_bids}"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
   backend:
     build: ./backend
     image: autoandbid/backend:${IMAGE_TAG:-latest}
@@ -81,9 +98,12 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     environment:
       MONGO_URL: mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongo:27017/${DB_NAME}?authSource=admin
       DB_NAME: ${DB_NAME}
+      POSTGRES_URL: postgresql+asyncpg://${POSTGRES_USER:-autobid}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-autobid_bids}
       CORS_ORIGINS: ${CORS_ORIGINS}
       JWT_SECRET: ${JWT_SECRET}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
@@ -135,4 +155,5 @@ services:
 
 volumes:
   mongo_data:
+  postgres_data:
   minio_data:

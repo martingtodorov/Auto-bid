@@ -20,6 +20,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from deps import db
+from services import bidding as bidding_svc
 from models import SiteSettingsUpdate, AdminUserUpdate, StripeSettingsUpdate, MakeCreate, CancelReason, InvalidateBidRequest, BlockBidderRequest, InternalNote, BuyerFeeUpdate
 from helpers import audit_log, mask_secret, stripe_public_config, stripe_runtime_config
 
@@ -226,8 +227,8 @@ def register_routes():
         verified_dealers = await db.users.count_documents({"is_verified_dealer": True})
         new_users_week = await db.users.count_documents({"created_at": {"$gte": week_ago}})
 
-        total_bids = await db.bids.count_documents({})
-        bids_this_week = await db.bids.count_documents({"created_at": {"$gte": week_ago}})
+        total_bids = await bidding_svc.count_bids()
+        bids_this_week = await bidding_svc.count_bids(since=datetime.fromisoformat(week_ago) if isinstance(week_ago, str) else week_ago)
 
         gmv_cursor = db.auctions.aggregate([
             {"$match": {"status": "sold"}},
@@ -340,7 +341,7 @@ def register_routes():
         if u.get("role") in ("admin", "moderator"):
             raise HTTPException(status_code=400, detail="Не можете да изтриете друг служител на платформата")
 
-        bids = await db.bids.delete_many({"user_id": user_id})
+        bids = await bidding_svc.delete_bids_for_user(user_id)
         comments = await db.comments.delete_many({"user_id": user_id})
         watches = await db.watches.delete_many({"user_id": user_id})
         saved = await db.saved_searches.delete_many({"user_id": user_id})
@@ -358,7 +359,7 @@ def register_routes():
             "ok": True,
             "deleted": {
                 "user": 1,
-                "bids": bids.deleted_count,
+                "bids": bids,
                 "comments": comments.deleted_count,
                 "watches": watches.deleted_count,
                 "saved_searches": saved.deleted_count,
@@ -522,7 +523,7 @@ def register_routes():
     # ============================================================
     @router.get("/admin/auctions/{auction_id}/bids")
     async def admin_bid_history(auction_id: str, _admin: dict = Depends(_require_admin_or_moderator)):
-        items = await db.bids.find({"auction_id": auction_id}, {"_id": 0}).sort("created_at", -1).to_list(500)
+        items = await bidding_svc.list_bids_for_admin(auction_id, limit=500)
         # Enrich blocked status per user
         blocked_ids = set()
         async for b in db.bid_blocks.find({"auction_id": auction_id}, {"_id": 0, "user_id": 1}):
@@ -533,24 +534,19 @@ def register_routes():
 
     @router.post("/admin/bids/{bid_id}/invalidate")
     async def admin_invalidate_bid(bid_id: str, payload: InvalidateBidRequest, request: Request, admin: dict = Depends(_require_admin)):
-        b = await db.bids.find_one({"id": bid_id}, {"_id": 0})
+        b = await bidding_svc.get_bid(bid_id)
         if not b:
             raise HTTPException(status_code=404, detail="Бидът не е намерен")
-        if b.get("invalidated"):
+        if b.get("preauth_status") == "released":
             raise HTTPException(status_code=400, detail="Бидът вече е инвалидиран")
-        now = datetime.now(timezone.utc).isoformat()
-        await db.bids.update_one({"id": bid_id}, {"$set": {
-            "invalidated": True, "invalidated_reason": payload.reason.strip(),
-            "invalidated_by": admin["id"], "invalidated_at": now,
-        }})
+        await bidding_svc.invalidate_bid(bid_id)
         # Re-derive auction's high bid from remaining valid bids
         auction_id = b["auction_id"]
-        top = await db.bids.find({"auction_id": auction_id, "invalidated": {"$ne": True}}, {"_id": 0}).sort("amount_eur", -1).limit(1).to_list(1)
+        top = await bidding_svc.get_top_active_bid(auction_id)
         a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
         if top:
-            t = top[0]
             await db.auctions.update_one({"id": auction_id}, {"$set": {
-                "current_bid_eur": t["amount_eur"], "high_bidder_id": t["user_id"], "high_bidder_name": t["user_name"],
+                "current_bid_eur": top["amount_eur"], "high_bidder_id": top["user_id"], "high_bidder_name": top["user_name"],
             }})
         elif a:
             # Fallback to starting bid
