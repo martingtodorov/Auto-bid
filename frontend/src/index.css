@@ -300,9 +300,15 @@ textarea.input { resize: vertical; min-height: 80px; }
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.08em;
+    color: hsl(var(--ink));
     background: rgba(255, 255, 255, 0.92);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
+}
+html[data-theme="dark"] .pill {
+    color: hsl(var(--ink));
+    background: hsl(var(--surface) / 0.9);
+    border-color: hsl(var(--line));
 }
 .pill-live {
     border-color: hsl(var(--accent) / 0.4);
@@ -322,6 +328,9 @@ textarea.input { resize: vertical; min-height: 80px; }
     color: hsl(var(--danger));
     background: hsl(0 74% 97%);
 }
+html[data-theme="dark"] .pill-ending {
+    background: hsl(0 50% 14%);
+}
 .pill-sold {
     border-color: hsl(var(--ink-muted) / 0.3);
     color: hsl(var(--ink-muted));
@@ -332,6 +341,10 @@ textarea.input { resize: vertical; min-height: 80px; }
     color: white;
     background: linear-gradient(135deg, hsl(var(--accent)) 0%, hsl(var(--accent-ink)) 100%);
     font-weight: 600;
+}
+html[data-theme="dark"] .pill-verified {
+    color: #000;
+    background: linear-gradient(135deg, hsl(var(--accent)) 0%, hsl(var(--accent-ink)) 100%);
 }
 
 @keyframes pulse {
