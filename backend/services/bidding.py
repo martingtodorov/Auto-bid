@@ -63,6 +63,25 @@ def _bid_row_to_dict(b: Bid) -> dict:
 
 # --------------------------------------------------------------- read helpers
 
+async def get_bid_history(auction_id: str, limit: int = 200) -> list[dict]:
+    """Public chronological bid history for charts (oldest → newest)."""
+    async with pg_session() as s:
+        rows = (await s.execute(
+            select(Bid.amount_eur, Bid.created_at, Bid.user_name, Bid.triggered_extension)
+            .where(Bid.auction_id == auction_id, Bid.preauth_status != "released_invalidated")
+            .order_by(Bid.created_at.asc()).limit(limit)
+        )).all()
+        return [
+            {
+                "amount_eur": float(r.amount_eur),
+                "created_at": _to_iso(r.created_at),
+                "user_name": r.user_name,
+                "triggered_extension": bool(r.triggered_extension),
+            }
+            for r in rows
+        ]
+
+
 async def list_bids(auction_id: str, limit: int = 50) -> list[dict]:
     async with pg_session() as s:
         rows = (await s.execute(

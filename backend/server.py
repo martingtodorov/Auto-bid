@@ -1102,6 +1102,22 @@ async def list_bids(auction_id: str):
     return await bidding_svc.list_bids(auction_id, limit=50)
 
 
+@api.get("/auctions/{auction_id}/bid-history")
+async def auction_bid_history(auction_id: str):
+    """Public chronological bid history for charts. Returns oldest → newest.
+    Includes the auction's starting_bid_eur as the chart's anchor point."""
+    from services import bidding as bidding_svc
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0, "starting_bid_eur": 1, "created_at": 1})
+    if not a:
+        raise HTTPException(status_code=404, detail="Търгът не е намерен")
+    history = await bidding_svc.get_bid_history(auction_id, limit=500)
+    return {
+        "starting_bid_eur": float(a.get("starting_bid_eur", 0)),
+        "starts_at": a.get("created_at"),
+        "history": history,
+    }
+
+
 # ---- Bidding Credit (pre-authorization for multiple bids) ----
 @api.get("/auctions/{auction_id}/bidding-credit")
 async def get_my_credit(auction_id: str, user: dict = Depends(get_current_user)):

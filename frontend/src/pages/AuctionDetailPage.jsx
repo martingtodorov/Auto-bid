@@ -8,6 +8,7 @@ import { useAuth, formatError } from "../lib/auth";
 import PreauthModal from "../components/PreauthModal";
 import BiddingCreditModal from "../components/BiddingCreditModal";
 import AuctionCard from "../components/AuctionCard";
+import BidHistoryChart from "../components/BidHistoryChart";
 import NegotiationPortal from "../components/NegotiationPortal";
 import Lightbox from "../components/Lightbox";
 import { useSiteSettings, computeBuyerFee } from "../lib/settings";
@@ -410,6 +411,11 @@ export default function AuctionDetailPage() {
             <div className="mt-14">
               <div className="overline text-[hsl(var(--accent))]">{t("auction.bids_history_overline")}</div>
               <h2 className="font-serif text-2xl lg:text-3xl mt-2">{t("auction.bids_history_title")} ({bids.length})</h2>
+              {bids.length > 0 && (
+                <div className="mt-6">
+                  <BidHistoryChart auctionId={id} currentBidEur={a?.current_bid_eur} refreshKey={bids.length} />
+                </div>
+              )}
               <div className="mt-6 rounded-card border border-[hsl(var(--line))] overflow-hidden">
                 {bids.length === 0 ? (
                   <p className="p-6 text-sm text-[hsl(var(--ink-muted))]">{t("auction.no_bids_yet")}</p>
