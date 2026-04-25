@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Sun, Moon, Monitor } from "lucide-react";
+import { Sun, Moon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { getStoredTheme, setTheme } from "../lib/theme";
 
@@ -14,14 +14,12 @@ export default function ThemeToggle({ className = "" }) {
     return () => window.removeEventListener("ab:theme-changed", onChange);
   }, []);
 
-  const next = theme === "light" ? "dark" : theme === "dark" ? "system" : "light";
-  const Icon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor;
+  const next = theme === "dark" ? "light" : "dark";
+  const Icon = theme === "dark" ? Moon : Sun;
   const label =
-    theme === "light"
-      ? t("theme.light", "Светла тема")
-      : theme === "dark"
+    theme === "dark"
       ? t("theme.dark", "Тъмна тема")
-      : t("theme.system", "Системна тема");
+      : t("theme.light", "Светла тема");
 
   return (
     <button

@@ -6,26 +6,16 @@
  * "system" we follow `prefers-color-scheme` and react to OS-level changes.
  */
 const KEY = "ab.theme";
-const THEMES = ["light", "dark", "system"];
-
-function systemPrefersDark() {
-  return typeof window !== "undefined" && window.matchMedia
-    ? window.matchMedia("(prefers-color-scheme: dark)").matches
-    : false;
-}
-
-function effective(theme) {
-  return theme === "system" ? (systemPrefersDark() ? "dark" : "light") : theme;
-}
+const THEMES = ["light", "dark"];
 
 export function getStoredTheme() {
-  if (typeof localStorage === "undefined") return "system";
+  if (typeof localStorage === "undefined") return "light";
   const v = localStorage.getItem(KEY);
-  return THEMES.includes(v) ? v : "system";
+  return THEMES.includes(v) ? v : "light";
 }
 
 export function applyTheme(theme) {
-  const eff = effective(theme);
+  const eff = THEMES.includes(theme) ? theme : "light";
   document.documentElement.setAttribute("data-theme", eff);
   // Mobile browser address-bar tint
   let meta = document.head.querySelector('meta[name="theme-color"]');
@@ -34,11 +24,11 @@ export function applyTheme(theme) {
     meta.setAttribute("name", "theme-color");
     document.head.appendChild(meta);
   }
-  meta.setAttribute("content", eff === "dark" ? "#101418" : "#ffffff");
+  meta.setAttribute("content", eff === "dark" ? "#000000" : "#ffffff");
 }
 
 export function setTheme(theme) {
-  if (!THEMES.includes(theme)) theme = "system";
+  if (!THEMES.includes(theme)) theme = "light";
   localStorage.setItem(KEY, theme);
   applyTheme(theme);
   window.dispatchEvent(new CustomEvent("ab:theme-changed", { detail: { theme } }));
@@ -47,11 +37,4 @@ export function setTheme(theme) {
 /** Boot — call from index.js so the first paint is correct (no flash). */
 export function bootTheme() {
   applyTheme(getStoredTheme());
-  if (window.matchMedia) {
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = () => {
-      if (getStoredTheme() === "system") applyTheme("system");
-    };
-    mq.addEventListener?.("change", handler);
-  }
 }

@@ -30,7 +30,7 @@ export default function Nav() {
   };
 
   return (
-    <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md rule-b" data-testid="main-navigation">
+    <header className="sticky top-0 z-50 bg-[hsl(var(--bg))]/85 backdrop-blur-md rule-b" data-testid="main-navigation">
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10">
         <div className="flex items-center justify-between h-16 gap-6">
           <Link to="/" className="flex items-center gap-2 shrink-0 mr-2 md:mr-6" data-testid="brand-logo">

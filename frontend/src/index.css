@@ -42,22 +42,23 @@
 
 /* ------------------------------------------------------------------ */
 /* Dark theme — applied via `data-theme="dark"` on <html>.            */
-/* Same HSL variables; rest of the app reads `hsl(var(--…))`          */
+/* True black background, near-white ink. Same HSL variables; the     */
+/* rest of the app reads `hsl(var(--…))` and inherits automatically.  */
 /* ------------------------------------------------------------------ */
 html[data-theme="dark"] {
-    --bg: 222 22% 8%;
-    --surface: 222 18% 12%;
-    --surface-2: 222 16% 16%;
-    --ink: 220 15% 94%;
-    --ink-muted: 220 8% 64%;
-    --line: 220 14% 22%;
-    --accent: 158 50% 48%;
-    --accent-ink: 158 60% 60%;
-    --accent-soft: 158 30% 16%;
-    --danger: 0 70% 58%;
-    --success: 142 55% 50%;
-    --primary-foreground: 222 22% 8%;
-    --accent-foreground: 222 22% 8%;
+    --bg: 0 0% 0%;          /* pure black page bg */
+    --surface: 0 0% 6%;     /* cards / elevated surfaces */
+    --surface-2: 0 0% 11%;  /* hover / second-level surfaces */
+    --ink: 0 0% 98%;        /* near-white text */
+    --ink-muted: 0 0% 70%;  /* secondary text — must stay readable on black */
+    --line: 0 0% 18%;       /* subtle borders */
+    --accent: 158 65% 52%;  /* brighter accent for dark bg contrast */
+    --accent-ink: 158 70% 65%;
+    --accent-soft: 158 35% 14%;
+    --danger: 0 75% 62%;
+    --success: 142 60% 55%;
+    --primary-foreground: 0 0% 0%;     /* dark ink on light primary buttons */
+    --accent-foreground: 0 0% 0%;      /* black text on the bright accent */
     --destructive-foreground: 0 0% 100%;
 
     color-scheme: dark;
@@ -70,8 +71,9 @@ html[data-theme="dark"] img:not([data-no-dim]) { filter: brightness(0.92); }
 /* Dark-mode overrides for hardcoded Tailwind colour utilities.       */
 /* The codebase uses both CSS-var classes (preferred) and hardcoded    */
 /* `bg-white`/`text-black`/`bg-gray-*`. Remap them under dark theme.   */
+/* All white surfaces become near-black; light text becomes white.    */
 /* ------------------------------------------------------------------ */
-html[data-theme="dark"] .bg-white { background-color: hsl(var(--bg)) !important; }
+html[data-theme="dark"] .bg-white { background-color: hsl(var(--surface)) !important; }
 html[data-theme="dark"] .text-black { color: hsl(var(--ink)) !important; }
 html[data-theme="dark"] .bg-black { background-color: #000 !important; }
 html[data-theme="dark"] .bg-gray-50 { background-color: hsl(var(--surface)) !important; }
@@ -79,6 +81,7 @@ html[data-theme="dark"] .bg-gray-100 { background-color: hsl(var(--surface)) !im
 html[data-theme="dark"] .bg-gray-200 { background-color: hsl(var(--surface-2)) !important; }
 html[data-theme="dark"] .bg-slate-50 { background-color: hsl(var(--surface)) !important; }
 html[data-theme="dark"] .bg-slate-100 { background-color: hsl(var(--surface)) !important; }
+html[data-theme="dark"] .text-gray-400,
 html[data-theme="dark"] .text-gray-500,
 html[data-theme="dark"] .text-gray-600,
 html[data-theme="dark"] .text-gray-700 { color: hsl(var(--ink-muted)) !important; }
@@ -87,15 +90,38 @@ html[data-theme="dark"] .text-gray-900 { color: hsl(var(--ink)) !important; }
 html[data-theme="dark"] .border-gray-100,
 html[data-theme="dark"] .border-gray-200,
 html[data-theme="dark"] .border-gray-300 { border-color: hsl(var(--line)) !important; }
-/* Inputs in dark mode — Tailwind defaults to white background */
+/* Inputs / textareas / selects */
 html[data-theme="dark"] input,
 html[data-theme="dark"] textarea,
 html[data-theme="dark"] select {
     background-color: hsl(var(--surface)) !important;
     color: hsl(var(--ink));
+    border-color: hsl(var(--line));
 }
 html[data-theme="dark"] input::placeholder,
 html[data-theme="dark"] textarea::placeholder { color: hsl(var(--ink-muted)); }
+/* Native select dropdown chevron + option list (Firefox/Chromium) */
+html[data-theme="dark"] select option { background-color: #0a0a0a; color: hsl(var(--ink)); }
+
+/* Header / sticky bars stay black */
+html[data-theme="dark"] header,
+html[data-theme="dark"] nav { background-color: hsl(var(--bg)) !important; }
+
+/* Buttons that are explicitly "secondary" / outlined keep dark surface */
+html[data-theme="dark"] .btn-secondary {
+    background-color: hsl(var(--surface)) !important;
+    color: hsl(var(--ink)) !important;
+    border-color: hsl(var(--line)) !important;
+}
+html[data-theme="dark"] .btn-secondary:hover {
+    background-color: hsl(var(--surface-2)) !important;
+}
+
+/* Light primary buttons (e.g. "Place bid") — keep light surface, dark text */
+html[data-theme="dark"] .btn-primary {
+    /* Already drawn from --primary which is set per-theme. Force black ink. */
+    color: #000 !important;
+}
 
 
 * { border-color: hsl(var(--border)); }
@@ -208,7 +234,8 @@ code { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
 .input {
     width: 100%;
     border: 1px solid hsl(var(--line));
-    background: white;
+    background: hsl(var(--bg));
+    color: hsl(var(--ink));
     padding: 0.6rem 0.85rem;
     font-size: 0.875rem;
     line-height: 1.4;
@@ -225,7 +252,7 @@ textarea.input { resize: vertical; min-height: 80px; }
 
 /* Cards */
 .card-editorial {
-    background: white;
+    background: hsl(var(--bg));
     border: 1px solid hsl(var(--line));
     border-radius: 14px;
     overflow: hidden;
