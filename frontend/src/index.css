@@ -117,10 +117,19 @@ html[data-theme="dark"] .btn-secondary:hover {
     background-color: hsl(var(--surface-2)) !important;
 }
 
-/* Light primary buttons (e.g. "Place bid") — keep light surface, dark text */
+/* Light primary buttons (e.g. "Place bid", "Browse auctions") — keep
+ * dark background with white text in BOTH themes. The default rule
+ * uses `hsl(var(--ink))` which would flip to white in dark mode, so
+ * pin it to a fixed dark grey here. */
 html[data-theme="dark"] .btn-primary {
-    /* Already drawn from --primary which is set per-theme. Force black ink. */
+    background: #111 !important;
+    color: #fff !important;
+    border-color: #111 !important;
+}
+html[data-theme="dark"] .btn-primary:hover {
+    background: hsl(var(--accent)) !important;
     color: #000 !important;
+    border-color: hsl(var(--accent)) !important;
 }
 
 
@@ -188,12 +197,14 @@ code { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
 .btn:active { transform: translateY(0); }
 
 .btn-primary {
-    background: hsl(var(--ink));
+    background: #0a0a0a;
     color: white;
+    border-color: #0a0a0a;
 }
 .btn-primary:hover {
     background: hsl(var(--accent));
     border-color: hsl(var(--accent));
+    color: white;
     box-shadow: 0 8px 24px -8px hsl(var(--accent) / 0.4);
 }
 
@@ -220,13 +231,13 @@ code { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
 }
 
 .btn-sell-gradient {
-    background: linear-gradient(135deg, hsl(var(--accent)) 0%, hsl(var(--accent-ink)) 50%, hsl(156 72% 22%) 100%);
+    background: linear-gradient(135deg, hsl(158 60% 22%) 0%, hsl(158 65% 16%) 50%, hsl(156 72% 14%) 100%);
     color: white;
     border-color: transparent;
     box-shadow: 0 6px 20px -6px hsl(var(--accent) / 0.5);
 }
 .btn-sell-gradient:hover {
-    background: linear-gradient(135deg, hsl(var(--accent-ink)) 0%, hsl(var(--accent)) 100%);
+    background: linear-gradient(135deg, hsl(158 65% 26%) 0%, hsl(158 60% 20%) 100%);
     box-shadow: 0 12px 32px -8px hsl(var(--accent) / 0.7);
     transform: translateY(-1px);
 }

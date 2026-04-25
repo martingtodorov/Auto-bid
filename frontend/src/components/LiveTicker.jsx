@@ -24,7 +24,7 @@ export default function LiveTicker() {
   const loop = [...items, ...items];
 
   return (
-    <div className="bg-[hsl(var(--ink))] text-white overflow-hidden border-b border-black" data-testid="live-ticker">
+    <div className="bg-black text-white overflow-hidden border-b border-[hsl(var(--line))]" data-testid="live-ticker">
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 h-9 flex items-center gap-4">
         <div className="shrink-0 flex items-center gap-2 text-xs uppercase tracking-[0.18em] font-semibold">
           <span className="relative flex h-2 w-2">
