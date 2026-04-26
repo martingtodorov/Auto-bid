@@ -73,6 +73,39 @@ export default function AdminArchiveTab() {
     }
   };
 
+  const restoreOne = async (id, e) => {
+    e?.stopPropagation();
+    setBusy(true); setErr(""); setMsg("");
+    try {
+      await api.post("/admin/auctions/bulk-restore", { ids: [id] });
+      setMsg(t("admin.archive.restored_count", { count: 1 }));
+      await load();
+    } catch (err) {
+      setErr(err?.response?.data?.detail || String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteOne = async (id, title, e) => {
+    e?.stopPropagation();
+    const word = t("admin.archive.confirm_word", "ИЗТРИЙ");
+    const conf = window.prompt(
+      t("admin.archive.confirm_delete_one", { title, word }),
+    );
+    if (conf !== word) return;
+    setBusy(true); setErr(""); setMsg("");
+    try {
+      await api.post("/admin/auctions/bulk-delete", { ids: [id] });
+      setMsg(t("admin.archive.deleted_count", { count: 1 }));
+      await load();
+    } catch (err) {
+      setErr(err?.response?.data?.detail || String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="mt-10" data-testid="admin-archive-tab">
       <div className="flex items-start justify-between flex-wrap gap-4 mb-6">
@@ -149,6 +182,28 @@ export default function AdminArchiveTab() {
                     {a.year} · {(a.current_bid_eur || 0).toLocaleString("bg-BG")} EUR
                     {a.archived_at && ` · ${new Date(a.archived_at).toLocaleDateString()}`}
                   </p>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={(e) => restoreOne(a.id, e)}
+                    disabled={busy}
+                    title={t("admin.archive.row_restore", "Възстанови")}
+                    className="p-2 rounded-lg border border-[hsl(var(--line))] bg-white text-[hsl(var(--ink))] hover:bg-[hsl(var(--surface))] disabled:opacity-40 transition-colors"
+                    data-testid={`restore-one-${a.id}`}
+                  >
+                    <RotateCcw size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => deleteOne(a.id, a.title, e)}
+                    disabled={busy}
+                    title={t("admin.archive.row_delete", "Изтрий завинаги")}
+                    className="p-2 rounded-lg border border-[hsl(var(--danger))]/40 bg-white text-[hsl(var(--danger))] hover:bg-[hsl(var(--danger))]/10 disabled:opacity-40 transition-colors"
+                    data-testid={`delete-one-${a.id}`}
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               </li>
             ))}

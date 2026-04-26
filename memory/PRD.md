@@ -380,7 +380,14 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 - Real Stripe API keys (изчаква user keys)
 - "Buy Now" за търгове (P2)
 - CAPTCHA (Cloudflare Turnstile) на регистрация (P3)
+- "Без резерв" badge на AuctionCard и AuctionDetailPage (P1, неначатo)
 - PostgreSQL миграция: **НЕ се прави** (user decision — остава MongoDB)
+
+## 2026-04-26 — Archive tab + AuctionsPage button polish (DONE)
+- **Admin Archive tab** (`AdminArchiveTab.jsx`): list, select-all + per-row check, bulk-restore, bulk-delete (с „ИЗТРИЙ" confirm), плюс **per-row individual restore и individual delete** (всеки с собствен confirm). Wired в AdminPage под нов таб „Архив".
+- **Backend route order fix**: `GET /admin/auctions/archived`, `POST /admin/auctions/bulk-restore`, `POST /admin/auctions/bulk-delete` бяха регистрирани СЛЕД `/admin/auctions/{auction_id}` → wildcard грабваше "archived" → 404. Преместени преди wildcard-а.
+- **AuctionsPage UI**: Save search, Sort dropdown, Filter button — единен бял фон, `rounded-lg` (10px) border-radius (мач със search bar-а, който също получи `rounded-lg`), еднаква h-12 височина. На мобилно (`flex-1 sm:flex-none`) бутоните разпъват цялата ширина.
+- i18n keys в bg/ro/en за `admin.archive.*` + `admin.tabs.archive`.
 
 ## 2026-02-23 — Hybrid PostgreSQL bidding subsystem (DONE)
 

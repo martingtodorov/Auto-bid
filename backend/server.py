@@ -2050,6 +2050,80 @@ async def admin_list_all(q: Optional[str] = None, status: Optional[str] = None, 
 ADMIN_ALLOWED_STATUSES = {"pending", "live", "ended", "sold", "reserve_not_met", "withdrawn", "removed", "rejected"}
 
 
+# ---- Admin: archived listings (must be registered BEFORE /{auction_id} routes) ----
+@api.get("/admin/auctions/archived")
+async def admin_list_archived(_admin: dict = Depends(require_admin_or_moderator)):
+    """List every archived (soft-deleted) auction so admin can bulk-restore or hard-delete."""
+    items = await db.auctions.find(
+        {"$or": [{"is_archived": True}, {"status": "archived"}]},
+        {"_id": 0},
+    ).sort("archived_at", -1).to_list(500)
+    return [_public_auction(a, None) for a in items]
+
+
+@api.post("/admin/auctions/bulk-restore")
+async def admin_bulk_restore(payload: dict, _admin: dict = Depends(require_admin)):
+    """Restore multiple archived auctions in one call. Body: {ids: [...]}"""
+    ids = payload.get("ids") or []
+    if not ids:
+        raise HTTPException(status_code=400, detail="ids[] е задължителен")
+    restored = []
+    skipped = []
+    now = datetime.now(timezone.utc)
+    for aid in ids:
+        a = await db.auctions.find_one({"id": aid}, {"_id": 0})
+        if not a:
+            skipped.append({"id": aid, "reason": "not_found"})
+            continue
+        try:
+            end = datetime.fromisoformat(a.get("ends_at", ""))
+        except Exception:
+            end = now - timedelta(days=1)
+        new_status = "live" if end > now else "ended"
+        await db.auctions.update_one(
+            {"id": aid},
+            {"$set": {"status": new_status, "is_archived": False}, "$unset": {"archived_at": ""}},
+        )
+        restored.append({"id": aid, "status": new_status})
+    return {"ok": True, "restored": restored, "skipped": skipped}
+
+
+@api.post("/admin/auctions/bulk-delete")
+async def admin_bulk_hard_delete(payload: dict, request: Request, admin: dict = Depends(require_admin)):
+    """Permanently delete multiple ARCHIVED auctions. Body: {ids: [...]}.
+
+    Refuses to hard-delete listings that are not currently archived — admin
+    must first archive them. This protects against accidental wipes.
+    """
+    ids = payload.get("ids") or []
+    if not ids:
+        raise HTTPException(status_code=400, detail="ids[] е задължителен")
+    from services import bidding as bidding_svc
+    deleted = []
+    refused = []
+    for aid in ids:
+        a = await db.auctions.find_one({"id": aid}, {"_id": 0})
+        if not a:
+            refused.append({"id": aid, "reason": "not_found"})
+            continue
+        if not (a.get("is_archived") or a.get("status") == "archived"):
+            refused.append({"id": aid, "reason": "not_archived"})
+            continue
+        await bidding_svc.delete_bids_for_auction(aid)
+        await db.comments.delete_many({"auction_id": aid})
+        await db.watches.delete_many({"auction_id": aid})
+        await db.bidding_credits.delete_many({"auction_id": aid})
+        await db.vin_requests.delete_many({"auction_id": aid})
+        await db.auctions.delete_one({"id": aid})
+        deleted.append(aid)
+        await audit_log(
+            db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
+            action="auction.hard_delete_bulk", target_type="auction", target_id=aid,
+            details={"title": a.get("title")}, ip=request.client.host if request.client else "",
+        )
+    return {"ok": True, "deleted": deleted, "refused": refused}
+
+
 @api.get("/admin/auctions/{auction_id}")
 async def admin_get_auction(auction_id: str, _admin: dict = Depends(require_admin_or_moderator)):
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
@@ -2207,79 +2281,6 @@ async def admin_hard_delete_auction(auction_id: str, request: Request, _admin: d
 async def admin_restore_archived_auction(auction_id: str, _admin: dict = Depends(require_admin)):
     """Alias for restore — kept for clarity in admin UI ("restore from archive")."""
     return await admin_restore_auction(auction_id, _admin)
-
-
-@api.get("/admin/auctions/archived")
-async def admin_list_archived(_admin: dict = Depends(require_admin_or_moderator)):
-    """List every archived (soft-deleted) auction so admin can bulk-restore or hard-delete."""
-    items = await db.auctions.find(
-        {"$or": [{"is_archived": True}, {"status": "archived"}]},
-        {"_id": 0},
-    ).sort("archived_at", -1).to_list(500)
-    return [_public_auction(a, None) for a in items]
-
-
-@api.post("/admin/auctions/bulk-restore")
-async def admin_bulk_restore(payload: dict, _admin: dict = Depends(require_admin)):
-    """Restore multiple archived auctions in one call. Body: {ids: [...]}"""
-    ids = payload.get("ids") or []
-    if not ids:
-        raise HTTPException(status_code=400, detail="ids[] е задължителен")
-    restored = []
-    skipped = []
-    now = datetime.now(timezone.utc)
-    for aid in ids:
-        a = await db.auctions.find_one({"id": aid}, {"_id": 0})
-        if not a:
-            skipped.append({"id": aid, "reason": "not_found"})
-            continue
-        try:
-            end = datetime.fromisoformat(a.get("ends_at", ""))
-        except Exception:
-            end = now - timedelta(days=1)
-        new_status = "live" if end > now else "ended"
-        await db.auctions.update_one(
-            {"id": aid},
-            {"$set": {"status": new_status, "is_archived": False}, "$unset": {"archived_at": ""}},
-        )
-        restored.append({"id": aid, "status": new_status})
-    return {"ok": True, "restored": restored, "skipped": skipped}
-
-
-@api.post("/admin/auctions/bulk-delete")
-async def admin_bulk_hard_delete(payload: dict, request: Request, admin: dict = Depends(require_admin)):
-    """Permanently delete multiple ARCHIVED auctions. Body: {ids: [...]}.
-
-    Refuses to hard-delete listings that are not currently archived — admin
-    must first archive them. This protects against accidental wipes.
-    """
-    ids = payload.get("ids") or []
-    if not ids:
-        raise HTTPException(status_code=400, detail="ids[] е задължителен")
-    from services import bidding as bidding_svc
-    deleted = []
-    refused = []
-    for aid in ids:
-        a = await db.auctions.find_one({"id": aid}, {"_id": 0})
-        if not a:
-            refused.append({"id": aid, "reason": "not_found"})
-            continue
-        if not (a.get("is_archived") or a.get("status") == "archived"):
-            refused.append({"id": aid, "reason": "not_archived"})
-            continue
-        await bidding_svc.delete_bids_for_auction(aid)
-        await db.comments.delete_many({"auction_id": aid})
-        await db.watches.delete_many({"auction_id": aid})
-        await db.bidding_credits.delete_many({"auction_id": aid})
-        await db.vin_requests.delete_many({"auction_id": aid})
-        await db.auctions.delete_one({"id": aid})
-        deleted.append(aid)
-        await audit_log(
-            db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
-            action="auction.hard_delete_bulk", target_type="auction", target_id=aid,
-            details={"title": a.get("title")}, ip=request.client.host if request.client else "",
-        )
-    return {"ok": True, "deleted": deleted, "refused": refused}
 
 
 # ---- Admin: Dashboard / Stats ----

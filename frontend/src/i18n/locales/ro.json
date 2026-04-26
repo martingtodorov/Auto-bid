@@ -516,12 +516,30 @@
       "requests": "Cereri",
       "users": "Utilizatori",
       "sold": "Vândute",
+      "archive": "Arhivă",
       "makes": "Mărci",
       "stripe": "Stripe",
       "notifications": "Notificări",
       "templates": "Șabloane email",
       "audit": "Jurnal",
       "settings": "Setări"
+    },
+    "archive": {
+      "overline": "Arhivă",
+      "title": "Anunțuri arhivate",
+      "subtitle": "Aici sunt anunțurile ascunse din listările publice. Fotografiile, ofertele și comentariile sunt păstrate și pot fi restaurate.",
+      "bulk_restore": "Restaurează",
+      "bulk_delete": "Șterge definitiv",
+      "row_restore": "Restaurează",
+      "row_delete": "Șterge definitiv",
+      "select_all": "Selectează tot",
+      "deselect_all": "Deselectează",
+      "empty": "Arhiva este goală.",
+      "restored_count": "Restaurate: {{count}}",
+      "deleted_count": "Șterse: {{count}}",
+      "confirm_word": "ȘTERGE",
+      "confirm_delete": "Veți șterge {{count}} anunțuri DEFINITIV. Tastați \"{{word}}\" pentru confirmare:",
+      "confirm_delete_one": "Veți șterge \"{{title}}\" DEFINITIV. Tastați \"{{word}}\" pentru confirmare:"
     }
   },
   "language": {

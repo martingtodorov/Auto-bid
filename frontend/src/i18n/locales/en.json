@@ -516,12 +516,30 @@
       "requests": "Requests",
       "users": "Users",
       "sold": "Sold",
+      "archive": "Archive",
       "makes": "Makes",
       "stripe": "Stripe",
       "notifications": "Notifications",
       "templates": "Email templates",
       "audit": "Audit log",
       "settings": "Settings"
+    },
+    "archive": {
+      "overline": "Archive",
+      "title": "Archived listings",
+      "subtitle": "These are listings hidden from public lists. Photos, bids and comments are preserved and can be restored.",
+      "bulk_restore": "Restore",
+      "bulk_delete": "Delete forever",
+      "row_restore": "Restore",
+      "row_delete": "Delete forever",
+      "select_all": "Select all",
+      "deselect_all": "Deselect",
+      "empty": "Archive is empty.",
+      "restored_count": "Restored: {{count}}",
+      "deleted_count": "Deleted: {{count}}",
+      "confirm_word": "DELETE",
+      "confirm_delete": "You will permanently delete {{count}} listings. Type \"{{word}}\" to confirm:",
+      "confirm_delete_one": "You will permanently delete \"{{title}}\". Type \"{{word}}\" to confirm:"
     }
   },
   "language": {
