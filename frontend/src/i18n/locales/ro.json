@@ -548,5 +548,9 @@
     "unsupported": "Acest browser nu acceptă notificări push. Încercați Chrome, Edge, Firefox sau Safari (iOS 16.4+).",
     "ios_install": "Pe iPhone/iPad: apăsați butonul \"Distribuie\" în Safari → \"Add to Home Screen\". Apoi deschideți aplicația de pe ecranul de start și activați notificările aici.",
     "denied": "Notificările sunt blocate în browser. Permiteți-le din setările site-ului (pictograma lacăt în bara de adrese) și încercați din nou."
+  },
+  "seo": {
+    "all_auctions_title": "Toate licitațiile",
+    "all_auctions_description": "Răsfoiește toate licitațiile auto active — filtrează după marcă, an, combustibil și preț."
   }
 }

@@ -125,11 +125,38 @@ html[data-theme="dark"] .btn-primary {
     background: #111 !important;
     color: #fff !important;
     border-color: #111 !important;
+    box-shadow: none !important;
 }
 html[data-theme="dark"] .btn-primary:hover {
     background: hsl(var(--accent)) !important;
     color: #000 !important;
     border-color: hsl(var(--accent)) !important;
+    box-shadow: none !important;
+}
+
+/* Kill all accent-coloured "glow" halos in dark mode — on pure black
+ * they read as fuzzy green smudges around buttons and inputs. */
+html[data-theme="dark"] .btn,
+html[data-theme="dark"] .btn:hover,
+html[data-theme="dark"] .btn-accent,
+html[data-theme="dark"] .btn-accent:hover,
+html[data-theme="dark"] .btn-sell-gradient,
+html[data-theme="dark"] .btn-sell-gradient:hover,
+html[data-theme="dark"] input:focus,
+html[data-theme="dark"] textarea:focus,
+html[data-theme="dark"] select:focus,
+html[data-theme="dark"] .card-editorial:hover,
+html[data-theme="dark"] .input:focus {
+    box-shadow: none !important;
+}
+
+/* Drop the accent-tinted text drop-shadow on dark backgrounds — looks
+ * like the text is glowing/blurred against pure black. */
+html[data-theme="dark"] .hero-headline em,
+html[data-theme="dark"] .hero-headline,
+html[data-theme="dark"] .accent-text,
+html[data-theme="dark"] .accent-glow {
+    filter: none !important;
 }
 
 

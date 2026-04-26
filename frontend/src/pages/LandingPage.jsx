@@ -199,21 +199,21 @@ export default function LandingPage() {
         </section>
       )}
 
-      {/* CTA */}
-      <section className="bg-[hsl(var(--ink))] text-white">
+      {/* CTA — intentionally always dark to provide contrast with the rest of the page. */}
+      <section className="bg-black text-white">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-20 lg:py-28 grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
           <div className="lg:col-span-7">
-            <div className="overline text-[hsl(var(--accent))]" style={{color: "#6DE0B1"}}>{t("cta.join_community_overline")}</div>
+            <div className="overline" style={{color: "#6DE0B1"}}>{t("cta.join_community_overline")}</div>
             <h2 className="hero-headline text-4xl lg:text-6xl mt-5">{t("cta.ready_next_deal")}</h2>
             <p className="mt-6 text-white/70 max-w-xl leading-relaxed">
               {t("cta.cta_subtitle")}
             </p>
           </div>
           <div className="lg:col-span-5 lg:justify-self-end flex flex-wrap gap-3">
-            <Link to="/register" className="btn !border-white bg-white !text-[hsl(var(--ink))] hover:!bg-[hsl(var(--accent))] hover:!text-white hover:!border-[hsl(var(--accent))]" data-testid="cta-register">
+            <Link to="/register" className="btn !border-white bg-white !text-black hover:!bg-[hsl(var(--accent))] hover:!text-black hover:!border-[hsl(var(--accent))]" data-testid="cta-register">
               {t("cta.register_free")}
             </Link>
-            <Link to="/sell" className="btn !border-white/60 bg-transparent !text-white hover:!bg-white hover:!text-[hsl(var(--ink))]" data-testid="cta-sell">
+            <Link to="/sell" className="btn !border-white/60 bg-transparent !text-white hover:!bg-white hover:!text-black" data-testid="cta-sell">
               {t("cta.sell_car")}
             </Link>
           </div>

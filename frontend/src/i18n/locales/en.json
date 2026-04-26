@@ -548,5 +548,9 @@
     "unsupported": "This browser doesn't support push notifications. Try Chrome, Edge, Firefox or Safari (iOS 16.4+).",
     "ios_install": "On iPhone/iPad: tap the Share button in Safari → \"Add to Home Screen\". Then open the app from your home screen and enable notifications here.",
     "denied": "Notifications are blocked in the browser. Allow them in the site settings (lock icon in the address bar) and try again."
+  },
+  "seo": {
+    "all_auctions_title": "All auctions",
+    "all_auctions_description": "Browse all active car auctions — filter by make, year, fuel and price."
   }
 }

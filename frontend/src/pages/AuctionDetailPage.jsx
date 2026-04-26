@@ -126,8 +126,8 @@ export default function AuctionDetailPage() {
     const url = window.location.href;
     const origin = window.location.origin;
     const breadcrumbs = buildBreadcrumbs([
-      { name: "Начало", url: origin + "/" },
-      { name: "Търгове", url: origin + "/auctions" },
+      { name: t("nav.home", "Home"), url: origin + "/" },
+      { name: t("nav.auctions", "Auctions"), url: origin + "/auctions" },
       { name: a.title, url },
     ]);
     const vehicle = buildVehicleJsonLd(a, url);

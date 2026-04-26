@@ -34,16 +34,16 @@ export default function AuctionsPage() {
 
   useEffect(() => {
     setPageMeta({
-      title: `Всички търгове — ${brand}`,
-      description: `Разгледайте всички активни автомобилни търгове в ${brand} — филтрирайте по марка, година, гориво и цена.`,
+      title: `${t("seo.all_auctions_title", "All auctions")} — ${brand}`,
+      description: t("seo.all_auctions_description", `Browse all active car auctions on ${brand} — filter by make, year, fuel and price.`),
       url: window.location.href,
       jsonLd: buildBreadcrumbs([
-        { name: "Начало", url: window.location.origin + "/" },
-        { name: "Търгове", url: window.location.origin + "/auctions" },
+        { name: t("nav.home", "Home"), url: window.location.origin + "/" },
+        { name: t("nav.auctions", "Auctions"), url: window.location.origin + "/auctions" },
       ]),
     });
     return () => resetPageMeta();
-  }, [brand]);
+  }, [brand, t]);
 
   const load = useCallback(async () => {
     setLoading(true);
