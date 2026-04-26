@@ -2128,7 +2128,7 @@ async def admin_remove_auction(auction_id: str, _admin: dict = Depends(require_a
 
 @api.post("/admin/auctions/{auction_id}/restore")
 async def admin_restore_auction(auction_id: str, _admin: dict = Depends(require_admin)):
-    """Restore a removed/withdrawn auction — sets status to 'live' if end date is in the future, otherwise 'ended'."""
+    """Restore a removed/withdrawn/archived auction — sets status to 'live' if end date is in the future, otherwise 'ended', and clears is_archived."""
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     if not a:
         raise HTTPException(status_code=404, detail="Обявата не е намерена")
@@ -2137,16 +2137,31 @@ async def admin_restore_auction(auction_id: str, _admin: dict = Depends(require_
     except Exception:
         end = datetime.now(timezone.utc) - timedelta(days=1)
     new_status = "live" if end > datetime.now(timezone.utc) else "ended"
-    await db.auctions.update_one({"id": auction_id}, {"$set": {"status": new_status}})
+    await db.auctions.update_one(
+        {"id": auction_id},
+        {"$set": {"status": new_status, "is_archived": False}, "$unset": {"archived_at": ""}},
+    )
     return {"ok": True, "status": new_status}
 
 
 @api.delete("/admin/auctions/{auction_id}")
-async def admin_hard_delete_auction(auction_id: str, _admin: dict = Depends(require_admin)):
-    """PERMANENTLY deletes an auction and all associated records (bids, comments, watches, credits, vin requests)."""
+async def admin_hard_delete_auction(auction_id: str, request: Request, _admin: dict = Depends(require_admin)):
+    """SOFT-deletes an auction (sets is_archived=true) — never destroys data.
+
+    Behaviour change (2026-02): auction documents are NEVER physically
+    removed from MongoDB anymore. They are flagged as `is_archived` so
+    they disappear from public listings and from the admin live grid,
+    but remain recoverable. Linked bids stay in PostgreSQL untouched.
+
+    To force a true hard delete (legal/compliance requirement, e.g.
+    DSAR), pass `?hard=1`. This is intentionally noisy in audit log.
+    """
+    hard = request.query_params.get("hard") in ("1", "true", "yes")
+
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     if not a:
         raise HTTPException(status_code=404, detail="Обявата не е намерена")
+
     now_iso = datetime.now(timezone.utc).isoformat()
     from services import bidding as bidding_svc
     # Release active credit/preauth mocks before wiping
@@ -2155,7 +2170,19 @@ async def admin_hard_delete_auction(auction_id: str, _admin: dict = Depends(requ
         {"auction_id": auction_id, "status": "authorized"},
         {"$set": {"status": "released", "released_at": now_iso}},
     )
-    # Cascade delete
+
+    if not hard:
+        await db.auctions.update_one(
+            {"id": auction_id},
+            {"$set": {
+                "is_archived": True,
+                "archived_at": now_iso,
+                "status": "archived",
+            }},
+        )
+        return {"ok": True, "soft_deleted": True, "auction_id": auction_id}
+
+    # Hard delete branch (use only with explicit ?hard=1)
     res_bids_count = await bidding_svc.delete_bids_for_auction(auction_id)
     res_comments = await db.comments.delete_many({"auction_id": auction_id})
     res_watches = await db.watches.delete_many({"auction_id": auction_id})
@@ -2164,6 +2191,7 @@ async def admin_hard_delete_auction(auction_id: str, _admin: dict = Depends(requ
     await db.auctions.delete_one({"id": auction_id})
     return {
         "ok": True,
+        "hard_deleted": True,
         "deleted": {
             "auction": 1,
             "bids": res_bids_count,
@@ -2173,6 +2201,12 @@ async def admin_hard_delete_auction(auction_id: str, _admin: dict = Depends(requ
             "vin_requests": res_vin.deleted_count,
         },
     }
+
+
+@api.post("/admin/auctions/{auction_id}/restore-archived")
+async def admin_restore_archived_auction(auction_id: str, _admin: dict = Depends(require_admin)):
+    """Alias for restore — kept for clarity in admin UI ("restore from archive")."""
+    return await admin_restore_auction(auction_id, _admin)
 
 
 # ---- Admin: Dashboard / Stats ----
@@ -2823,14 +2857,32 @@ async def _finalize_expired_auctions_once():
         logger.info("Auto-finalized auction %s → sold (€%.0f)", auction_id, current_bid)
 
 @api.post("/admin/reseed")
-async def reseed():
-    from services import bidding as bidding_svc
-    await db.auctions.delete_many({})
-    await bidding_svc.delete_all_bids()
-    await db.comments.delete_many({})
-    await db.watches.delete_many({})
+async def reseed(_admin: dict = Depends(require_admin)):
+    """Adds any missing seed/demo listings — NEVER touches user-owned data.
+
+    Safety guards (added 2026-02 after we accidentally wiped real user
+    listings during dev):
+      • Only deletes platform-owned auctions (seller_id == 'platform')
+      • Does NOT touch user-owned auctions, bids, comments, or watches
+      • Insert is idempotent on (title, seller_id='platform') so calling
+        reseed twice doesn't duplicate seed rows
+    """
+    # 1) Remove ONLY the platform demo auctions — leave user listings intact.
+    platform_auctions = await db.auctions.find(
+        {"seller_id": "platform"}, {"_id": 0, "id": 1}
+    ).to_list(500)
+    platform_ids = [a["id"] for a in platform_auctions]
+    if platform_ids:
+        await db.auctions.delete_many({"id": {"$in": platform_ids}})
+        # Bids / comments / watches tied to platform listings only
+        from services import bidding as bidding_svc
+        for aid in platform_ids:
+            await bidding_svc.delete_bids_for_auction(aid)
+        await db.comments.delete_many({"auction_id": {"$in": platform_ids}})
+        await db.watches.delete_many({"auction_id": {"$in": platform_ids}})
+    # 2) Re-insert seed listings (idempotent — guard inside seed())
     await seed()
-    return {"ok": True}
+    return {"ok": True, "platform_listings_reset": len(platform_ids)}
 
 
 # ---- SEO / Sitemap / Share endpoints moved to routers/seo.py ----
