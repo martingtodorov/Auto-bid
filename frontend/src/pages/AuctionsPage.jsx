@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../lib/apiClient";
 import { useAuth, formatError } from "../lib/auth";
 import AuctionCard from "../components/AuctionCard";
+import Pagination from "../components/Pagination";
 import { SlidersHorizontal, X, Search, BookmarkPlus, Check } from "lucide-react";
 import { mergeMakes } from "../lib/makes";
 import { translateEnum } from "../lib/carTranslations";
@@ -14,6 +15,9 @@ export default function AuctionsPage() {
   const brand = useBrandName();
   const { user } = useAuth();
   const [items, setItems] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
   const [loading, setLoading] = useState(true);
   const [facets, setFacets] = useState({ makes: [], fuels: [], transmissions: [], body_types: [] });
   const [saveMsg, setSaveMsg] = useState("");
@@ -48,12 +52,27 @@ export default function AuctionsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== "" && v != null));
+    params.paginated = 1;
+    params.limit = PAGE_SIZE;
+    params.offset = (page - 1) * PAGE_SIZE;
     const { data } = await api.get("/auctions", { params });
-    setItems(data);
+    setItems(data?.items || []);
+    setTotal(data?.total || 0);
     setLoading(false);
-  }, [filters]);
+    // Scroll to grid top after a page change
+    if (page > 1) {
+      try {
+        document.querySelector('[data-testid="auctions-grid"]')?.scrollIntoView({ behavior: "smooth", block: "start" });
+      } catch (_) { /* noop */ }
+    }
+  }, [filters, page]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => { setPage(1); }, [filters]);
 
   useEffect(() => { load(); }, [load]);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const reset = () => setFilters({ make: "", fuel: "", transmission: "", body_type: "", min_price: "", max_price: "", year_min: "", year_max: "", status: "live", sort: "ending_soon", q: "" });
   const set = (k, v) => setFilters((p) => ({ ...p, [k]: v }));
@@ -177,9 +196,12 @@ export default function AuctionsPage() {
                 <p className="text-sm text-[hsl(var(--ink-muted))] mt-2">{t("auctions_page.no_results_hint")}</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 stagger" data-testid="auctions-grid">
-                {items.map((a) => <AuctionCard key={a.id} auction={a} />)}
-              </div>
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 stagger" data-testid="auctions-grid">
+                  {items.map((a) => <AuctionCard key={a.id} auction={a} />)}
+                </div>
+                <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+              </>
             )}
           </div>
         </div>

@@ -275,6 +275,8 @@ async def list_auctions(
     status: Optional[str] = Query(None, description="live|ended|sold"),
     sort: Optional[str] = Query("ending_soon"),
     limit: int = 60,
+    offset: int = 0,
+    paginated: int = 0,
 ):
     viewer = await get_optional_user(request)
     query = {}
@@ -296,8 +298,14 @@ async def list_auctions(
         rx = {"$regex": re.escape(q.strip()), "$options": "i"}
         query["$or"] = [{"title": rx}, {"description": rx}, {"make": rx}, {"model": rx}, {"color": rx}]
 
-    cursor = db.auctions.find(query, {"_id": 0}).limit(limit)
-    items = await cursor.to_list(limit)
+    # NOTE: status & "not archived" filtering is computed Python-side from
+    # _public_auction() output (because `status` in DB may be "scheduled"
+    # but compute-as-"live"). So we can't trust DB-level skip/limit pagination
+    # before the Python filter. We fetch a generous batch (200) per page then
+    # paginate after computing public statuses + sorting.
+    fetch_cap = 200
+    cursor = db.auctions.find(query, {"_id": 0}).limit(fetch_cap)
+    items = await cursor.to_list(fetch_cap)
     items = [_public_auction(a, viewer) for a in items]
 
     # Hide non-public statuses from public listings (pending/rejected/withdrawn/removed/cancelled/paused)
@@ -319,8 +327,17 @@ async def list_auctions(
     elif sort == "most_bids":
         items.sort(key=lambda a: a.get("bid_count", 0), reverse=True)
 
-    await _enrich_dealer_status(items)
-    return items
+    total = len(items)
+    if paginated:
+        offset = max(0, int(offset))
+        page_items = items[offset: offset + max(1, min(60, int(limit)))]
+        await _enrich_dealer_status(page_items)
+        return {"items": page_items, "total": total, "offset": offset, "limit": limit}
+
+    # Backwards-compat: legacy callers (featured rails, embedded carousels…)
+    # still receive the full unfiltered slice up to `limit`.
+    await _enrich_dealer_status(items[:limit])
+    return items[:limit]
 
 @api.get("/auctions/featured")
 async def featured(request: Request):
