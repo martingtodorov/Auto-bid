@@ -2331,6 +2331,51 @@ async def public_profile(user_id: str):
 # ---- Seed ----
 SEED_AUCTIONS = [
     {
+        "title": "BMW M2 Coupé — Club Sport Pack, Manual",
+        "make": "BMW", "model": "M2", "year": 2018, "mileage_km": 64000,
+        "fuel": "Бензин", "transmission": "Ръчна", "body_type": "Купе",
+        "power_hp": 410, "engine_cc": 2979, "color": "Long Beach Blue",
+        "region": "София", "city": "София",
+        "images": [
+            "https://images.unsplash.com/photo-1607853554439-0069ec0f29b6?crop=entropy&cs=srgb&fm=jpg&q=85&w=1600",
+            "https://images.unsplash.com/photo-1617531653332-bd46c24f2068?crop=entropy&cs=srgb&fm=jpg&q=85&w=1600",
+            "https://images.unsplash.com/photo-1611821064430-0979d0e51e8b?crop=entropy&cs=srgb&fm=jpg&q=85&w=1600",
+        ],
+        "description": "M2 Competition с Club Sport Pack — без шумоизолация в багажника, fixed-back седалки, half-cage, спортно окачване. Документиран сервиз през Дилерска мрежа БМВ.",
+        "starting_bid_eur": 45000, "current_bid": 52500, "featured": True, "days_left": 5, "extra_bids": 18,
+        "vin": "WBS4Y91020AC78423",
+    },
+    {
+        "title": "Mercedes-Benz C 43 AMG 4MATIC — 2020, FULL",
+        "make": "Mercedes-Benz", "model": "C-Class", "year": 2020, "mileage_km": 71000,
+        "fuel": "Бензин", "transmission": "Автоматична", "body_type": "Седан",
+        "power_hp": 390, "engine_cc": 2996, "color": "Selenite Grey",
+        "region": "Пловдив", "city": "Пловдив",
+        "images": [
+            "https://images.unsplash.com/photo-1617814076367-b759c7d7e738?crop=entropy&cs=srgb&fm=jpg&q=85&w=1600",
+            "https://images.unsplash.com/photo-1606220588913-b3aacb4d2f46?crop=entropy&cs=srgb&fm=jpg&q=85&w=1600",
+            "https://images.unsplash.com/photo-1606016159991-dfe4f2746ad5?crop=entropy&cs=srgb&fm=jpg&q=85&w=1600",
+        ],
+        "description": "C 43 AMG 4MATIC, biturbo V6, 9-speed AMG SPEEDSHIFT, AMG Performance изпускателна, Burmester, panoramic, керамичен покрив. Карбонов пакет, AMG Track Pace.",
+        "starting_bid_eur": 48000, "current_bid": 54200, "featured": True, "days_left": 4, "extra_bids": 26,
+        "vin": "WDD2050801F123456",
+    },
+    {
+        "title": "BMW M240i xDrive — M-Performance, 2023",
+        "make": "BMW", "model": "M240i", "year": 2023, "mileage_km": 22000,
+        "fuel": "Бензин", "transmission": "Автоматична", "body_type": "Купе",
+        "power_hp": 374, "engine_cc": 2998, "color": "Thundernight Metallic",
+        "region": "Варна", "city": "Варна",
+        "images": [
+            "https://images.unsplash.com/photo-1555215695-3004980ad54e?crop=entropy&cs=srgb&fm=jpg&q=85&w=1600",
+            "https://images.unsplash.com/photo-1614162883144-1f0d3f59db76?crop=entropy&cs=srgb&fm=jpg&q=85&w=1600",
+            "https://images.unsplash.com/photo-1606016159991-dfe4f2746ad5?crop=entropy&cs=srgb&fm=jpg&q=85&w=1600",
+        ],
+        "description": "M240i xDrive с M Performance пакет — карбонови огледала, OPF delete, Akrapovič, M Sport диференциал. Гаранция БМВ до 2026.",
+        "starting_bid_eur": 52000, "current_bid": 58800, "featured": True, "days_left": 6, "extra_bids": 33,
+        "vin": "WBA2J71040VA53204",
+    },
+    {
         "title": "Audi A8 4.2 FSI Quattro — пълен сервиз",
         "make": "Audi", "model": "A8", "year": 2011, "mileage_km": 260000,
         "fuel": "Дизел", "transmission": "Автоматична", "body_type": "Седан",
