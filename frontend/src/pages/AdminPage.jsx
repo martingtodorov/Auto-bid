@@ -125,12 +125,17 @@ export default function AdminPage() {
     finally { setBusy(null); }
   };
   const hardDeleteListing = async (id, title) => {
-    const confirm1 = window.prompt(`ВНИМАНИЕ: Ще изтриете ИЗЦЯЛО обявата "${title || id}" от платформата.\n\nТова ще премахне безвъзвратно:\n• обявата\n• всички наддавания\n• всички коментари\n• всички watchlist записи\n• всички bidding credits\n\nЗа потвърждение напишете ИЗТРИЙ:`);
-    if (confirm1 !== "ИЗТРИЙ") return;
+    const confirm1 = window.prompt(`Архивиране на обявата "${title || id}".\n\nОбявата се скрива от публичните листинги, но ВСИЧКО се запазва (снимки, наддавания, коментари) и може да се възстанови по всяко време.\n\nЗа потвърждение напишете АРХИВ:`);
+    if (confirm1 !== "АРХИВ") return;
     setErr(""); setBusy(id);
     try {
       const { data } = await api.delete(`/admin/auctions/${id}`);
-      alert(`Изтрити: ${data.deleted.auction} обява, ${data.deleted.bids} наддавания, ${data.deleted.comments} коментари, ${data.deleted.watches} watchers.`);
+      if (data?.hard_deleted) {
+        const d = data.deleted || {};
+        alert(`Изтрити: ${d.auction || 0} обява, ${d.bids || 0} наддавания, ${d.comments || 0} коментари, ${d.watches || 0} watchers.`);
+      } else {
+        alert(`Обявата е архивирана. Може да я възстановите от секция "Архивирани" или да я премахнете окончателно само при законова необходимост.`);
+      }
       await Promise.all([loadAll(), loadPending(), loadSold()]);
     } catch (e) { setErr(formatError(e)); }
     finally { setBusy(null); }
