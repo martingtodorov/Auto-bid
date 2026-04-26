@@ -15,6 +15,7 @@ import AdminBidHistoryModal from "../components/AdminBidHistoryModal";
 import AdminNotificationsTab from "../components/AdminNotificationsTab";
 import AdminEmailTemplatesTab from "../components/AdminEmailTemplatesTab";
 import AdminSellerRequestsTab from "../components/AdminSellerRequestsTab";
+import AdminArchiveTab from "../components/AdminArchiveTab";
 
 const STATUS_LABELS = {
   pending: "Очаква",
@@ -235,6 +236,7 @@ export default function AdminPage() {
     { k: "requests", label: t("admin.tabs.requests"), icon: Inbox },
     { k: "users", label: t("admin.tabs.users"), icon: Users },
     { k: "sold", label: `${t("admin.tabs.sold")} (${sold.length})`, icon: Archive },
+    { k: "archive", label: t("admin.tabs.archive"), icon: Archive, adminOnly: true },
     { k: "makes", label: t("admin.tabs.makes"), icon: Tag, adminOnly: true },
     { k: "stripe", label: t("admin.tabs.stripe"), icon: CreditCard, adminOnly: true },
     { k: "notifications", label: t("admin.tabs.notifications"), icon: Mail },
@@ -477,6 +479,7 @@ export default function AdminPage() {
         {tab === "notifications" && <AdminNotificationsTab />}
         {tab === "templates" && <AdminEmailTemplatesTab />}
         {tab === "requests" && <AdminSellerRequestsTab />}
+        {tab === "archive" && <AdminArchiveTab />}
 
         {tab === "sold" && (
           <div className="mt-10">

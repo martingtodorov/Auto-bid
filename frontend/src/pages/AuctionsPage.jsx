@@ -165,21 +165,30 @@ export default function AuctionsPage() {
             {saveErr && <span className="ml-3 text-[hsl(var(--danger))]">{saveErr}</span>}
           </p>
           <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
-            <button onClick={saveSearch} className="btn btn-secondary !py-2 !px-3 sm:!px-4 flex items-center gap-1.5 text-xs sm:text-sm shrink-0" data-testid="save-search-btn">
+            <button onClick={saveSearch} className="btn btn-secondary h-10 !py-0 !px-3 sm:!px-4 flex items-center gap-1.5 text-xs sm:text-sm shrink-0 rounded-card" data-testid="save-search-btn">
               <BookmarkPlus size={14} />
               <span className="hidden sm:inline">{t("auctions_page.save_search")}</span>
               <span className="sm:hidden">{t("forms.save")}</span>
             </button>
-            <select value={filters.sort} onChange={(e) => set("sort", e.target.value)} className="flex-1 sm:flex-none border border-[hsl(var(--line))] h-10 px-2 sm:px-3 text-xs sm:text-sm bg-white min-w-0" data-testid="sort-select">
+            <select
+              value={filters.sort}
+              onChange={(e) => set("sort", e.target.value)}
+              className="border border-[hsl(var(--line))] h-10 px-2 text-xs sm:text-sm bg-[hsl(var(--bg))] rounded-card w-[110px] sm:w-[120px] shrink-0"
+              data-testid="sort-select"
+            >
               <option value="ending_soon">{t("auctions_page.sort_ending_soon")}</option>
               <option value="newest">{t("auctions_page.sort_newest")}</option>
               <option value="price_asc">{t("auctions_page.sort_lowest_price")}</option>
               <option value="price_desc">{t("auctions_page.sort_highest_price")}</option>
               <option value="most_bids">{t("auctions_page.sort_most_bids")}</option>
             </select>
-            <button onClick={() => setOpen(true)} className="lg:hidden btn btn-secondary !py-2 !px-3 sm:!px-4 flex items-center gap-1.5 text-xs sm:text-sm shrink-0" data-testid="open-filters">
-              <SlidersHorizontal size={14} />
-              <span className="hidden sm:inline">{t("auctions_page.filters")}</span>
+            <button
+              onClick={() => setOpen(true)}
+              className="lg:hidden btn btn-primary h-10 !py-0 !px-4 sm:!px-5 flex items-center gap-2 text-sm sm:text-base shrink-0 rounded-card"
+              data-testid="open-filters"
+            >
+              <SlidersHorizontal size={16} />
+              <span>{t("auctions_page.filters")}</span>
             </button>
           </div>
         </div>
