@@ -17,12 +17,18 @@ export default function LanguageSwitcher({ className = "" }) {
   const current = i18n.resolvedLanguage || "bg";
 
   return (
-    <div className={`inline-flex items-center gap-1 rounded-card border border-[hsl(var(--line))] bg-white text-xs overflow-hidden ${className}`} data-testid="language-switcher">
+    <div className={`inline-flex items-center gap-1 rounded-card border border-[hsl(var(--line))] bg-[hsl(var(--bg))] text-xs overflow-hidden ${className}`} data-testid="language-switcher">
       <span className="pl-2 text-[hsl(var(--ink-muted))]"><Globe size={12} /></span>
       {langs.map((l) => {
         const isActive = current === l.code;
         const extUrl = externalUrlForLang(l.code);
-        const cls = `px-2 py-1.5 transition-colors ${isActive ? "bg-[hsl(var(--ink))] text-white" : "hover:bg-[hsl(var(--surface))]"}`;
+        // Active = inverse of page bg (works in both light and dark themes).
+        // Inactive = inherits the bg, hover slightly lifts.
+        const cls = `px-2 py-1.5 transition-colors ${
+          isActive
+            ? "bg-[hsl(var(--ink))] text-[hsl(var(--bg))]"
+            : "text-[hsl(var(--ink))] hover:bg-[hsl(var(--surface))]"
+        }`;
         if (extUrl) {
           return (
             <a
