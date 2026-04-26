@@ -1,5 +1,5 @@
 """
-Pydantic request/response models for autobids.bg backend.
+Pydantic request/response models for autoandbid.com backend.
 Extracted from server.py to keep route handlers focused.
 """
 from typing import List, Optional

@@ -675,9 +675,9 @@ def register_routes():
             from emails import send_email, _shell
             html = _shell(
                 "Потвърдете акаунта си",
-                f"<p>Здравейте {u.get('name','')},</p><p>Admin екипът ви подсеща да потвърдите своя акаунт в autobids.bg. Моля, влезте в профила си и актуализирайте данните за контакт, ако е необходимо.</p>",
+                f"<p>Здравейте {u.get('name','')},</p><p>Admin екипът ви подсеща да потвърдите своя акаунт в autoandbid.com. Моля, влезте в профила си и актуализирайте данните за контакт, ако е необходимо.</p>",
             )
-            await send_email(u["email"], "autobids.bg — напомняне за акаунта", html)
+            await send_email(u["email"], "autoandbid.com — напомняне за акаунта", html)
             await db.users.update_one({"id": user_id}, {"$set": {"verification_sent_at": datetime.now(timezone.utc).isoformat()}})
         except Exception as e:
             logger.error("resend_verification failed: %s", e)

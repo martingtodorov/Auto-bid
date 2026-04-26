@@ -14,7 +14,7 @@ export default function ContactsPage() {
   const custom = pickCmsContent(settings, "contacts_content", i18n.language);
   useInfoPageSeo({
     title: `Контакти — ${brand}`,
-    description: `Свържете се с екипа на ${brand} — team@autoandbid.com, тел. +359 87 827 9269, ул. Карнеги 11А, София.`,
+    description: `Свържете се с екипа на ${brand} — contact@autoandbid.com, тел. +359 87 827 9269, ул. Карнеги 11А, София.`,
     path: "/contacts",
     crumb: "Контакти",
   });
@@ -31,7 +31,7 @@ function DefaultContacts() {
     <>
       <p className="text-lg text-[hsl(var(--ink-muted))]">Нашият екип отговаря в рамките на 1 работен ден.</p>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <ContactCard icon={Mail} label="Имейл" value="team@autoandbid.com" href="mailto:team@autoandbid.com" note="За общи запитвания и поддръжка" />
+        <ContactCard icon={Mail} label="Имейл" value="contact@autoandbid.com" href="mailto:contact@autoandbid.com" note="За общи запитвания и поддръжка" />
         <ContactCard icon={Phone} label="Телефон" value="+359 87 827 9269" href="tel:+359878279269" note="Понеделник–Петък · 10:00–17:00" />
         <ContactCard icon={MapPin} label="Адрес" value="ул. Карнеги 11А, София, България" href={mapsUrl} external note="Отвори в Google Maps · срещи по предварителна уговорка" />
         <ContactCard icon={Clock} label="Работно време" value="Пн–Пт: 10:00–17:00" note="Събота и неделя — почивни" />
@@ -41,12 +41,12 @@ function DefaultContacts() {
           <div className="rounded-card border border-[hsl(var(--line))] bg-white p-5">
             <div className="overline text-[hsl(var(--accent))]">Партньорства и дилъри</div>
             <p className="mt-2 text-sm">Интересувате се от статус „Проверен дилър“ или обемна продажба?</p>
-            <a href="mailto:team@autoandbid.com" className="mt-3 inline-block text-sm font-semibold text-[hsl(var(--accent))] hover:underline">team@autoandbid.com →</a>
+            <a href="mailto:contact@autoandbid.com" className="mt-3 inline-block text-sm font-semibold text-[hsl(var(--accent))] hover:underline">contact@autoandbid.com →</a>
           </div>
           <div className="rounded-card border border-[hsl(var(--line))] bg-white p-5">
             <div className="overline text-[hsl(var(--accent))]">Преса и медии</div>
             <p className="mt-2 text-sm">За интервюта, доклади и статистики.</p>
-            <a href="mailto:team@autoandbid.com" className="mt-3 inline-block text-sm font-semibold text-[hsl(var(--accent))] hover:underline">team@autoandbid.com →</a>
+            <a href="mailto:contact@autoandbid.com" className="mt-3 inline-block text-sm font-semibold text-[hsl(var(--accent))] hover:underline">contact@autoandbid.com →</a>
           </div>
         </div>
       </InfoSection>

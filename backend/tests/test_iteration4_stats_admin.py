@@ -15,7 +15,7 @@ import os
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
 # Test credentials
-ADMIN_EMAIL = "admin@autobids.bg"
+ADMIN_EMAIL = "contact@autoandbid.com"
 ADMIN_PASSWORD = "admin123"
 BUYER_EMAIL = "reviewbuyer@test.bg"
 BUYER_PASSWORD = "test12345"

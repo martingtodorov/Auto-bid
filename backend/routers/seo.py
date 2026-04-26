@@ -217,12 +217,12 @@ async def share_auction(auction_id: str, request: Request):
     target = f"{frontend_base}/auctions/{auction_id}"
 
     if not a:
-        title = "autobids.bg — Търг"
+        title = "autoandbid.com — Търг"
         description = "Търгът не е намерен."
         image = f"{frontend_base}/og-default.jpg"
         json_ld = ""
     else:
-        title = f"{a.get('title','')} — autobids.bg"
+        title = f"{a.get('title','')} — autoandbid.com"
         description = (a.get("description") or "")[:280]
         image = (a.get("images") or [None])[0] or f"{frontend_base}/og-default.jpg"
         json_ld = f'<script type="application/ld+json">{_json_ld_vehicle(a, target)}</script>'
@@ -234,7 +234,7 @@ async def share_auction(auction_id: str, request: Request):
 <title>{_esc(title)}</title>
 <meta name="description" content="{_esc(description)}">
 <meta property="og:type" content="article">
-<meta property="og:site_name" content="autobids.bg">
+<meta property="og:site_name" content="autoandbid.com">
 <meta property="og:title" content="{_esc(title)}">
 <meta property="og:description" content="{_esc(description)}">
 <meta property="og:image" content="{_esc(image)}">

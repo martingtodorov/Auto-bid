@@ -48,7 +48,7 @@ function DefaultTerms({ pct, brand }) {
         <p>Плащането между купувача и продавача се извършва директно — банков превод или ескроу. {brand} не съхранява средствата на сделката.</p>
       </InfoSection>
       <InfoSection title="6. Контакти и спорове">
-        <p>За въпроси: <a href="mailto:contact@autobids.bg" className="text-[hsl(var(--accent))] hover:underline">contact@autobids.bg</a>. Компетентен е Софийски районен съд.</p>
+        <p>За въпроси: <a href="mailto:contact@autoandbid.com" className="text-[hsl(var(--accent))] hover:underline">contact@autoandbid.com</a>. Компетентен е Софийски районен съд.</p>
       </InfoSection>
     </>
   );

@@ -7,7 +7,7 @@ import resend
 logger = logging.getLogger(__name__)
 
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "").strip()
-SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "autobids.bg <onboarding@resend.dev>")
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "autoandbid.com <onboarding@resend.dev>")
 APP_URL = os.environ.get("APP_URL", "https://auction-drive-bg.preview.emergentagent.com")
 
 if RESEND_API_KEY:
@@ -60,14 +60,14 @@ def _shell(title: str, body_html: str) -> str:
   <tr><td align="center">
     <table role="presentation" width="560" cellspacing="0" cellpadding="0" style="background:#ffffff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;">
       <tr><td style="padding:28px 32px;border-bottom:1px solid #e5e7eb;">
-        <div style="font-weight:700;font-size:22px;letter-spacing:-0.03em;">autobids<span style="color:#1B4D3E">.bg</span></div>
+        <div style="font-weight:700;font-size:22px;letter-spacing:-0.03em;">autoandbid<span style="color:#1B4D3E">.bg</span></div>
       </td></tr>
       <tr><td style="padding:32px;">
         <h1 style="margin:0 0 16px 0;font-size:24px;letter-spacing:-0.02em;">{title}</h1>
         {body_html}
       </td></tr>
       <tr><td style="padding:20px 32px;background:#fafafa;border-top:1px solid #e5e7eb;color:#6b7280;font-size:12px;">
-        autobids.bg · Редакционна платформа за автомобилни търгове · София
+        autoandbid.com · Редакционна платформа за автомобилни търгове · София
       </td></tr>
     </table>
   </td></tr>

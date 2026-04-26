@@ -1,5 +1,5 @@
 """
-Phase 1 Security Features Tests — autobids.bg
+Phase 1 Security Features Tests — autoandbid.com
 Tests for: Stripe CMS, Moderator role, Audit log, Forgot password, 2FA, Reactivate auction
 """
 import pytest
@@ -14,7 +14,7 @@ import json
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
 # Test credentials
-ADMIN_EMAIL = "admin@autobids.bg"
+ADMIN_EMAIL = "contact@autoandbid.com"
 ADMIN_PASSWORD = "admin123"
 MODERATOR_EMAIL = "moderator@test.bg"
 MODERATOR_PASSWORD = "mod12345"

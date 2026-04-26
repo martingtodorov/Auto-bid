@@ -1,6 +1,6 @@
 """
 Phase 6 Testing: Registration T&C, Hero CMS, Seller Requests, Admin Notifications/Templates
-Tests for autobids.bg session 6 features.
+Tests for autoandbid.com session 6 features.
 """
 import pytest
 import requests
@@ -10,7 +10,7 @@ import uuid
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 
 # Test credentials
-ADMIN_EMAIL = "admin@autobids.bg"
+ADMIN_EMAIL = "contact@autoandbid.com"
 ADMIN_PASSWORD = "admin123"
 MODERATOR_EMAIL = "moderator@test.bg"
 MODERATOR_PASSWORD = "mod12345"

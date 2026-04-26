@@ -36,10 +36,10 @@ export default function ProfilePage() {
     const { user, stats, rating } = data;
     const count = rating?.count ?? 0;
     const avg = rating?.avg ?? 0;
-    const title = `${user.name} — Профил на ${user.role === "admin" ? "autobids екип" : "продавач"} | autobids.bg`;
+    const title = `${user.name} — Профил на ${user.role === "admin" ? "autoandbid екип" : "продавач"} | autoandbid.com`;
     const desc = count > 0
-      ? `${user.name} — ${avg.toFixed(1)}/5 (${count} отзива), ${stats.sales_count} продажби в autobids.bg. Виж активни обяви и история на сделките.`
-      : `${user.name} — ${stats.sales_count} продажби, ${stats.purchases_count} покупки в autobids.bg. Профил и история на сделките.`;
+      ? `${user.name} — ${avg.toFixed(1)}/5 (${count} отзива), ${stats.sales_count} продажби в autoandbid.com. Виж активни обяви и история на сделките.`
+      : `${user.name} — ${stats.sales_count} продажби, ${stats.purchases_count} покупки в autoandbid.com. Профил и история на сделките.`;
     const url = window.location.href;
     const personLd = {
       "@context": "https://schema.org",

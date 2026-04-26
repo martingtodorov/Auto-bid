@@ -22,7 +22,7 @@ BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 def admin_token():
     """Login as admin"""
     r = requests.post(f"{BASE_URL}/api/auth/login", json={
-        "email": "admin@autobids.bg",
+        "email": "contact@autoandbid.com",
         "password": "admin123"
     })
     if r.status_code == 200:

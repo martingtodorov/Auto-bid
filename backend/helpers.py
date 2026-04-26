@@ -1,5 +1,5 @@
 """
-Shared business-logic helpers for autobids.bg backend.
+Shared business-logic helpers for autoandbid.com backend.
 Pure / near-pure functions with no FastAPI or Mongo side effects —
 safe to import from any router module.
 """

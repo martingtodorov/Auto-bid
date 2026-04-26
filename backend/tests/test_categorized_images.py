@@ -1,5 +1,5 @@
 """
-Test suite for categorized images feature in autobids.bg
+Test suite for categorized images feature in autoandbid.com
 Tests:
 - POST /api/auctions with categorized images (validates minimums 8/4/1/4)
 - POST /api/auctions without categorized images (legacy payload)
@@ -22,7 +22,7 @@ TEST_IMAGE = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgGBgcGBQg
 def admin_token():
     """Get admin authentication token"""
     response = requests.post(f"{BASE_URL}/api/auth/login", json={
-        "email": "admin@autobids.bg",
+        "email": "contact@autoandbid.com",
         "password": "admin123"
     })
     if response.status_code == 200:

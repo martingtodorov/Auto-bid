@@ -8,7 +8,7 @@ import { formatError } from "../lib/auth";
 // Each template: { subject, body }
 
 const DEFAULT_SUGGESTIONS = [
-  { key: "welcome", subject: "Добре дошли в autobids.bg", body: "Здравейте {{name}},\n\nБлагодарим, че се регистрирахте в autobids.bg…" },
+  { key: "welcome", subject: "Добре дошли в autoandbid.com", body: "Здравейте {{name}},\n\nБлагодарим, че се регистрирахте в autoandbid.com…" },
   { key: "payment_reminder", subject: "Напомняне за такса купувач", body: "Здравейте {{name}},\n\nЗа търга \"{{auction_title}}\" очакваме плащане на таксата…" },
   { key: "auction_approved", subject: "Вашата обява е одобрена", body: "Здравейте {{name}},\n\nВашата обява \"{{auction_title}}\" е одобрена и вече е активна." },
 ];

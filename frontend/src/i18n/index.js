@@ -15,9 +15,9 @@ import en from "./locales/en.json";
  * Defaults assume the three TLD variants that follow the brand convention.
  * A match is "endsWith" so staging/preview subdomains (e.g. `preview.auto-bid.ro`) work too.
  */
-const DOMAIN_BG = (process.env.REACT_APP_DOMAIN_BG || "auto-bid.bg").toLowerCase();
-const DOMAIN_RO = (process.env.REACT_APP_DOMAIN_RO || "auto-bid.ro").toLowerCase();
-const DOMAIN_EN = (process.env.REACT_APP_DOMAIN_EN || "auto-bid.com").toLowerCase();
+const DOMAIN_BG = (process.env.REACT_APP_DOMAIN_BG || "autoandbid.bg").toLowerCase();
+const DOMAIN_RO = (process.env.REACT_APP_DOMAIN_RO || "autoandbid.ro").toLowerCase();
+const DOMAIN_EN = (process.env.REACT_APP_DOMAIN_EN || "autoandbid.com").toLowerCase();
 
 export const LANG_DOMAINS = { bg: DOMAIN_BG, ro: DOMAIN_RO, en: DOMAIN_EN };
 

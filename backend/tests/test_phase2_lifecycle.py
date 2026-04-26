@@ -15,7 +15,7 @@ from datetime import datetime, timezone, timedelta
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
 # Test credentials
-ADMIN_EMAIL = "admin@autobids.bg"
+ADMIN_EMAIL = "contact@autoandbid.com"
 ADMIN_PASSWORD = "admin123"
 MODERATOR_EMAIL = "moderator@test.bg"
 MODERATOR_PASSWORD = "mod12345"

@@ -1,5 +1,5 @@
 """
-Backend tests for Admin Auction Management (autobids.bg)
+Backend tests for Admin Auction Management (autoandbid.com)
 Tests new admin endpoints: GET/PUT /admin/auctions/{id}, POST /admin/auctions/{id}/remove, POST /admin/auctions/{id}/restore
 Also tests regression for existing endpoints.
 """
@@ -11,7 +11,7 @@ import uuid
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
 # Test credentials
-ADMIN_EMAIL = "admin@autobids.bg"
+ADMIN_EMAIL = "contact@autoandbid.com"
 ADMIN_PASSWORD = "admin123"
 TEST_USER_EMAIL = f"testuser_{uuid.uuid4().hex[:8]}@test.com"
 TEST_USER_PASSWORD = "testpass123"
