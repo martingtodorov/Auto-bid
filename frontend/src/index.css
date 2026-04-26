@@ -445,6 +445,9 @@ input:focus, select:focus, textarea:focus {
 .animate-marquee:hover {
     animation-play-state: paused;
 }
+@media (max-width: 640px) {
+    .animate-marquee { animation-duration: 25s; }
+}
 
 .dot-grid {
     background-image: radial-gradient(hsl(var(--line)) 1px, transparent 1px);
