@@ -150,6 +150,7 @@ SETTINGS_DEFAULTS = {
     "stripe_webhook_secret_live": "",
     # --- Phase 5 ---
     "og_image_url": "",
+    "favicon_url": "",
     "maintenance_mode": False,
     "maintenance_message": "Auto&Bid се обновява. Моля, върнете се след малко.",
     # --- Phase 6: Multi-language hero CMS ---
@@ -1565,6 +1566,7 @@ async def get_public_settings():
         "how_it_works_content_ro": s.get("how_it_works_content_ro") or "",
         "how_it_works_content_en": s.get("how_it_works_content_en") or "",
         "og_image_url": s.get("og_image_url") or "",
+        "favicon_url": s.get("favicon_url") or "",
         "maintenance_mode": bool(s.get("maintenance_mode")),
         "maintenance_message": s.get("maintenance_message") or "",
         "hero_headline_bg": s.get("hero_headline_bg") or "",

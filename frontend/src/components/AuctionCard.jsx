@@ -82,7 +82,7 @@ export default function AuctionCard({ auction, compact = false }) {
                     ● {t("auction.with_reserve")}
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[hsl(var(--ink))] bg-[hsl(var(--surface))] px-3 py-1.5 rounded-full border border-[hsl(var(--line))]" data-testid={`no-reserve-${auction.id}`}>
+                  <span className="no-reserve-gradient inline-flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded-full" data-testid={`no-reserve-${auction.id}`}>
                     ● {t("auction.no_reserve_badge")}
                   </span>
                 )}

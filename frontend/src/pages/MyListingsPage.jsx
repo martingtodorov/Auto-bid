@@ -138,7 +138,7 @@ export default function MyListingsPage() {
                         {a.has_reserve && (a.reserve_met
                           ? <span className="pill pill-live">{t("auction.reserve_met", "Резервът е достигнат")}</span>
                           : <span className="pill">{t("auction.with_reserve_amount", "С резерв")} · €{Math.round(a.reserve_eur || 0).toLocaleString("bg-BG")}</span>)}
-                        {a.has_reserve === false && <span className="pill">{t("auction.no_reserve_badge", "Без резерв")}</span>}
+                        {a.has_reserve === false && <span className="pill no-reserve-gradient">{t("auction.no_reserve_badge", "Без резерв")}</span>}
                         {counter === "pending" && <span className="pill pill-ending">{t("auction.counter_pending", "Чака отговор")}</span>}
                         {counter === "declined" && <span className="pill pill-sold">{t("auction.counter_declined", "Отказан контраоферта")}</span>}
                       </div>

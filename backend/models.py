@@ -204,6 +204,7 @@ class SiteSettingsUpdate(BaseModel):
     buyer_fee_min_eur: Optional[float] = None
     buyer_fee_max_eur: Optional[float] = None
     og_image_url: Optional[str] = None            # Phase 5: homepage OG image
+    favicon_url: Optional[str] = None             # Site favicon (link rel=icon)
     maintenance_mode: Optional[bool] = None       # Phase 5: maintenance toggle
     maintenance_message: Optional[str] = None
     seo_title: Optional[str] = None

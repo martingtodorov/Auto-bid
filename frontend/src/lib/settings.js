@@ -56,6 +56,18 @@ function applyVerificationTags(s) {
   ensure("google-site-verification", s.google_site_verification);
   ensure("msvalidate.01", s.bing_site_verification);
 
+  // Dynamic favicon — applies CMS-configured icon URL (link rel="icon").
+  const fav = (s.favicon_url || "").trim();
+  let favEl = head.querySelector('link[rel="icon"]');
+  if (fav) {
+    if (!favEl) {
+      favEl = document.createElement("link");
+      favEl.setAttribute("rel", "icon");
+      head.appendChild(favEl);
+    }
+    if (favEl.getAttribute("href") !== fav) favEl.setAttribute("href", fav);
+  }
+
   // Google Analytics gtag.js (only if configured)
   const gaId = s.google_analytics_id;
   const gaScriptId = "ga-gtag-src";

@@ -520,7 +520,7 @@ export default function AuctionDetailPage() {
                     : tl.urgent ? <span className="pill pill-ending">{formatTimeLeft(tl, t)}</span>
                     : <span className="pill pill-live">{formatTimeLeft(tl, t)}</span>}
                   {a.has_reserve && <span className="pill" data-testid="with-reserve">{t("auction.with_reserve")}</span>}
-                  {a.has_reserve === false && <span className="pill" data-testid="no-reserve">{t("auction.no_reserve_badge")}</span>}
+                  {a.has_reserve === false && <span className="pill no-reserve-gradient" data-testid="no-reserve">{t("auction.no_reserve_badge")}</span>}
                   <span className="overline text-[hsl(var(--ink-muted))] ml-auto">{a.bid_count || 0} {t("auction.bids_word")}</span>
                 </div>
 

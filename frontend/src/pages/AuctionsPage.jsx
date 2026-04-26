@@ -171,7 +171,8 @@ export default function AuctionsPage() {
               data-testid="save-search-btn"
             >
               <BookmarkPlus size={16} />
-              <span>{t("auctions_page.save_search")}</span>
+              <span className="hidden sm:inline">{t("auctions_page.save_search")}</span>
+              <span className="sm:hidden">{t("forms.save")}</span>
             </button>
             <select
               value={filters.sort}

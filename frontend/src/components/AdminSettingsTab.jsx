@@ -57,6 +57,7 @@ export default function AdminSettingsTab() {
           )
         ),
         og_image_url: data.og_image_url ?? "",
+        favicon_url: data.favicon_url ?? "",
         maintenance_mode: !!data.maintenance_mode,
         maintenance_message: data.maintenance_message ?? "",
         hero_headline_bg: data.hero_headline_bg ?? "",
@@ -98,6 +99,7 @@ export default function AdminSettingsTab() {
           )
         ),
         og_image_url: form.og_image_url,
+        favicon_url: form.favicon_url,
         maintenance_mode: !!form.maintenance_mode,
         maintenance_message: form.maintenance_message,
         hero_headline_bg: form.hero_headline_bg,
@@ -192,6 +194,24 @@ export default function AdminSettingsTab() {
               </div>
             )}
             <p className="mt-2 text-xs text-[hsl(var(--ink-muted))]">Статична картинка за социално споделяне на началната страница. Обявите автоматично ползват снимка на автомобила.</p>
+          </Field>
+
+          <Field label="Favicon (URL към .ico / .png — иконката в таба)" testid="seo-favicon" span={2}>
+            <input
+              type="url"
+              value={form.favicon_url}
+              onChange={(e) => set("favicon_url", e.target.value)}
+              placeholder="https://autoandbid.com/favicon.ico"
+              className="w-full border border-[hsl(var(--line))] h-11 px-3 text-sm font-mono"
+              data-testid="favicon-url-input"
+            />
+            {form.favicon_url && (
+              <div className="mt-3 inline-flex items-center gap-3 px-3 py-2 rounded-card border border-[hsl(var(--line))] bg-[hsl(var(--surface))]">
+                <img src={form.favicon_url} alt="favicon preview" className="w-8 h-8 object-contain" />
+                <span className="text-xs text-[hsl(var(--ink-muted))] font-mono break-all">{form.favicon_url}</span>
+              </div>
+            )}
+            <p className="mt-2 text-xs text-[hsl(var(--ink-muted))]">Препоръчителни размери: 32×32, 48×48 или 64×64. Поддържа .ico, .png и .svg. Промяната се прилага веднага в браузъра.</p>
           </Field>
         </div>
       </section>

@@ -269,6 +269,15 @@ code { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
     transform: translateY(-1px);
 }
 
+/* No-reserve badge — same green gradient as the "Sell your car" button.
+   Used across AuctionCard, AuctionDetailPage and MyListingsPage. */
+.no-reserve-gradient {
+    background: linear-gradient(135deg, hsl(158 60% 22%) 0%, hsl(158 65% 16%) 50%, hsl(156 72% 14%) 100%) !important;
+    color: white !important;
+    border-color: transparent !important;
+    box-shadow: 0 4px 12px -4px hsl(var(--accent) / 0.45);
+}
+
 .input {
     width: 100%;
     border: 1px solid hsl(var(--line));
