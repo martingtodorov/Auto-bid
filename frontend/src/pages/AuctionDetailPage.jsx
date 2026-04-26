@@ -398,7 +398,9 @@ export default function AuctionDetailPage() {
               <DescriptionWithInteriorShots
                 auctionId={id}
                 description={a.description}
-                interiorImages={a.images_interior || []}
+                interiorImages={(a.images_interior && a.images_interior.length > 0)
+                  ? a.images_interior
+                  : (a.images || []).slice(0, Math.max(3, (a.images || []).length))}
                 preTranslated={{ ro: a.description_ro || "", en: a.description_en || "" }}
               />
             </div>
@@ -661,18 +663,26 @@ function DescriptionWithInteriorShots({ auctionId, description, interiorImages, 
 
   const displayText = (!showOriginal && translated) ? translated : (description || "");
   const text = displayText.trim();
-  const shots = (interiorImages || []).slice(0, 3);
-
-  let paragraphs = text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
-  if (paragraphs.length < 2) {
-    const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean);
-    if (sentences.length >= 2) {
-      const mid = Math.ceil(sentences.length / 2);
-      paragraphs = [sentences.slice(0, mid).join(" "), sentences.slice(mid).join(" ")].filter(Boolean);
-    } else {
-      paragraphs = [text];
-    }
+  // Split description into exactly 3 chunks by sentence count.  Sentence
+  // boundaries are stable across languages (AI translator preserves them),
+  // so the image positions don't jump when the user toggles translation.
+  const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean);
+  let chunks;
+  if (sentences.length >= 3) {
+    const per = Math.ceil(sentences.length / 3);
+    chunks = [
+      sentences.slice(0, per).join(" "),
+      sentences.slice(per, per * 2).join(" "),
+      sentences.slice(per * 2).join(" "),
+    ].filter(Boolean);
+  } else {
+    chunks = [text];
   }
+
+  const allShots = interiorImages || [];
+  const SHOWN_SHOTS = 3;
+  const visibleShots = allShots.slice(0, SHOWN_SHOTS);
+  const moreCount = Math.max(0, allShots.length - SHOWN_SHOTS);
 
   const translateControls = needsTranslation ? (
     <div className="flex items-center gap-3 flex-wrap mt-4 mb-1" data-testid="translate-controls">
@@ -715,11 +725,11 @@ function DescriptionWithInteriorShots({ auctionId, description, interiorImages, 
     </div>
   ) : null;
 
-  const paraBlocks = paragraphs.map((p, i) => (
+  const paraBlocks = chunks.map((p, i) => (
     <p key={i} className="text-[15px] leading-[1.7] whitespace-pre-wrap text-[hsl(var(--ink))]/90">{p}</p>
   ));
 
-  if (shots.length === 0) {
+  if (visibleShots.length === 0) {
     return (
       <div className="max-w-3xl" data-testid="auction-description">
         {translateControls}
@@ -728,30 +738,56 @@ function DescriptionWithInteriorShots({ auctionId, description, interiorImages, 
     );
   }
 
+  // Interleave: text → image → text → image → text → image.
+  // The very last visible image gets a dark "+N" overlay if there are
+  // more interior shots beyond what we render here. Clicking it scrolls
+  // the user back up to the main image carousel.
+  const onMoreClick = () => {
+    try {
+      const car = document.querySelector('[data-testid="auction-images"], #image-carousel, .image-carousel');
+      if (car) car.scrollIntoView({ behavior: "smooth", block: "start" });
+      else window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (_) { /* noop */ }
+  };
+
   const blocks = [];
-  paragraphs.forEach((p, i) => {
+  chunks.forEach((p, i) => {
     blocks.push(
       <p key={`p-${i}`} className="text-[15px] leading-[1.7] whitespace-pre-wrap text-[hsl(var(--ink))]/90">{p}</p>
     );
-    if (i < shots.length) {
+    const shot = visibleShots[i];
+    if (shot) {
+      const isLast = i === visibleShots.length - 1;
+      const hasOverlay = isLast && moreCount > 0;
       blocks.push(
-        <figure key={`s-${i}`} className="my-2 rounded-card overflow-hidden border border-[hsl(var(--line))] bg-[hsl(var(--surface))]">
-          <img src={shots[i]} alt="Interior" loading="lazy" className="w-full h-auto object-cover max-h-[480px]" data-testid={`interior-shot-${i}`} />
-          <figcaption className="px-3 py-2 text-xs text-[hsl(var(--ink-muted))] font-mono tracking-wide">{t("spec.interior", "Интериор")} · {i + 1}/{shots.length}</figcaption>
+        <figure
+          key={`s-${i}`}
+          className="my-2 rounded-card overflow-hidden border border-[hsl(var(--line))] bg-[hsl(var(--surface))] relative"
+        >
+          <img
+            src={shot}
+            alt="Interior"
+            loading="lazy"
+            className="w-full h-auto object-cover max-h-[480px]"
+            data-testid={`interior-shot-${i}`}
+          />
+          {hasOverlay && (
+            <button
+              type="button"
+              onClick={onMoreClick}
+              className="absolute inset-0 bg-black/60 hover:bg-black/70 transition-colors flex items-center justify-center group"
+              data-testid="interior-more-overlay"
+              aria-label={`+${moreCount} още снимки`}
+            >
+              <span className="text-white font-serif text-5xl sm:text-6xl tracking-tight group-hover:scale-105 transition-transform">
+                +{moreCount}
+              </span>
+            </button>
+          )}
         </figure>
       );
     }
   });
-  if (shots.length > paragraphs.length) {
-    for (let i = paragraphs.length; i < shots.length; i++) {
-      blocks.push(
-        <figure key={`s-tail-${i}`} className="my-2 rounded-card overflow-hidden border border-[hsl(var(--line))] bg-[hsl(var(--surface))]">
-          <img src={shots[i]} alt="Interior" loading="lazy" className="w-full h-auto object-cover max-h-[480px]" data-testid={`interior-shot-${i}`} />
-          <figcaption className="px-3 py-2 text-xs text-[hsl(var(--ink-muted))] font-mono tracking-wide">{t("spec.interior", "Интериор")} · {i + 1}/{shots.length}</figcaption>
-        </figure>
-      );
-    }
-  }
 
   return (
     <div className="max-w-3xl" data-testid="auction-description">
