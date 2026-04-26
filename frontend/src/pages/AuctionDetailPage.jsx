@@ -487,8 +487,8 @@ export default function AuctionDetailPage() {
                 )}
 
                 <div className="flex items-center justify-between flex-wrap gap-2">
-                  {a.status === "sold" ? <span className="pill pill-sold">Продаден</span>
-                    : a.status === "ended" ? <span className="pill pill-sold">Приключил</span>
+                  {a.status === "sold" ? <span className="pill pill-sold">{t("auction.status_sold", "Продаден")}</span>
+                    : a.status === "ended" ? <span className="pill pill-sold">{t("auction.status_ended", "Приключил")}</span>
                     : tl.urgent ? <span className="pill pill-ending">{formatTimeLeft(tl, t)}</span>
                     : <span className="pill pill-live">{formatTimeLeft(tl, t)}</span>}
                   {a.has_reserve && <span className="pill" data-testid="with-reserve">{t("auction.with_reserve")}</span>}

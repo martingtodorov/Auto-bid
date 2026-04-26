@@ -146,7 +146,14 @@
     "similar_listings": "Anunțuri similare",
     "view_all_auctions": "Vezi toate licitațiile",
     "preauth_active": "preauth activ",
-    "active_credit_short": "Credit activ"
+    "active_credit_short": "Credit activ",
+    "seller_short": "Vânzător",
+    "delete": "Șterge",
+    "status_sold": "Vândut",
+    "status_ended": "Finalizat",
+    "with_reserve_amount": "Cu rezervă",
+    "counter_pending": "În așteptare",
+    "counter_declined": "Contra-ofertă refuzată"
   },
   "preauth": {
     "confirm_card": "Confirmă cardul",
@@ -521,5 +528,25 @@
     "bg": "Български",
     "ro": "Română",
     "en": "English"
+  },
+  "theme": {
+    "dark": "Temă întunecată",
+    "light": "Temă luminoasă"
+  },
+  "push": {
+    "title": "Notificări push",
+    "description": "Primiți notificări în timp real când sunteți depășit, anunțul dvs. primește o ofertă sau o mașină nouă corespunde unei căutări salvate.",
+    "bullet_outbid": "Sunteți depășit de un alt cumpărător",
+    "bullet_seller": "Mașina dvs. a primit o ofertă",
+    "bullet_saved": "Un anunț nou corespunde unei căutări salvate",
+    "enable": "Activează notificările",
+    "disable": "Dezactivează notificările",
+    "send_test": "Trimite test",
+    "enabled_msg": "Notificările sunt activate.",
+    "disabled_msg": "Notificările sunt dezactivate.",
+    "test_sent": "Notificarea de test a fost trimisă. Verificați telefonul/browserul.",
+    "unsupported": "Acest browser nu acceptă notificări push. Încercați Chrome, Edge, Firefox sau Safari (iOS 16.4+).",
+    "ios_install": "Pe iPhone/iPad: apăsați butonul \"Distribuie\" în Safari → \"Add to Home Screen\". Apoi deschideți aplicația de pe ecranul de start și activați notificările aici.",
+    "denied": "Notificările sunt blocate în browser. Permiteți-le din setările site-ului (pictograma lacăt în bara de adrese) și încercați din nou."
   }
 }

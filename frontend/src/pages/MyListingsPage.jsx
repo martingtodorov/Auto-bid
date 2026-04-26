@@ -135,10 +135,12 @@ export default function MyListingsPage() {
                     <div className="p-5">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`pill ${icon.cls}`} data-testid={`status-${a.id}`}><Icon size={11} /> {statusLabel}</span>
-                        {a.has_reserve && (a.reserve_met ? <span className="pill pill-live">Резервът е достигнат</span> : <span className="pill">С резерв · €{Math.round(a.reserve_eur || 0).toLocaleString("bg-BG")}</span>)}
-                        {a.has_reserve === false && <span className="pill">Без резерв</span>}
-                        {counter === "pending" && <span className="pill pill-ending">Чака отговор</span>}
-                        {counter === "declined" && <span className="pill pill-sold">Отказан контраоферта</span>}
+                        {a.has_reserve && (a.reserve_met
+                          ? <span className="pill pill-live">{t("auction.reserve_met", "Резервът е достигнат")}</span>
+                          : <span className="pill">{t("auction.with_reserve_amount", "С резерв")} · €{Math.round(a.reserve_eur || 0).toLocaleString("bg-BG")}</span>)}
+                        {a.has_reserve === false && <span className="pill">{t("auction.no_reserve_badge", "Без резерв")}</span>}
+                        {counter === "pending" && <span className="pill pill-ending">{t("auction.counter_pending", "Чака отговор")}</span>}
+                        {counter === "declined" && <span className="pill pill-sold">{t("auction.counter_declined", "Отказан контраоферта")}</span>}
                       </div>
                       {editing === a.id ? (
                         <div className="mt-4 space-y-3">

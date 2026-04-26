@@ -146,7 +146,14 @@
     "similar_listings": "Similar listings",
     "view_all_auctions": "View all auctions",
     "preauth_active": "preauth active",
-    "active_credit_short": "Active credit"
+    "active_credit_short": "Active credit",
+    "seller_short": "Seller",
+    "delete": "Delete",
+    "status_sold": "Sold",
+    "status_ended": "Ended",
+    "with_reserve_amount": "With reserve",
+    "counter_pending": "Awaiting response",
+    "counter_declined": "Counter-offer declined"
   },
   "preauth": {
     "confirm_card": "Confirm your card",
@@ -521,5 +528,25 @@
     "bg": "Български",
     "ro": "Română",
     "en": "English"
+  },
+  "theme": {
+    "dark": "Dark theme",
+    "light": "Light theme"
+  },
+  "push": {
+    "title": "Push notifications",
+    "description": "Get real-time alerts when you're outbid, your listing receives a bid, or a new car matches a saved search.",
+    "bullet_outbid": "You've been outbid by another buyer",
+    "bullet_seller": "Your car has received a new bid",
+    "bullet_saved": "A new listing matches a saved search",
+    "enable": "Enable notifications",
+    "disable": "Disable notifications",
+    "send_test": "Send test",
+    "enabled_msg": "Notifications enabled.",
+    "disabled_msg": "Notifications disabled.",
+    "test_sent": "Test notification sent. Check your phone/browser.",
+    "unsupported": "This browser doesn't support push notifications. Try Chrome, Edge, Firefox or Safari (iOS 16.4+).",
+    "ios_install": "On iPhone/iPad: tap the Share button in Safari → \"Add to Home Screen\". Then open the app from your home screen and enable notifications here.",
+    "denied": "Notifications are blocked in the browser. Allow them in the site settings (lock icon in the address bar) and try again."
   }
 }
