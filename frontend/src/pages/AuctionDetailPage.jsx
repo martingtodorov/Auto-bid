@@ -350,7 +350,7 @@ export default function AuctionDetailPage() {
                     return (
                       <button
                         key={i}
-                        onClick={() => setPhotoIdx(i)}
+                        onClick={() => isMobileLastVisible ? setLightboxIdx(i) : setPhotoIdx(i)}
                         className={`relative aspect-[4/3] rounded-card border overflow-hidden ${
                           photoIdx === i ? "border-[hsl(var(--ink))]" : "border-[hsl(var(--line))]"
                         } ${hideOnMobile ? "hidden md:block" : ""}`}
@@ -359,7 +359,7 @@ export default function AuctionDetailPage() {
                         <img src={img} alt="" className="w-full h-full object-cover" />
                         {isMobileLastVisible && (
                           <span
-                            className="md:hidden absolute inset-0 bg-black/65 flex items-center justify-center text-white font-serif text-lg"
+                            className="md:hidden absolute inset-0 bg-black/65 hover:bg-black/75 transition-colors flex items-center justify-center text-white font-serif text-lg cursor-zoom-in"
                             data-testid="thumb-more-overlay"
                           >
                             +{mobileExtra}
