@@ -334,15 +334,43 @@ export default function AuctionDetailPage() {
                 </div>
               )}
             </div>
-            {a.images?.length > 1 && (
-              <div className="mt-3 grid grid-cols-5 gap-2">
-                {a.images.map((img, i) => (
-                  <button key={i} onClick={() => setPhotoIdx(i)} className={`aspect-[4/3] rounded-card border overflow-hidden ${photoIdx === i ? "border-[hsl(var(--ink))]" : "border-[hsl(var(--line))]"}`} data-testid={`thumb-${i}`}>
-                    <img src={img} alt="" className="w-full h-full object-cover" />
-                  </button>
-                ))}
-              </div>
-            )}
+            {a.images?.length > 1 && (() => {
+              const total = a.images.length;
+              // Mobile shows at most 5 thumbnails (1 row). The 5th gets a
+              // "+N more" dark overlay if there are extra photos hidden.
+              // Desktop shows all thumbs in the 5-col grid as usual.
+              const MOBILE_MAX = 5;
+              const mobileExtra = total - MOBILE_MAX;
+              return (
+                <div className="mt-3 grid grid-cols-5 gap-2">
+                  {a.images.map((img, i) => {
+                    // hide thumbs >= 5 on mobile only
+                    const hideOnMobile = i >= MOBILE_MAX;
+                    const isMobileLastVisible = i === MOBILE_MAX - 1 && mobileExtra > 0;
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => setPhotoIdx(i)}
+                        className={`relative aspect-[4/3] rounded-card border overflow-hidden ${
+                          photoIdx === i ? "border-[hsl(var(--ink))]" : "border-[hsl(var(--line))]"
+                        } ${hideOnMobile ? "hidden md:block" : ""}`}
+                        data-testid={`thumb-${i}`}
+                      >
+                        <img src={img} alt="" className="w-full h-full object-cover" />
+                        {isMobileLastVisible && (
+                          <span
+                            className="md:hidden absolute inset-0 bg-black/65 flex items-center justify-center text-white font-serif text-lg"
+                            data-testid="thumb-more-overlay"
+                          >
+                            +{mobileExtra}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
 
             <div className="mt-10">
               <div className="overline text-[hsl(var(--ink-muted))]">{t("auction.specs_overline")}</div>
@@ -398,9 +426,7 @@ export default function AuctionDetailPage() {
               <DescriptionWithInteriorShots
                 auctionId={id}
                 description={a.description}
-                interiorImages={(a.images_interior && a.images_interior.length > 0)
-                  ? a.images_interior
-                  : (a.images || []).slice(0, Math.max(3, (a.images || []).length))}
+                interiorImages={a.images_interior || []}
                 preTranslated={{ ro: a.description_ro || "", en: a.description_en || "" }}
               />
             </div>
@@ -680,9 +706,7 @@ function DescriptionWithInteriorShots({ auctionId, description, interiorImages, 
   }
 
   const allShots = interiorImages || [];
-  const SHOWN_SHOTS = 3;
-  const visibleShots = allShots.slice(0, SHOWN_SHOTS);
-  const moreCount = Math.max(0, allShots.length - SHOWN_SHOTS);
+  const visibleShots = allShots.slice(0, 3);
 
   const translateControls = needsTranslation ? (
     <div className="flex items-center gap-3 flex-wrap mt-4 mb-1" data-testid="translate-controls">
@@ -738,18 +762,6 @@ function DescriptionWithInteriorShots({ auctionId, description, interiorImages, 
     );
   }
 
-  // Interleave: text → image → text → image → text → image.
-  // The very last visible image gets a dark "+N" overlay if there are
-  // more interior shots beyond what we render here. Clicking it scrolls
-  // the user back up to the main image carousel.
-  const onMoreClick = () => {
-    try {
-      const car = document.querySelector('[data-testid="auction-images"], #image-carousel, .image-carousel');
-      if (car) car.scrollIntoView({ behavior: "smooth", block: "start" });
-      else window.scrollTo({ top: 0, behavior: "smooth" });
-    } catch (_) { /* noop */ }
-  };
-
   const blocks = [];
   chunks.forEach((p, i) => {
     blocks.push(
@@ -757,12 +769,10 @@ function DescriptionWithInteriorShots({ auctionId, description, interiorImages, 
     );
     const shot = visibleShots[i];
     if (shot) {
-      const isLast = i === visibleShots.length - 1;
-      const hasOverlay = isLast && moreCount > 0;
       blocks.push(
         <figure
           key={`s-${i}`}
-          className="my-2 rounded-card overflow-hidden border border-[hsl(var(--line))] bg-[hsl(var(--surface))] relative"
+          className="my-2 rounded-card overflow-hidden border border-[hsl(var(--line))] bg-[hsl(var(--surface))]"
         >
           <img
             src={shot}
@@ -771,19 +781,6 @@ function DescriptionWithInteriorShots({ auctionId, description, interiorImages, 
             className="w-full h-auto object-cover max-h-[480px]"
             data-testid={`interior-shot-${i}`}
           />
-          {hasOverlay && (
-            <button
-              type="button"
-              onClick={onMoreClick}
-              className="absolute inset-0 bg-black/60 hover:bg-black/70 transition-colors flex items-center justify-center group"
-              data-testid="interior-more-overlay"
-              aria-label={`+${moreCount} още снимки`}
-            >
-              <span className="text-white font-serif text-5xl sm:text-6xl tracking-tight group-hover:scale-105 transition-transform">
-                +{moreCount}
-              </span>
-            </button>
-          )}
         </figure>
       );
     }
