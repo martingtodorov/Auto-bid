@@ -450,3 +450,40 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 
 ### Removed
 - `BidHistoryChart` компонент + `/api/auctions/{id}/bid-history` endpoint + `chart_*` i18n ключове
+
+## 2026-02-23 — Production-grade transactional outbox (DONE)
+
+**От**: synchronous dual-write (PG → inline Mongo update)
+**Към**: transactional outbox pattern с background worker
+
+**Защо**: Ако backend крашне между PG commit и Mongo update → Mongo остава stale завинаги. Outbox решава това с **at-least-once + idempotent** доставка.
+
+**Нови файлове:**
+- `models_pg.py` → `BidEvent` table (id, auction_id, event_type, payload JSONB, applied_at, attempt_count, next_attempt_at, last_error)
+- `services/outbox_worker.py` — async coroutine с 250ms poll, batch=50, exp. backoff, max_attempts=12, dead-letter
+
+**Гаранции:**
+1. **Atomic write**: `place_bid()` INSERT-ва Bid + BidEvent в **същата** PG транзакция → guaranteed consistency
+2. **Sync fast path**: server.py се опитва веднага да обнови Mongo (за UX без забавяне) → ако успее, маркира event applied
+3. **Worker safety net**: ако sync write fail-не (мрежа, crash), worker автоматично retry-ва с exponential backoff
+4. **Idempotent writes**: Mongo update е conditional (`bid_count: {$lt: new_count}`) → replays никога не overwrite-ват по-нова държава
+5. **Crash recovery**: `SELECT ... FOR UPDATE SKIP LOCKED` — worker never duplicate-processes
+6. **Dead-letter**: след 12 неуспешни опита event-ът се изключва; admin може ръчно да retry-не
+
+**Admin endpoints:**
+- `GET /api/admin/bid-outbox` — health (pending count, dead_letter count, oldest pending age)
+- `GET /api/admin/bid-outbox/dead-letter` — списък на dead-letter events
+- `POST /api/admin/bid-outbox/{event_id}/retry` — ръчно retry
+
+**Тествано:**
+- Successful bid → event written, applied within ms, marked applied=true ✅
+- Outbox health endpoint работи (admin auth) ✅
+- Idempotency guard ($lt) предпазва от backwards counts ✅
+- Worker boots on startup, drains pending events ✅
+
+**Постижение**: Сега системата е безопасна срещу:
+- Backend crash mid-bid
+- Mongo network partition
+- Concurrent bidders (FOR UPDATE lock)
+- Out-of-order event delivery (idempotent guards)
+

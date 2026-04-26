@@ -13,8 +13,9 @@ from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
-    Boolean, DateTime, Index, Numeric, String, func,
+    Boolean, DateTime, Index, Integer, Numeric, String, Text, func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db_pg import Base
@@ -69,4 +70,34 @@ class BidState(Base):
     ends_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+
+class BidEvent(Base):
+    """Transactional outbox table.
+
+    Every bid placement INSERTs one row here in the SAME transaction
+    that wrote the bid. A background worker (services.outbox_worker)
+    drains these rows by applying their effects to MongoDB, then marks
+    them `applied_at`. If the backend crashes between Postgres commit
+    and Mongo write, the worker recovers on restart — guaranteeing
+    eventual consistency between the two stores.
+    """
+    __tablename__ = "bid_events"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    auction_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), index=True
+    )
+    applied_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_error: Mapped[Optional[str]] = mapped_column(Text)
+    next_attempt_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), index=True)
+
+    __table_args__ = (
+        Index("ix_bid_events_pending", "applied_at", "next_attempt_at"),
     )

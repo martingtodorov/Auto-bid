@@ -228,6 +228,31 @@ async def place_bid(
         st.ends_at = new_ends_at
         st.updated_at = now
 
+        # 7) Outbox event — drained by services.outbox_worker.
+        # Same transaction → guaranteed atomic with the bid INSERT.
+        from models_pg import BidEvent
+        import uuid as _uuid
+        event = BidEvent(
+            id=str(_uuid.uuid4()),
+            auction_id=auction_id,
+            event_type="bid_placed",
+            payload={
+                "bid_id": bid_id,
+                "auction_id": auction_id,
+                "user_id": user_id,
+                "user_name": user_name,
+                "amount_eur": float(amount),
+                "bid_count": st.bid_count,
+                "high_bidder_id": user_id,
+                "high_bidder_name": user_name,
+                "ends_at": _to_iso(new_ends_at),
+                "triggered_extension": triggered_extension,
+                "created_at": _to_iso(now),
+            },
+            next_attempt_at=now,
+        )
+        s.add(event)
+
         return {
             "bid": _bid_row_to_dict(bid_row),
             "current_bid_eur": float(amount),
@@ -236,6 +261,7 @@ async def place_bid(
             "high_bidder_name": user_name,
             "ends_at": _to_iso(new_ends_at),
             "triggered_extension": triggered_extension,
+            "event_id": event.id,
         }
 
 

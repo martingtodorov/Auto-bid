@@ -1301,15 +1301,39 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
 
     # Mirror denormalised fields onto the Mongo auction so the rest of the app
     # (filters, listings, sorting, sitemap) keeps working without a join.
-    update = {
-        "current_bid_eur": amount,
-        "bid_count": result["bid_count"],
-        "high_bidder_id": user["id"],
-        "high_bidder_name": user["name"],
-    }
-    if triggered_extension:
-        update["ends_at"] = new_ends_at_iso
-    await db.auctions.update_one({"id": auction_id}, {"$set": update})
+    # Best-effort fast path: the outbox event written inside place_bid()'s
+    # transaction is the source of truth — if this sync write fails or the
+    # process crashes here, the outbox worker (services.outbox_worker) will
+    # apply the same change idempotently within ~250ms.
+    try:
+        update = {
+            "current_bid_eur": amount,
+            "bid_count": result["bid_count"],
+            "high_bidder_id": user["id"],
+            "high_bidder_name": user["name"],
+        }
+        if triggered_extension:
+            update["ends_at"] = new_ends_at_iso
+        await db.auctions.update_one(
+            {"id": auction_id, "$or": [
+                {"bid_count": {"$lt": result["bid_count"]}},
+                {"bid_count": {"$exists": False}},
+            ]},
+            {"$set": update},
+        )
+        # Mark outbox event applied so the worker doesn't redo the same write.
+        from services.outbox_worker import pg_session as _pgs
+        from sqlalchemy import update as _upd
+        from models_pg import BidEvent as _BE
+        async with _pgs() as _s:
+            await _s.execute(
+                _upd(_BE).where(_BE.id == result["event_id"], _BE.applied_at.is_(None)).values(
+                    applied_at=datetime.now(timezone.utc),
+                    attempt_count=1,
+                )
+            )
+    except Exception as e:
+        logger.warning("Sync Mongo mirror failed (outbox will catch up): %s", e)
 
     public_bid = result["bid"]
     await hub.broadcast(auction_id, {
@@ -2589,6 +2613,10 @@ async def on_startup():
     # PostgreSQL bidding subsystem (see services/bidding.py)
     from db_pg import init_pg_schema
     await init_pg_schema()
+    # Transactional-outbox worker (drains bid_events → MongoDB)
+    from services import outbox_worker
+    app.state._outbox_stop = asyncio.Event()
+    app.state._outbox_task = asyncio.create_task(outbox_worker.run_worker(app.state._outbox_stop))
     await _load_settings_cache()
     await seed_admin()
     await seed()
@@ -2806,6 +2834,28 @@ api.include_router(_admin_router.router)
 api.include_router(_seller_requests_router.router)
 api.include_router(_push_router.register_push_routes(get_current_user))
 
+
+@api.get("/admin/bid-outbox")
+async def admin_bid_outbox(_admin: dict = Depends(require_admin_or_moderator)):
+    """Outbox health: pending count, dead-letter count, oldest pending age."""
+    from services import outbox_worker
+    return await outbox_worker.get_outbox_health()
+
+
+@api.get("/admin/bid-outbox/dead-letter")
+async def admin_bid_outbox_dead_letter(_admin: dict = Depends(require_admin_or_moderator)):
+    from services import outbox_worker
+    return await outbox_worker.list_dead_letter_events(limit=200)
+
+
+@api.post("/admin/bid-outbox/{event_id}/retry")
+async def admin_bid_outbox_retry(event_id: str, _admin: dict = Depends(require_admin)):
+    from services import outbox_worker
+    ok = await outbox_worker.retry_dead_letter_event(event_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Събитието не е намерено")
+    return {"ok": True}
+
 app.include_router(api)
 
 app.add_middleware(
@@ -2896,4 +2946,12 @@ logger = logging.getLogger(__name__)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    # Gracefully stop outbox worker before closing connections
+    try:
+        if hasattr(app.state, "_outbox_stop"):
+            app.state._outbox_stop.set()
+        if hasattr(app.state, "_outbox_task"):
+            await asyncio.wait_for(app.state._outbox_task, timeout=5.0)
+    except Exception as e:
+        logger.warning("Outbox worker shutdown: %s", e)
     client.close()
