@@ -69,9 +69,12 @@ def build_inbox_router(db, get_current_user):
     return router
 
 
-async def notify_user(db, *, user_id: str, type: str, title: str, body: str = "",
+async def notify_user(db, *, user_id: str, type: str, title: str = "", body: str = "",
+                      data: Optional[dict] = None,
                       auction_id: Optional[str] = None, link: Optional[str] = None) -> str:
-    """Emit a single in-app notification. Returns the notification id."""
+    """Emit a single in-app notification. Returns the notification id.
+    `data` carries placeholder args (e.g. {"car": "BMW", "amount": 23000}) that
+    the frontend interpolates into a translated `notifications.types.{type}.{title|body}` key."""
     nid = str(uuid.uuid4())
     doc = {
         "id": nid,
@@ -79,6 +82,7 @@ async def notify_user(db, *, user_id: str, type: str, title: str, body: str = ""
         "type": type,
         "title": title[:200],
         "body": body[:1000],
+        "data": data or {},
         "auction_id": auction_id,
         "link": link or (f"/auctions/{auction_id}" if auction_id else None),
         "read": False,
@@ -89,14 +93,15 @@ async def notify_user(db, *, user_id: str, type: str, title: str, body: str = ""
     return nid
 
 
-async def notify_admins(db, *, type: str, title: str, body: str = "",
+async def notify_admins(db, *, type: str, title: str = "", body: str = "",
+                        data: Optional[dict] = None,
                         auction_id: Optional[str] = None, link: Optional[str] = None) -> int:
     """Fan out one notification to every admin & moderator. Returns count fanned out."""
     cursor = db.users.find({"role": {"$in": ["admin", "moderator"]}}, {"_id": 0, "id": 1})
     count = 0
     async for u in cursor:
         try:
-            await notify_user(db, user_id=u["id"], type=type, title=title, body=body,
+            await notify_user(db, user_id=u["id"], type=type, title=title, body=body, data=data,
                               auction_id=auction_id, link=link)
             count += 1
         except Exception:

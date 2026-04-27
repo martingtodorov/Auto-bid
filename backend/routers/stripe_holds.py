@@ -320,7 +320,7 @@ async def cancel_authorization(db, auth_id: str) -> dict:
     auth = await db.bid_authorizations.find_one({"id": auth_id}, {"_id": 0})
     if not auth:
         raise HTTPException(status_code=404, detail="Authorization not found")
-    if auth["authorization_status"] not in ("active", "pending"):
+    if auth["authorization_status"] not in ("active", "pending", "loser_grace"):
         return {"ok": True, "skipped": True, "reason": auth["authorization_status"]}
     pi_id = auth.get("stripe_payment_intent_id")
     if pi_id:

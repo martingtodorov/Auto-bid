@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { CheckCheck } from "lucide-react";
 import { api } from "../lib/apiClient";
+import { resolveNotification } from "../lib/notifications";
 
 /** Full-page inbox listing the user's notifications with pagination. */
 export default function InboxPage() {
@@ -66,6 +67,7 @@ export default function InboxPage() {
 
       <ul className="rounded-card border border-[hsl(var(--line))] overflow-hidden">
         {items.map((n) => {
+          const r = resolveNotification(n, t);
           const dest = n.link || (n.auction_id ? `/auctions/${n.auction_id}` : null);
           const inner = (
             <>
@@ -73,8 +75,8 @@ export default function InboxPage() {
                 className={`mt-2 w-2.5 h-2.5 rounded-full shrink-0 ${n.read ? "bg-transparent" : "bg-[hsl(var(--accent))]"}`}
               />
               <div className="flex-1 min-w-0">
-                <div className="font-semibold">{n.title}</div>
-                {n.body && <div className="text-sm text-[hsl(var(--ink-muted))] mt-0.5">{n.body}</div>}
+                <div className="font-semibold">{r.title}</div>
+                {r.body && <div className="text-sm text-[hsl(var(--ink-muted))] mt-0.5">{r.body}</div>}
                 <div className="text-xs text-[hsl(var(--ink-muted))] mt-1.5 font-mono">
                   {new Date(n.created_at).toLocaleString()}
                 </div>

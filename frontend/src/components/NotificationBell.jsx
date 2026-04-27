@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Bell, Check, CheckCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api } from "../lib/apiClient";
+import { resolveNotification } from "../lib/notifications";
 import { useAuth } from "../lib/auth";
 
 /** Bell icon + dropdown panel showing the user's recent in-app notifications.
@@ -114,7 +115,9 @@ export default function NotificationBell() {
                 {t("inbox.empty", "Нямате известия")}
               </div>
             )}
-            {items.map((n) => (
+            {items.map((n) => {
+              const r = resolveNotification(n, t);
+              return (
               <button
                 key={n.id}
                 onClick={() => onItemClick(n)}
@@ -126,15 +129,16 @@ export default function NotificationBell() {
                   aria-hidden="true"
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-sm">{n.title}</div>
-                  {n.body && <div className="text-xs text-[hsl(var(--ink-muted))] mt-0.5 line-clamp-2">{n.body}</div>}
+                  <div className="font-semibold text-sm">{r.title}</div>
+                  {r.body && <div className="text-xs text-[hsl(var(--ink-muted))] mt-0.5 line-clamp-2">{r.body}</div>}
                   <div className="text-[10px] uppercase tracking-wide text-[hsl(var(--ink-muted))] mt-1.5 font-mono">
                     {new Date(n.created_at).toLocaleString()}
                   </div>
                 </div>
                 {n.read && <Check size={12} className="text-[hsl(var(--ink-muted))] shrink-0 mt-1.5" />}
               </button>
-            ))}
+              );
+            })}
           </div>
           <div className="border-t border-[hsl(var(--line))] px-4 py-2.5 text-center">
             <Link

@@ -110,6 +110,7 @@
     "no_reserve_badge": "No reserve",
     "vat_inclusive_badge": "VAT incl. {{rate}}%",
     "vat_exempt_badge": "VAT exempt",
+    "vat_short": "VAT",
     "price_with_vat": "With VAT {{rate}}%",
     "buyer_fee_label": "Buyer's fee",
     "buyer_fee_detail": "{{pct}}% of the bid (min. €{{min}}, max. €{{max}}) — pre-authorised on your card. Fully released if you lose.",
@@ -595,6 +596,54 @@
     "mark_all_read": "Mark all read",
     "view_all": "View all →",
     "unread_count": "{{count}} unread"
+  },
+  "notifications": {
+    "types": {
+      "listing_pending": {
+        "title": "New listing awaiting approval",
+        "body": "{{seller}}: {{title}}"
+      },
+      "auction_no_bids": {
+        "title": "Auction ended without bids",
+        "body": "{{title}} ended without offers."
+      },
+      "auction_no_bids_seller": {
+        "title": "Your auction ended without offers",
+        "body": "{{title}}"
+      },
+      "auction_below_reserve": {
+        "title": "Auction ended BELOW reserve",
+        "body": "{{title}} — bid €{{bid}} vs reserve €{{reserve}} (short by €{{gap}})."
+      },
+      "auction_below_reserve_seller": {
+        "title": "Reserve price not met",
+        "body": "You have 24h to negotiate with the buyer — {{title}}"
+      },
+      "auction_below_reserve_buyer": {
+        "title": "Reserve not met",
+        "body": "The seller has 24h to make an offer — {{title}}"
+      },
+      "auction_sold_above_reserve": {
+        "title": "Auction SOLD above reserve",
+        "body": "{{title}} — €{{bid}} (+€{{margin}} over reserve)"
+      },
+      "auction_sold_no_reserve": {
+        "title": "Auction SOLD (no reserve)",
+        "body": "{{title}} — €{{bid}}"
+      },
+      "auction_sold_seller": {
+        "title": "Your car has been sold",
+        "body": "{{title}} — €{{bid}}"
+      },
+      "auction_won": {
+        "title": "You won the auction!",
+        "body": "{{title}} — €{{bid}}"
+      },
+      "outbid": {
+        "title": "You've been outbid",
+        "body": "Another bidder placed a higher bid on {{title}}"
+      }
+    }
   },
   "stripe": {
     "active_title": "Active authorization",

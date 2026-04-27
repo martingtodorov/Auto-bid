@@ -752,10 +752,9 @@ async def create_auction(request: Request, payload: AuctionCreate, user: dict = 
         await _notify_admins(
             db,
             type="listing_pending",
-            title="Нова обява за одобрение",
-            body=f"{user['name']}: {doc.get('title')}",
+            data={"seller": user.get("name", ""), "title": doc.get("title", "")},
             auction_id=auction_id,
-            link=f"/admin?tab=pending",
+            link="/admin?tab=pending",
         )
     except Exception as e:
         logger.warning("notify_admins (pending) failed: %s", e)
@@ -3018,19 +3017,29 @@ async def _finalize_expired_auctions_once():
                 {"id": auction_id},
                 {"$set": {"status": "ended", "finalized_at": now_iso}},
             )
+            # Release any Stripe holds tied to this auction (rare — usually no holds without bids)
+            try:
+                from routers.stripe_holds import cancel_authorization as _cancel_auth
+                async for sa in db.bid_authorizations.find(
+                    {"auction_id": auction_id, "authorization_status": {"$in": ["active", "pending"]}},
+                    {"_id": 0, "id": 1},
+                ):
+                    try: await _cancel_auth(db, sa["id"])
+                    except Exception: pass
+            except Exception as e:
+                logger.warning("[stripe] cancel-on-no-bids failed: %s", e)
             try:
                 from routers.inbox import notify_admins as _notify_admins, notify_user as _notify_user
                 await _notify_admins(
                     db, type="auction_no_bids",
-                    title="Търг приключи без наддавки",
-                    body=f"{a.get('title','')} приключи без оферти.",
+                    data={"title": a.get("title", "")},
                     auction_id=auction_id,
                 )
                 if a.get("seller_id") and a["seller_id"] != "platform":
                     await _notify_user(db, user_id=a["seller_id"],
                                        type="auction_no_bids_seller",
-                                       title="Вашият търг приключи без оферти",
-                                       body=a.get("title", ""), auction_id=auction_id)
+                                       data={"title": a.get("title", "")},
+                                       auction_id=auction_id)
             except Exception as e:
                 logger.warning("notify ended-no-bids failed: %s", e)
             logger.info("Auto-finalized auction %s → ended (no bids)", auction_id)
@@ -3045,24 +3054,23 @@ async def _finalize_expired_auctions_once():
             try:
                 from routers.inbox import notify_admins as _notify_admins, notify_user as _notify_user
                 gap = float(reserve) - current_bid
+                payload = {
+                    "title": a.get("title", ""),
+                    "bid": int(current_bid),
+                    "reserve": int(reserve),
+                    "gap": int(gap),
+                }
                 await _notify_admins(
-                    db, type="auction_below_reserve",
-                    title="Търг приключи ПОД резерва",
-                    body=f"{a.get('title','')} — наддавка €{int(current_bid):,} срещу резерв €{int(reserve):,} (под с €{int(gap):,}).",
-                    auction_id=auction_id,
+                    db, type="auction_below_reserve", data=payload, auction_id=auction_id,
                 )
                 if a.get("seller_id") and a["seller_id"] != "platform":
                     await _notify_user(db, user_id=a["seller_id"],
                                        type="auction_below_reserve_seller",
-                                       title="Резервната цена не е достигната",
-                                       body=f"Имате 24ч да договорите с купувача — {a.get('title','')}",
-                                       auction_id=auction_id)
+                                       data=payload, auction_id=auction_id)
                 if a.get("high_bidder_id"):
                     await _notify_user(db, user_id=a["high_bidder_id"],
                                        type="auction_below_reserve_buyer",
-                                       title="Резервът не е достигнат",
-                                       body=f"Продавачът има 24ч да направи оферта — {a.get('title','')}",
-                                       auction_id=auction_id)
+                                       data=payload, auction_id=auction_id)
             except Exception as e:
                 logger.warning("notify reserve_not_met failed: %s", e)
             # Email both parties
@@ -3098,23 +3106,23 @@ async def _finalize_expired_auctions_once():
         try:
             from routers.inbox import notify_admins as _notify_admins, notify_user as _notify_user
             margin = current_bid - float(reserve) if has_reserve else 0
-            margin_label = f" (+€{int(margin):,} над резерва)" if has_reserve and margin > 0 else (" (без резерв)" if not has_reserve else "")
+            payload = {
+                "title": a.get("title", ""),
+                "bid": int(current_bid),
+                "margin": int(margin) if has_reserve else 0,
+                "has_reserve": has_reserve,
+            }
             await _notify_admins(
-                db, type="auction_sold",
-                title="Търг ПРОДАДЕН над резерва" if has_reserve else "Търг ПРОДАДЕН (без резерв)",
-                body=f"{a.get('title','')} — €{int(current_bid):,}{margin_label}",
-                auction_id=auction_id,
+                db,
+                type="auction_sold_above_reserve" if has_reserve else "auction_sold_no_reserve",
+                data=payload, auction_id=auction_id,
             )
             if a.get("seller_id") and a["seller_id"] != "platform":
                 await _notify_user(db, user_id=a["seller_id"], type="auction_sold_seller",
-                                   title="Вашият автомобил е продаден",
-                                   body=f"{a.get('title','')} — €{int(current_bid):,}",
-                                   auction_id=auction_id)
+                                   data=payload, auction_id=auction_id)
             if a.get("high_bidder_id"):
                 await _notify_user(db, user_id=a["high_bidder_id"], type="auction_won",
-                                   title="Спечелихте търга!",
-                                   body=f"{a.get('title','')} — €{int(current_bid):,}",
-                                   auction_id=auction_id)
+                                   data=payload, auction_id=auction_id)
         except Exception as e:
             logger.warning("notify sold failed: %s", e)
         # Release losing bidders' preauths (keep winner's active for capture)
@@ -3124,6 +3132,31 @@ async def _finalize_expired_auctions_once():
             {"auction_id": auction_id, "status": "authorized", "user_id": {"$ne": a["high_bidder_id"]}},
             {"$set": {"status": "released", "released_at": now_iso}},
         )
+        # Stripe holds:
+        #   • Winner's authorization → capture immediately (settle the buyer's premium hold)
+        #   • Losers' authorizations → keep ACTIVE for 24h grace, then auto-release
+        try:
+            from routers.stripe_holds import capture_authorization as _capture_auth
+            grace_until = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+            async for sa in db.bid_authorizations.find(
+                {"auction_id": auction_id, "authorization_status": "active"}, {"_id": 0, "id": 1, "user_id": 1}
+            ):
+                if sa["user_id"] == a["high_bidder_id"]:
+                    try:
+                        await _capture_auth(db, sa["id"])
+                        logger.info("[stripe] captured winner hold %s for auction %s", sa["id"], auction_id)
+                    except Exception as e:
+                        logger.error("[stripe] winner capture failed for %s: %s", sa["id"], e)
+                else:
+                    await db.bid_authorizations.update_one(
+                        {"id": sa["id"]},
+                        {"$set": {"authorization_status": "loser_grace",
+                                  "release_at": grace_until,
+                                  "updated_at": now_iso}},
+                    )
+                    logger.info("[stripe] loser %s scheduled to release at %s", sa["id"], grace_until)
+        except Exception as e:
+            logger.warning("[stripe] capture/grace pipeline failed for %s: %s", auction_id, e)
         # Notify winner
         try:
             winner = await db.users.find_one({"id": a["high_bidder_id"]}, {"_id": 0})
@@ -3132,6 +3165,23 @@ async def _finalize_expired_auctions_once():
         except Exception as e:
             logger.error("email_won auto-finalize failed for %s: %s", auction_id, e)
         logger.info("Auto-finalized auction %s → sold (€%.0f)", auction_id, current_bid)
+
+    # ---- Process expired "loser_grace" Stripe holds (released after 24h) ----
+    try:
+        from routers.stripe_holds import cancel_authorization as _cancel_auth
+        now_iso2 = datetime.now(timezone.utc).isoformat()
+        cursor = db.bid_authorizations.find(
+            {"authorization_status": "loser_grace", "release_at": {"$lt": now_iso2}},
+            {"_id": 0, "id": 1},
+        )
+        async for sa in cursor:
+            try:
+                await _cancel_auth(db, sa["id"])
+                logger.info("[stripe] loser-grace hold %s released", sa["id"])
+            except Exception as e:
+                logger.warning("[stripe] loser-grace release failed for %s: %s", sa["id"], e)
+    except Exception as e:
+        logger.warning("[stripe] loser-grace sweep failed: %s", e)
 
 @api.post("/admin/reseed")
 async def reseed(_admin: dict = Depends(require_admin)):

@@ -110,6 +110,7 @@
     "no_reserve_badge": "Fără rezervă",
     "vat_inclusive_badge": "Cu TVA {{rate}}%",
     "vat_exempt_badge": "Scutit de TVA",
+    "vat_short": "TVA",
     "price_with_vat": "Cu TVA {{rate}}%",
     "buyer_fee_label": "Taxă cumpărător",
     "buyer_fee_detail": "{{pct}}% din ofertă (min. €{{min}}, max. €{{max}}) — blocați pe card. În caz de pierdere se eliberează integral.",
@@ -595,6 +596,54 @@
     "mark_all_read": "Marchează toate",
     "view_all": "Toate notificările →",
     "unread_count": "{{count}} necitite"
+  },
+  "notifications": {
+    "types": {
+      "listing_pending": {
+        "title": "Anunț nou pentru aprobare",
+        "body": "{{seller}}: {{title}}"
+      },
+      "auction_no_bids": {
+        "title": "Licitație încheiată fără oferte",
+        "body": "{{title}} s-a încheiat fără oferte."
+      },
+      "auction_no_bids_seller": {
+        "title": "Licitația dvs. s-a încheiat fără oferte",
+        "body": "{{title}}"
+      },
+      "auction_below_reserve": {
+        "title": "Licitație încheiată SUB rezervă",
+        "body": "{{title}} — ofertă €{{bid}} față de rezerva €{{reserve}} (sub cu €{{gap}})."
+      },
+      "auction_below_reserve_seller": {
+        "title": "Prețul de rezervă nu a fost atins",
+        "body": "Aveți 24h să negociați cu cumpărătorul — {{title}}"
+      },
+      "auction_below_reserve_buyer": {
+        "title": "Rezerva nu a fost atinsă",
+        "body": "Vânzătorul are 24h să facă o ofertă — {{title}}"
+      },
+      "auction_sold_above_reserve": {
+        "title": "Licitație VÂNDUTĂ peste rezervă",
+        "body": "{{title}} — €{{bid}} (+€{{margin}} peste rezervă)"
+      },
+      "auction_sold_no_reserve": {
+        "title": "Licitație VÂNDUTĂ (fără rezervă)",
+        "body": "{{title}} — €{{bid}}"
+      },
+      "auction_sold_seller": {
+        "title": "Mașina dvs. a fost vândută",
+        "body": "{{title}} — €{{bid}}"
+      },
+      "auction_won": {
+        "title": "Ați câștigat licitația!",
+        "body": "{{title}} — €{{bid}}"
+      },
+      "outbid": {
+        "title": "Ați fost depășit",
+        "body": "Alt licitator a făcut o ofertă mai mare pentru {{title}}"
+      }
+    }
   },
   "stripe": {
     "active_title": "Autorizare activă",

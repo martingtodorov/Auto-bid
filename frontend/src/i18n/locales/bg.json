@@ -110,6 +110,7 @@
     "no_reserve_badge": "Без резерв",
     "vat_inclusive_badge": "С ДДС {{rate}}%",
     "vat_exempt_badge": "Освободена от ДДС",
+    "vat_short": "ДДС",
     "price_with_vat": "С ДДС {{rate}}%",
     "buyer_fee_label": "Такса на купувача",
     "buyer_fee_detail": "{{pct}}% от наддаването (мин. €{{min}}, макс. €{{max}}) — блокирани върху картата. При загуба се освобождават изцяло.",
@@ -595,6 +596,54 @@
     "mark_all_read": "Маркирай всички",
     "view_all": "Всички известия →",
     "unread_count": "{{count}} непрочетени"
+  },
+  "notifications": {
+    "types": {
+      "listing_pending": {
+        "title": "Нова обява за одобрение",
+        "body": "{{seller}}: {{title}}"
+      },
+      "auction_no_bids": {
+        "title": "Търг приключи без наддавки",
+        "body": "{{title}} приключи без оферти."
+      },
+      "auction_no_bids_seller": {
+        "title": "Вашият търг приключи без оферти",
+        "body": "{{title}}"
+      },
+      "auction_below_reserve": {
+        "title": "Търг приключи ПОД резерва",
+        "body": "{{title}} — наддавка €{{bid}} срещу резерв €{{reserve}} (под с €{{gap}})."
+      },
+      "auction_below_reserve_seller": {
+        "title": "Резервната цена не е достигната",
+        "body": "Имате 24ч да договорите с купувача — {{title}}"
+      },
+      "auction_below_reserve_buyer": {
+        "title": "Резервът не е достигнат",
+        "body": "Продавачът има 24ч да направи оферта — {{title}}"
+      },
+      "auction_sold_above_reserve": {
+        "title": "Търг ПРОДАДЕН над резерва",
+        "body": "{{title}} — €{{bid}} (+€{{margin}} над резерва)"
+      },
+      "auction_sold_no_reserve": {
+        "title": "Търг ПРОДАДЕН (без резерв)",
+        "body": "{{title}} — €{{bid}}"
+      },
+      "auction_sold_seller": {
+        "title": "Вашият автомобил е продаден",
+        "body": "{{title}} — €{{bid}}"
+      },
+      "auction_won": {
+        "title": "Спечелихте търга!",
+        "body": "{{title}} — €{{bid}}"
+      },
+      "outbid": {
+        "title": "Надигнаха ви",
+        "body": "Друг наддавач предложи по-висока цена за {{title}}"
+      }
+    }
   },
   "stripe": {
     "active_title": "Активна авторизация",

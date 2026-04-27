@@ -383,6 +383,22 @@ html[data-theme="dark"] .pill-verified {
     background: linear-gradient(135deg, hsl(var(--accent)) 0%, hsl(var(--accent-ink)) 100%);
 }
 
+/* "ДДС / VAT" badge — sits next to the time-left pill on cards/detail
+ * to flag VAT-inclusive listings. Same shape as the live-pill, distinct
+ * blue tint so it doesn't clash with green time/featured pills. */
+.pill-vat {
+    background: rgba(255, 255, 255, 0.94);
+    color: #1e3a8a;
+    border-color: #1e3a8a;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+}
+html[data-theme="dark"] .pill-vat {
+    background: rgba(0, 0, 0, 0.65);
+    color: #93c5fd;
+    border-color: #93c5fd;
+}
+
 @keyframes pulse {
     0% { box-shadow: 0 0 0 0 hsl(var(--accent) / 0.5); }
     50% { box-shadow: 0 0 0 5px hsl(var(--accent) / 0); }

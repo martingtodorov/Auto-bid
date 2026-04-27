@@ -38,6 +38,15 @@ export default function AuctionCard({ auction, compact = false }) {
             <span className="pill pill-live">{formatTimeLeft(tl, t)}</span>
           )}
           {auction.featured && !isSold && <span className="pill" data-testid={`featured-badge-${auction.id}`}>{t("auction.featured_badge")}</span>}
+          {auction.vat_status === "vat_inclusive" && (
+            <span
+              className="pill pill-vat"
+              data-testid={`vat-badge-${auction.id}`}
+              title={`VAT ${auction.vat_rate_pct || 20}%`}
+            >
+              {t("auction.vat_short", "ДДС")}
+            </span>
+          )}
           {auction.seller_is_verified_dealer && (
             <span className="pill pill-verified flex items-center gap-1" data-testid={`verified-dealer-${auction.id}`}>
               <Shield size={10} /> {t("auction.verified_dealer")}
