@@ -53,6 +53,7 @@ class AuctionCreate(BaseModel):
     starting_bid_eur: float
     reserve_eur: Optional[float] = None
     no_reserve: Optional[bool] = False
+    buy_now_eur: Optional[float] = None  # Optional "Buy it now" price (net, without VAT)
     vat_status: Optional[str] = None  # "exempt" | "vat_inclusive"
     vat_rate_pct: Optional[float] = None  # e.g. 20.0 — used when vat_status == "vat_inclusive"
     price_net_eur: Optional[float] = None  # legacy, kept for back-compat
@@ -60,6 +61,7 @@ class AuctionCreate(BaseModel):
     duration_days: int = 10
     contact_email: EmailStr
     contact_phone: str = Field(min_length=5, max_length=32)
+    vin: str = Field(min_length=11, max_length=17)  # VIN — required for every listing
 
 
 class BidCreate(BaseModel):
@@ -86,6 +88,7 @@ class AuctionUpdate(BaseModel):
     starting_bid_eur: Optional[float] = None
     reserve_eur: Optional[float] = None
     no_reserve: Optional[bool] = None
+    buy_now_eur: Optional[float] = None
     vat_status: Optional[str] = None
     vat_rate_pct: Optional[float] = None
     price_net_eur: Optional[float] = None
@@ -128,6 +131,7 @@ class AdminAuctionUpdate(BaseModel):
     starting_bid_eur: Optional[float] = None
     reserve_eur: Optional[float] = None
     no_reserve: Optional[bool] = None
+    buy_now_eur: Optional[float] = None
     vat_status: Optional[str] = None
     vat_rate_pct: Optional[float] = None
     price_net_eur: Optional[float] = None

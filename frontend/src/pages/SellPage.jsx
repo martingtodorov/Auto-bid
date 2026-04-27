@@ -79,6 +79,7 @@ const emptyForm = (user) => ({
   images_interior: [],
   starting_bid_eur: 5000, reserve_eur: "",
   no_reserve: false,
+  buy_now_eur: "",
   vat_status: "exempt",         // "exempt" | "vat_inclusive"
   vat_rate_pct: 20,
   price_net_eur: "",
@@ -181,6 +182,7 @@ export default function SellPage() {
         starting_bid_eur: Number(form.starting_bid_eur),
         reserve_eur: (form.no_reserve || !form.reserve_eur) ? null : Number(form.reserve_eur),
         no_reserve: !!form.no_reserve,
+        buy_now_eur: form.buy_now_eur ? Number(form.buy_now_eur) : null,
         vat_status: form.vat_status || "exempt",
         vat_rate_pct: form.vat_status === "vat_inclusive" && form.vat_rate_pct ? Number(form.vat_rate_pct) : null,
         price_net_eur: null,
@@ -188,6 +190,7 @@ export default function SellPage() {
         duration_days: Number(form.duration_days),
         contact_email: form.contact_email.trim(),
         contact_phone: form.contact_phone.trim(),
+        vin: (form.vin || "").trim().toUpperCase(),
       };
       await api.post("/auctions", payload);
       setSubmitted(true);
@@ -340,16 +343,6 @@ export default function SellPage() {
                 {COUNTRIES.map((o) => <option key={o} value={o}>{o}</option>)}
               </select>
             </Field>
-            <Field label={t("sell.form.starting_bid_eur")}>
-              <input type="number" required value={form.starting_bid_eur} onChange={(e) => set("starting_bid_eur", e.target.value)} className={inputCls} data-testid="sell-starting-bid" />
-            </Field>
-            <Field label={t("sell.form.reserve_eur")}>
-              <input type="number" value={form.reserve_eur} disabled={form.no_reserve} onChange={(e) => set("reserve_eur", e.target.value)} className={`${inputCls} ${form.no_reserve ? "opacity-50" : ""}`} data-testid="sell-reserve" />
-              <label className="mt-2 flex items-center gap-2 text-xs text-[hsl(var(--ink-muted))] cursor-pointer">
-                <input type="checkbox" checked={!!form.no_reserve} onChange={(e) => set("no_reserve", e.target.checked)} data-testid="sell-no-reserve" />
-                {t("sell.form.no_reserve_label")}
-              </label>
-            </Field>
             <Field label={t("sell.form.vat_status")} span={2}>
               <div className="rounded-card border border-[hsl(var(--line))] bg-[hsl(var(--surface))] p-4">
                 <div className="flex gap-3 flex-wrap" data-testid="sell-vat-status">
@@ -382,8 +375,63 @@ export default function SellPage() {
                 )}
               </div>
             </Field>
+            <Field label={t("sell.form.starting_bid_eur")}>
+              <input type="number" required value={form.starting_bid_eur} onChange={(e) => set("starting_bid_eur", e.target.value)} className={inputCls} data-testid="sell-starting-bid" />
+              {form.vat_status === "vat_inclusive" && Number(form.starting_bid_eur) > 0 && Number(form.vat_rate_pct) > 0 && (
+                <p className="mt-1.5 text-xs text-[hsl(var(--accent-ink))]" data-testid="sell-starting-bid-gross">
+                  {t("sell.form.with_vat_hint", "С ДДС {{rate}}%: {{amount}} €", {
+                    rate: form.vat_rate_pct,
+                    amount: Math.round(Number(form.starting_bid_eur) * (1 + Number(form.vat_rate_pct) / 100)).toLocaleString("bg-BG"),
+                  })}
+                </p>
+              )}
+            </Field>
+            <Field label={t("sell.form.reserve_eur")}>
+              <input type="number" value={form.reserve_eur} disabled={form.no_reserve} onChange={(e) => set("reserve_eur", e.target.value)} className={`${inputCls} ${form.no_reserve ? "opacity-50" : ""}`} data-testid="sell-reserve" />
+              {!form.no_reserve && form.vat_status === "vat_inclusive" && Number(form.reserve_eur) > 0 && Number(form.vat_rate_pct) > 0 && (
+                <p className="mt-1.5 text-xs text-[hsl(var(--accent-ink))]" data-testid="sell-reserve-gross">
+                  {t("sell.form.with_vat_hint", "С ДДС {{rate}}%: {{amount}} €", {
+                    rate: form.vat_rate_pct,
+                    amount: Math.round(Number(form.reserve_eur) * (1 + Number(form.vat_rate_pct) / 100)).toLocaleString("bg-BG"),
+                  })}
+                </p>
+              )}
+              <label className="mt-2 flex items-center gap-2 text-xs text-[hsl(var(--ink-muted))] cursor-pointer">
+                <input type="checkbox" checked={!!form.no_reserve} onChange={(e) => set("no_reserve", e.target.checked)} data-testid="sell-no-reserve" />
+                {t("sell.form.no_reserve_label")}
+              </label>
+            </Field>
+            <Field label={t("sell.form.buy_now_eur", "Купи сега (без ДДС, EUR) — по избор")} span={2}>
+              <input
+                type="number"
+                value={form.buy_now_eur}
+                onChange={(e) => set("buy_now_eur", e.target.value)}
+                className={inputCls}
+                placeholder={t("sell.form.buy_now_placeholder", "Оставете празно, ако не желаете моментална покупка")}
+                data-testid="sell-buy-now"
+              />
+              {form.buy_now_eur && Number(form.buy_now_eur) > 0 && form.vat_status === "vat_inclusive" && Number(form.vat_rate_pct) > 0 && (
+                <p className="mt-1.5 text-xs text-[hsl(var(--accent-ink))]" data-testid="sell-buy-now-gross">
+                  {t("sell.form.with_vat_hint", "С ДДС {{rate}}%: {{amount}} €", {
+                    rate: form.vat_rate_pct,
+                    amount: Math.round(Number(form.buy_now_eur) * (1 + Number(form.vat_rate_pct) / 100)).toLocaleString("bg-BG"),
+                  })}
+                </p>
+              )}
+              <p className="mt-1.5 text-xs text-[hsl(var(--ink-muted))]">{t("sell.form.buy_now_hint", "Купувачът може да приключи търга веднага на тази цена. Трябва да е поне колкото резерва и началната цена.")}</p>
+            </Field>
             <Field label={t("sell.form.vin")} span={2}>
-              <input value={form.vin} onChange={(e) => set("vin", e.target.value.toUpperCase())} className={inputCls} maxLength={17} placeholder={t("sell.form.vin_placeholder")} data-testid="sell-vin" />
+              <input
+                value={form.vin}
+                onChange={(e) => set("vin", e.target.value.toUpperCase())}
+                className={inputCls}
+                maxLength={17}
+                minLength={11}
+                required
+                placeholder={t("sell.form.vin_placeholder")}
+                data-testid="sell-vin"
+              />
+              <p className="mt-1.5 text-xs text-[hsl(var(--ink-muted))]">{t("sell.form.vin_required_hint", "VIN номерът е задължителен. Само латински букви и цифри (без I, O, Q), 11–17 знака.")}</p>
             </Field>
             <Field label="" span={2}>
               <div className="rounded-card border border-[hsl(var(--line))] bg-[hsl(var(--surface))] p-4">

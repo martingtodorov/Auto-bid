@@ -702,6 +702,31 @@ async def create_auction(request: Request, payload: AuctionCreate, user: dict = 
     if doc.get("no_reserve"):
         doc["reserve_eur"] = None
 
+    # ---- VIN validation (required for every listing) ----
+    vin_raw = (doc.get("vin") or "").strip().upper()
+    if not vin_raw:
+        raise HTTPException(status_code=400, detail="VIN номерът е задължителен")
+    # Allow legacy 11-char Bulgarian frames AND modern 17-char ISO 3779 VINs;
+    # reject obvious garbage (must be alphanumeric, no spaces/dashes).
+    if not re.match(r"^[A-HJ-NPR-Z0-9]{11,17}$", vin_raw):
+        raise HTTPException(status_code=400, detail="VIN може да съдържа само цифри и латински букви (без I, O, Q), 11–17 знака")
+    doc["vin"] = vin_raw
+
+    # ---- Buy-now sanity check ----
+    if doc.get("buy_now_eur") is not None:
+        try:
+            bn = float(doc["buy_now_eur"])
+        except Exception:
+            bn = 0
+        if bn <= 0:
+            doc["buy_now_eur"] = None
+        else:
+            if doc.get("reserve_eur") and bn < float(doc["reserve_eur"]):
+                raise HTTPException(status_code=400, detail="Цена 'Купи сега' трябва да е поне колкото резерва.")
+            if bn < float(doc.get("starting_bid_eur") or 0):
+                raise HTTPException(status_code=400, detail="Цена 'Купи сега' трябва да е поне колкото началната цена.")
+            doc["buy_now_eur"] = round(bn, 2)
+
     # ---- Validate make is in the known catalog (if any makes seeded) ----
     known_make = await db.makes.find_one({"name": doc.get("make", "")}, {"_id": 0, "name": 1})
     total_makes = await db.makes.count_documents({})
@@ -1449,6 +1474,60 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
                         logger.error("send_sms failed: %s", e)
 
     return {"ok": True, "bid": public_bid, "preauth_amount_eur": fee_amount, "buyer_fee_eur": fee_amount}
+
+
+@api.post("/auctions/{auction_id}/buy-now")
+@limiter.limit("10/minute")
+async def buy_now(auction_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Instantly purchase an auction at its 'Купи сега' price. Ends the auction
+    and assigns the buyer as the winner. Buyer's premium is computed on the
+    gross (incl. VAT) price and pre-authorised on the user's saved card.
+    """
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Търгът не е намерен")
+    if _auction_status(a) != "live":
+        raise HTTPException(status_code=400, detail="Само активни търгове поддържат 'Купи сега'.")
+    if user["id"] == a.get("seller_id"):
+        raise HTTPException(status_code=400, detail="Не можете да закупите собствения си автомобил.")
+    bn = a.get("buy_now_eur")
+    if not bn or float(bn) <= 0:
+        raise HTTPException(status_code=400, detail="Тази обява няма зададена цена 'Купи сега'.")
+    bn = float(bn)
+    if float(a.get("current_bid_eur") or 0) > bn:
+        raise HTTPException(status_code=400, detail="Текущата наддавка вече надвишава цената 'Купи сега'.")
+    now = datetime.now(timezone.utc)
+    fee_amount = _buyer_fee_on_auction(bn, a)
+    update = {
+        "status": "sold",
+        "current_bid_eur": bn,
+        "high_bidder_id": user["id"],
+        "high_bidder_name": user["name"],
+        "ends_at": now.isoformat(),
+        "sold_at": now.isoformat(),
+        "sold_via_buy_now": True,
+        "bid_count": int(a.get("bid_count") or 0) + 1,
+    }
+    await db.auctions.update_one({"id": auction_id}, {"$set": update})
+    await hub.broadcast(auction_id, {
+        "type": "buy_now",
+        "auction_id": auction_id,
+        "buyer_name": user["name"],
+        "amount_eur": bn,
+        "ends_at": now.isoformat(),
+    })
+    seller_id = a.get("seller_id")
+    if seller_id and seller_id != "platform":
+        try:
+            seller = await db.users.find_one({"id": seller_id}, {"_id": 0, "email": 1, "name": 1})
+            if seller and seller.get("email"):
+                await email_seller_new_bid(
+                    seller["email"], seller.get("name", ""), a["title"], auction_id,
+                    user["name"], bn, update["bid_count"],
+                )
+        except Exception as e:
+            logger.warning("buy-now seller email failed: %s", e)
+    return {"ok": True, "auction_id": auction_id, "amount_eur": bn, "buyer_fee_eur": fee_amount}
 
 
 @api.get("/auctions/{auction_id}/next-bid")

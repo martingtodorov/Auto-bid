@@ -29,6 +29,7 @@ export default function AuctionDetailPage() {
   const [tl, setTl] = useState({ label: "" });
   const [error, setError] = useState("");
   const [placing, setPlacing] = useState(false);
+  const [buyingNow, setBuyingNow] = useState(false);
   const [showPreauth, setShowPreauth] = useState(false);
   const [wsStatus, setWsStatus] = useState("connecting");
   const [watching, setWatching] = useState(false);
@@ -148,6 +149,26 @@ export default function AuctionDetailPage() {
       const { data } = await api.post(`/auctions/${id}/watch`);
       setWatching(!!data.watching);
     } catch (e) {}
+  };
+
+  const onBuyNow = async () => {
+    if (!user) { navigate("/login?next=/auctions/" + id); return; }
+    if (!a?.buy_now_eur) return;
+    const grossPrice = a.vat_status === "vat_inclusive" ? Math.round(Number(a.buy_now_eur) * (1 + Number(a.vat_rate_pct || 0) / 100)) : Number(a.buy_now_eur);
+    const confirmMsg = t("auction.buy_now_confirm", "Сигурни ли сте, че искате да купите този автомобил веднага за {{price}} €?", { price: grossPrice.toLocaleString("bg-BG") });
+    if (!window.confirm(confirmMsg)) return;
+    setBuyingNow(true);
+    setError("");
+    try {
+      await api.post(`/auctions/${id}/buy-now`);
+      // server broadcasts via WS; refresh anyway
+      const { data } = await api.get(`/auctions/${id}`);
+      setA(data);
+    } catch (e) {
+      setError(formatError(e));
+    } finally {
+      setBuyingNow(false);
+    }
   };
 
   // WebSocket for real-time updates
@@ -625,6 +646,32 @@ export default function AuctionDetailPage() {
                     )}
 
                     {error && <p className="text-xs text-[hsl(var(--danger))] mt-2" data-testid="bid-error">{error}</p>}
+                  </div>
+                )}
+
+                {/* Buy now — instant purchase at the seller's "Купи сега" price */}
+                {isLive && a.buy_now_eur && Number(a.buy_now_eur) > 0 && Number(a.current_bid_eur || 0) <= Number(a.buy_now_eur) && (
+                  <div className="mt-5 rounded-card border-2 border-[hsl(var(--accent))] bg-[hsl(var(--accent-soft))]/40 p-4" data-testid="buy-now-block">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Zap size={16} className="text-[hsl(var(--accent))]" />
+                      <span className="overline text-[hsl(var(--accent-ink))] font-semibold">{t("auction.buy_now_title", "Купи сега")}</span>
+                    </div>
+                    <div className="font-serif text-3xl text-[hsl(var(--ink))]" data-testid="buy-now-price">{formatEUR(a.buy_now_eur)}</div>
+                    {vatRate > 0 && (
+                      <div className="text-xs text-[hsl(var(--ink-muted))] font-mono mt-0.5">
+                        {t("auction.price_with_vat", "С ДДС {{rate}}%", { rate: vatRate })}: <span className="text-[hsl(var(--ink))] font-semibold">{formatEUR(grossOf(a.buy_now_eur))}</span>
+                      </div>
+                    )}
+                    <p className="text-xs text-[hsl(var(--ink-muted))] mt-2">{t("auction.buy_now_hint", "Купувайте веднага без да чакате края на търга. Резервът се счита за изпълнен.")}</p>
+                    <button
+                      onClick={onBuyNow}
+                      disabled={!user || buyingNow}
+                      className="mt-3 w-full btn btn-primary !bg-[hsl(var(--accent))] !text-black hover:!bg-[hsl(var(--accent))]/85 disabled:opacity-50 flex items-center justify-center gap-2"
+                      data-testid="buy-now-btn"
+                    >
+                      <Zap size={14} />
+                      {buyingNow ? t("auction.buy_now_processing", "Обработваме…") : !user ? t("auction.login_to_buy", "Влез, за да закупиш") : t("auction.buy_now_action", "Закупи сега за {{price}}", { price: formatEUR(vatRate > 0 ? grossOf(a.buy_now_eur) : a.buy_now_eur) })}
+                    </button>
                   </div>
                 )}
 
