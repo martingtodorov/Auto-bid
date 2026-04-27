@@ -498,12 +498,14 @@ async def facets():
     transmissions = await db.auctions.distinct("transmission")
     regions = await db.auctions.distinct("region")
     body_types = await db.auctions.distinct("body_type")
+    def _clean(values):
+        return sorted(v for v in values if v)
     return {
-        "makes": sorted(makes),
-        "fuels": sorted(fuels),
-        "transmissions": sorted(transmissions),
-        "regions": sorted(regions),
-        "body_types": sorted(body_types),
+        "makes": _clean(makes),
+        "fuels": _clean(fuels),
+        "transmissions": _clean(transmissions),
+        "regions": _clean(regions),
+        "body_types": _clean(body_types),
     }
 
 @api.get("/auctions/{auction_id}")
