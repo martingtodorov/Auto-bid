@@ -91,7 +91,12 @@ export default function Nav() {
             )}
           </div>
 
-          <button className="md:hidden" onClick={() => setOpen(!open)} data-testid="mobile-menu-toggle">
+          <button
+            className="md:hidden -m-3 p-3 flex items-center justify-center"
+            onClick={() => setOpen(!open)}
+            data-testid="mobile-menu-toggle"
+            aria-label="Menu"
+          >
             {open ? <X size={22} /> : <Menu size={22} />}
           </button>
         </div>

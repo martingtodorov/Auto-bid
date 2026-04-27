@@ -280,7 +280,12 @@ async def list_auctions(
     paginated: int = 0,
 ):
     viewer = await get_optional_user(request)
+    viewer_is_admin = viewer and viewer.get("role") in ("admin", "moderator")
     query = {}
+    # Hide archived listings at DB level for non-admins (admins see them via the dedicated archive tab).
+    if not viewer_is_admin:
+        query["is_archived"] = {"$ne": True}
+        query["status"] = {"$ne": "archived"}
     if make: query["make"] = make
     if fuel: query["fuel"] = fuel
     if transmission: query["transmission"] = transmission
@@ -310,7 +315,6 @@ async def list_auctions(
     items = [_public_auction(a, viewer) for a in items]
 
     # Hide non-public statuses from public listings (pending/rejected/withdrawn/removed/cancelled/paused)
-    viewer_is_admin = viewer and viewer.get("role") in ("admin", "moderator")
     if not viewer_is_admin:
         items = [a for a in items if a["status"] in ("live", "ended", "sold", "reserve_not_met") and not a.get("is_archived")]
 
@@ -343,10 +347,14 @@ async def list_auctions(
 @api.get("/auctions/featured")
 async def featured(request: Request):
     viewer = await get_optional_user(request)
-    # Fetch more than needed then filter in Python for computed "live" status
-    raw = await db.auctions.find({"featured": True}, {"_id": 0}).limit(30).to_list(30)
+    # Fetch more than needed then filter in Python for computed "live" status.
+    # Exclude archived listings up-front so they never appear in featured rails.
+    raw = await db.auctions.find(
+        {"featured": True, "is_archived": {"$ne": True}, "status": {"$ne": "archived"}},
+        {"_id": 0},
+    ).limit(30).to_list(30)
     items = [_public_auction(a, viewer) for a in raw]
-    live = [a for a in items if a["status"] == "live"]
+    live = [a for a in items if a["status"] == "live" and not a.get("is_archived")]
     live = live[:6]
     await _enrich_dealer_status(live)
     return live
@@ -367,7 +375,7 @@ async def sold(
     offset: int = 0,
 ):
     viewer = await get_optional_user(request)
-    query: dict = {"status": "sold"}
+    query: dict = {"status": "sold", "is_archived": {"$ne": True}}
     if make: query["make"] = make
     if body_type: query["body_type"] = body_type
     if fuel: query["fuel"] = fuel
@@ -406,7 +414,7 @@ async def sold(
 @api.get("/stats/sold")
 async def stats_sold(days: Optional[int] = None):
     """Public aggregate statistics for sold auctions. Optional `days` window."""
-    match: dict = {"status": "sold"}
+    match: dict = {"status": "sold", "is_archived": {"$ne": True}}
     if days and days > 0:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=int(days))).isoformat()
         match["finalized_at"] = {"$gte": cutoff}
@@ -513,6 +521,10 @@ async def get_auction(auction_id: str, request: Request):
     viewer = await get_optional_user(request)
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     if not a:
+        raise HTTPException(status_code=404, detail="Търгът не е намерен")
+    # Hide archived listings from non-admins (and the seller too — they should restore via /my-listings if needed)
+    viewer_is_admin = viewer and viewer.get("role") in ("admin", "moderator")
+    if (a.get("is_archived") or a.get("status") == "archived") and not viewer_is_admin:
         raise HTTPException(status_code=404, detail="Търгът не е намерен")
     # Phase 4: views counter (increment once per request; bots included is ok for MVP)
     try:
@@ -2103,6 +2115,7 @@ async def admin_bulk_hard_delete(payload: dict, request: Request, admin: dict = 
     if not ids:
         raise HTTPException(status_code=400, detail="ids[] е задължителен")
     from services import bidding as bidding_svc
+    from helpers import audit_log as _audit_log
     deleted = []
     refused = []
     for aid in ids:
@@ -2120,7 +2133,7 @@ async def admin_bulk_hard_delete(payload: dict, request: Request, admin: dict = 
         await db.vin_requests.delete_many({"auction_id": aid})
         await db.auctions.delete_one({"id": aid})
         deleted.append(aid)
-        await audit_log(
+        await _audit_log(
             db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
             action="auction.hard_delete_bulk", target_type="auction", target_id=aid,
             details={"title": a.get("title")}, ip=request.client.host if request.client else "",
