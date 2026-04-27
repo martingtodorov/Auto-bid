@@ -803,8 +803,9 @@ def _normalize(val: str, mapping: dict, default: str = "") -> str:
 
 @api.post("/auctions/import-mobile-bg")
 @limiter.limit("10/minute")
-async def import_from_mobile_bg(request: Request, payload: MobileBgImport, user: dict = Depends(get_current_user)):
+async def import_from_mobile_bg(request: Request, payload: MobileBgImport):
     """Scrapes a mobile.bg listing URL and returns a dict of pre-filled auction fields.
+    Public helper — no auth needed; the actual auction creation later does require login.
     Does NOT include price (user must set it themselves)."""
     from bs4 import BeautifulSoup
     import re as _re
