@@ -746,6 +746,19 @@ async def create_auction(request: Request, payload: AuctionCreate, user: dict = 
         "is_archived": False,
     })
     await db.auctions.insert_one(doc)
+    # In-app notification → admins for moderation queue
+    try:
+        from routers.inbox import notify_admins as _notify_admins
+        await _notify_admins(
+            db,
+            type="listing_pending",
+            title="Нова обява за одобрение",
+            body=f"{user['name']}: {doc.get('title')}",
+            auction_id=auction_id,
+            link=f"/admin?tab=pending",
+        )
+    except Exception as e:
+        logger.warning("notify_admins (pending) failed: %s", e)
     return {"id": auction_id, "status": "pending"}
 
 
@@ -3005,6 +3018,21 @@ async def _finalize_expired_auctions_once():
                 {"id": auction_id},
                 {"$set": {"status": "ended", "finalized_at": now_iso}},
             )
+            try:
+                from routers.inbox import notify_admins as _notify_admins, notify_user as _notify_user
+                await _notify_admins(
+                    db, type="auction_no_bids",
+                    title="Търг приключи без наддавки",
+                    body=f"{a.get('title','')} приключи без оферти.",
+                    auction_id=auction_id,
+                )
+                if a.get("seller_id") and a["seller_id"] != "platform":
+                    await _notify_user(db, user_id=a["seller_id"],
+                                       type="auction_no_bids_seller",
+                                       title="Вашият търг приключи без оферти",
+                                       body=a.get("title", ""), auction_id=auction_id)
+            except Exception as e:
+                logger.warning("notify ended-no-bids failed: %s", e)
             logger.info("Auto-finalized auction %s → ended (no bids)", auction_id)
             continue
 
@@ -3014,6 +3042,29 @@ async def _finalize_expired_auctions_once():
                 {"id": auction_id},
                 {"$set": {"status": "reserve_not_met", "finalized_at": now_iso}},
             )
+            try:
+                from routers.inbox import notify_admins as _notify_admins, notify_user as _notify_user
+                gap = float(reserve) - current_bid
+                await _notify_admins(
+                    db, type="auction_below_reserve",
+                    title="Търг приключи ПОД резерва",
+                    body=f"{a.get('title','')} — наддавка €{int(current_bid):,} срещу резерв €{int(reserve):,} (под с €{int(gap):,}).",
+                    auction_id=auction_id,
+                )
+                if a.get("seller_id") and a["seller_id"] != "platform":
+                    await _notify_user(db, user_id=a["seller_id"],
+                                       type="auction_below_reserve_seller",
+                                       title="Резервната цена не е достигната",
+                                       body=f"Имате 24ч да договорите с купувача — {a.get('title','')}",
+                                       auction_id=auction_id)
+                if a.get("high_bidder_id"):
+                    await _notify_user(db, user_id=a["high_bidder_id"],
+                                       type="auction_below_reserve_buyer",
+                                       title="Резервът не е достигнат",
+                                       body=f"Продавачът има 24ч да направи оферта — {a.get('title','')}",
+                                       auction_id=auction_id)
+            except Exception as e:
+                logger.warning("notify reserve_not_met failed: %s", e)
             # Email both parties
             try:
                 seller = await db.users.find_one({"id": a.get("seller_id")}, {"_id": 0}) if a.get("seller_id") != "platform" else None
@@ -3044,6 +3095,28 @@ async def _finalize_expired_auctions_once():
             {"id": auction_id},
             {"$set": {"status": "sold", "finalized_at": now_iso}},
         )
+        try:
+            from routers.inbox import notify_admins as _notify_admins, notify_user as _notify_user
+            margin = current_bid - float(reserve) if has_reserve else 0
+            margin_label = f" (+€{int(margin):,} над резерва)" if has_reserve and margin > 0 else (" (без резерв)" if not has_reserve else "")
+            await _notify_admins(
+                db, type="auction_sold",
+                title="Търг ПРОДАДЕН над резерва" if has_reserve else "Търг ПРОДАДЕН (без резерв)",
+                body=f"{a.get('title','')} — €{int(current_bid):,}{margin_label}",
+                auction_id=auction_id,
+            )
+            if a.get("seller_id") and a["seller_id"] != "platform":
+                await _notify_user(db, user_id=a["seller_id"], type="auction_sold_seller",
+                                   title="Вашият автомобил е продаден",
+                                   body=f"{a.get('title','')} — €{int(current_bid):,}",
+                                   auction_id=auction_id)
+            if a.get("high_bidder_id"):
+                await _notify_user(db, user_id=a["high_bidder_id"], type="auction_won",
+                                   title="Спечелихте търга!",
+                                   body=f"{a.get('title','')} — €{int(current_bid):,}",
+                                   auction_id=auction_id)
+        except Exception as e:
+            logger.warning("notify sold failed: %s", e)
         # Release losing bidders' preauths (keep winner's active for capture)
         from services import bidding as bidding_svc
         await bidding_svc.release_losing_preauths(auction_id, a["high_bidder_id"])
@@ -3151,6 +3224,17 @@ api.include_router(_reviews_router.router)
 api.include_router(_admin_router.router)
 api.include_router(_seller_requests_router.router)
 api.include_router(_push_router.register_push_routes(get_current_user))
+
+# In-app notification inbox (durable per-user message log)
+from routers import inbox as _inbox_router
+_inbox = _inbox_router.build_inbox_router(db, get_current_user)
+app.include_router(_inbox)
+
+# Stripe Checkout — manual-capture authorization holds for bidding deposits.
+# Card data is collected ONLY by Stripe's hosted Checkout — never by our website.
+from routers import stripe_holds as _stripe_holds
+_stripe_router = _stripe_holds.build_stripe_router(db, get_current_user)
+app.include_router(_stripe_router)
 
 
 @api.get("/admin/bid-outbox")

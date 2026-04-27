@@ -607,6 +607,12 @@ export default function AuctionDetailPage() {
                         {placing ? "…" : t("auction.place_bid")}
                       </button>
                     </div>
+                    {vatRate > 0 && bidAmountGross > 0 && (
+                      <div className="mt-2 flex items-baseline justify-between gap-2 px-1" data-testid="bid-gross-preview">
+                        <span className="text-xs text-[hsl(var(--ink-muted))]">{t("auction.your_bid_with_vat", "С ДДС {{rate}}%", { rate: vatRate })}</span>
+                        <span className="font-mono text-sm font-semibold text-[hsl(var(--accent-ink))]">{formatEUR(bidAmountGross)}</span>
+                      </div>
+                    )}
                     <p className="text-xs text-[hsl(var(--ink-muted))] mt-2">{t("auction.min_next_bid", { min: nextBid.min_next_eur?.toLocaleString(intlLocale(i18n.language)), step: nextBid.step_eur?.toLocaleString(intlLocale(i18n.language)) })}</p>
 
                     <div className="mt-4 p-3 rounded-card bg-[hsl(var(--accent-soft))] border border-[hsl(var(--accent))]/20 flex items-start gap-2">

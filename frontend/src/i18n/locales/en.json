@@ -587,5 +587,23 @@
   "seo": {
     "all_auctions_title": "All auctions",
     "all_auctions_description": "Browse all active car auctions — filter by make, year, fuel and price."
+  },
+  "inbox": {
+    "overline": "Inbox",
+    "title": "Notifications",
+    "empty": "No notifications",
+    "mark_all_read": "Mark all read",
+    "view_all": "View all →",
+    "unread_count": "{{count}} unread"
+  },
+  "stripe": {
+    "active_title": "Active authorization",
+    "active_body": "Bidding limit: {{limit}} · Hold: {{hold}}",
+    "expires_at": "Valid until",
+    "authorize_title": "Activate bidding",
+    "authorize_hint": "Card is handled by Stripe — we never see it. We hold 2% of the limit (min. €150).",
+    "limit_label": "Maximum bid (EUR)",
+    "authorize_action": "Authorize via Stripe →",
+    "processing": "Redirecting to Stripe…"
   }
 }

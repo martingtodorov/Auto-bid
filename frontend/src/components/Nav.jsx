@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "../lib/auth";
 import LanguageSwitcher from "./LanguageSwitcher";
 import ThemeToggle from "./ThemeToggle";
+import NotificationBell from "./NotificationBell";
 import { brandTldForLang } from "../i18n";
 
 export default function Nav() {
@@ -75,6 +76,7 @@ export default function Nav() {
                 <Link to="/my-listings" className="text-sm whitespace-nowrap hidden xl:inline" data-testid="nav-my-listings">{t("nav.my_listings")}</Link>
                 <Link to="/watchlist" className="text-sm whitespace-nowrap hidden xl:inline" data-testid="nav-watchlist">{t("nav.watchlist")}</Link>
                 <Link to="/settings" className="text-sm whitespace-nowrap hidden xl:inline" data-testid="nav-settings">{t("nav.settings")}</Link>
+                <NotificationBell />
                 <Link to="/dashboard" className="flex items-center gap-1.5 text-sm whitespace-nowrap" data-testid="nav-dashboard">
                   <User size={16} />
                   <span className="max-w-[110px] truncate">{user.name}</span>

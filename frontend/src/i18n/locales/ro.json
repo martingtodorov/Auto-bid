@@ -587,5 +587,23 @@
   "seo": {
     "all_auctions_title": "Toate licitațiile",
     "all_auctions_description": "Răsfoiește toate licitațiile auto active — filtrează după marcă, an, combustibil și preț."
+  },
+  "inbox": {
+    "overline": "Notificări",
+    "title": "Notificări",
+    "empty": "Nu aveți notificări",
+    "mark_all_read": "Marchează toate",
+    "view_all": "Toate notificările →",
+    "unread_count": "{{count}} necitite"
+  },
+  "stripe": {
+    "active_title": "Autorizare activă",
+    "active_body": "Limită licitație: {{limit}} · Blocați: {{hold}}",
+    "expires_at": "Valabil până",
+    "authorize_title": "Activează licitarea",
+    "authorize_hint": "Cardul este procesat de Stripe — nu îl vedem niciodată. Blocăm 2% din limită (min. €150).",
+    "limit_label": "Ofertă maximă (EUR)",
+    "authorize_action": "Autorizează prin Stripe →",
+    "processing": "Redirecționăm către Stripe…"
   }
 }

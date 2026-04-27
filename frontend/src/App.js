@@ -24,6 +24,7 @@ import DashboardPage from "./pages/DashboardPage";
 import AdminPage from "./pages/AdminPage";
 import WatchlistPage from "./pages/WatchlistPage";
 import MyListingsPage from "./pages/MyListingsPage";
+import InboxPage from "./pages/InboxPage";
 import ProfilePage from "./pages/ProfilePage";
 import AccountSettingsPage from "./pages/AccountSettingsPage";
 import FAQPage from "./pages/FAQPage";
@@ -56,6 +57,7 @@ function App() {
               <Route path="/admin" element={<AdminPage />} />
               <Route path="/watchlist" element={<WatchlistPage />} />
               <Route path="/my-listings" element={<MyListingsPage />} />
+              <Route path="/inbox" element={<InboxPage />} />
               <Route path="/profile/:userId" element={<ProfilePage />} />
               <Route path="/settings" element={<AccountSettingsPage />} />
               <Route path="/faq" element={<FAQPage />} />
