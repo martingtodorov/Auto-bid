@@ -261,12 +261,12 @@ def register_routes():
         if q:
             rx = {"$regex": re.escape(q.strip()), "$options": "i"}
             query["$or"] = [{"name": rx}, {"email": rx}, {"phone": rx}]
-        items = await db.users.find(query, {"_id": 0, "password_hash": 0}).sort("created_at", -1).limit(500).to_list(500)
+        items = await db.users.find(query, {"_id": 0, "password_hash": 0, "totp_secret": 0, "totp_backup_codes": 0}).sort("created_at", -1).limit(500).to_list(500)
         return items
 
     @router.get("/admin/users/{user_id}")
     async def admin_get_user(user_id: str, _admin: dict = Depends(_require_admin_or_moderator)):
-        u = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+        u = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0, "totp_secret": 0, "totp_backup_codes": 0})
         if not u:
             raise HTTPException(status_code=404, detail="Потребителят не е намерен")
         return u

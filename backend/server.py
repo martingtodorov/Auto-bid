@@ -1889,7 +1889,7 @@ async def update_my_profile(payload: ProfileUpdate, user: dict = Depends(get_cur
         update["sms_opt_in"] = bool(payload.sms_opt_in)
     if update:
         await db.users.update_one({"id": user["id"]}, {"$set": update})
-    u = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0})
+    u = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0, "totp_secret": 0, "totp_backup_codes": 0})
     return u
 
 
