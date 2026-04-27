@@ -440,13 +440,13 @@ input:focus, select:focus, textarea:focus {
     100% { transform: translateX(-50%); }
 }
 .animate-marquee {
-    animation: marquee 180s linear infinite;
+    animation: marquee 360s linear infinite;
 }
 .animate-marquee:hover {
     animation-play-state: paused;
 }
 @media (max-width: 640px) {
-    .animate-marquee { animation-duration: 80s; }
+    .animate-marquee { animation-duration: 160s; }
 }
 
 /* Mobile-friendly horizontal swipe container for the ticker.
