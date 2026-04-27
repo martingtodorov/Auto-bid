@@ -111,6 +111,8 @@
     "vat_inclusive_badge": "VAT incl. {{rate}}%",
     "vat_exempt_badge": "VAT exempt",
     "vat_short": "VAT",
+    "without_vat": "ex. VAT",
+    "buy_now_short": "Buy now",
     "price_with_vat": "With VAT {{rate}}%",
     "buyer_fee_label": "Buyer's fee",
     "buyer_fee_detail": "{{pct}}% of the bid (min. €{{min}}, max. €{{max}}) — pre-authorised on your card. Fully released if you lose.",

@@ -111,6 +111,8 @@
     "vat_inclusive_badge": "С ДДС {{rate}}%",
     "vat_exempt_badge": "Освободена от ДДС",
     "vat_short": "ДДС",
+    "without_vat": "без ДДС",
+    "buy_now_short": "Купи сега",
     "price_with_vat": "С ДДС {{rate}}%",
     "buyer_fee_label": "Такса на купувача",
     "buyer_fee_detail": "{{pct}}% от наддаването (мин. €{{min}}, макс. €{{max}}) — блокирани върху картата. При загуба се освобождават изцяло.",

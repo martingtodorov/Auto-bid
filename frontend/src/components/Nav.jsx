@@ -93,6 +93,13 @@ export default function Nav() {
             )}
           </div>
 
+          {/* Mobile-only bell — visible right next to the hamburger */}
+          {user && (
+            <div className="md:hidden">
+              <NotificationBell />
+            </div>
+          )}
+
           <button
             className="md:hidden -m-3 p-3 flex items-center justify-center"
             onClick={() => setOpen(!open)}

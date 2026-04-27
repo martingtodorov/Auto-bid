@@ -111,6 +111,8 @@
     "vat_inclusive_badge": "Cu TVA {{rate}}%",
     "vat_exempt_badge": "Scutit de TVA",
     "vat_short": "TVA",
+    "without_vat": "fără TVA",
+    "buy_now_short": "Cumpără acum",
     "price_with_vat": "Cu TVA {{rate}}%",
     "buyer_fee_label": "Taxă cumpărător",
     "buyer_fee_detail": "{{pct}}% din ofertă (min. €{{min}}, max. €{{max}}) — blocați pe card. În caz de pierdere se eliberează integral.",

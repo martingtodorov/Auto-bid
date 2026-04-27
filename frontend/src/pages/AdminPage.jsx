@@ -52,15 +52,24 @@ export default function AdminPage() {
     try { const { data } = await api.get("/admin/sold"); setSold(data); }
     catch (e) { setErr(formatError(e)); }
   }, []);
+  const [allOffset, setAllOffset] = useState(0);
+  const [allTotal, setAllTotal] = useState(0);
+  const ALL_PAGE_SIZE = 25;
+
   const loadAll = useCallback(async () => {
     try {
-      const params = {};
+      const params = { paginated: 1, limit: ALL_PAGE_SIZE, offset: allOffset };
       if (allQuery) params.q = allQuery;
       if (allStatusFilter) params.status = allStatusFilter;
       const { data } = await api.get("/admin/auctions", { params });
-      setAllListings(data);
+      const items = Array.isArray(data) ? data : (data?.items || []);
+      setAllListings(items);
+      setAllTotal(Array.isArray(data) ? items.length : Number(data?.total || items.length));
     } catch (e) { setErr(formatError(e)); }
-  }, [allQuery, allStatusFilter]);
+  }, [allQuery, allStatusFilter, allOffset]);
+
+  // Reset offset when query/status changes (avoid pagination "stuck" after filter change)
+  useEffect(() => { setAllOffset(0); }, [allQuery, allStatusFilter]);
 
   useEffect(() => {
     if (user?.role === "admin") {
@@ -466,6 +475,36 @@ export default function AdminPage() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Pagination — visible only when total exceeds one page */}
+            {allTotal > ALL_PAGE_SIZE && (
+              <div className="mt-6 flex items-center justify-between gap-3 flex-wrap" data-testid="admin-all-pagination">
+                <div className="text-xs text-[hsl(var(--ink-muted))] font-mono">
+                  {allOffset + 1}–{Math.min(allOffset + allListings.length, allTotal)} {t("forms.of", "от")} {allTotal}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setAllOffset(Math.max(0, allOffset - ALL_PAGE_SIZE))}
+                    disabled={allOffset === 0}
+                    className="btn btn-secondary !py-1.5 !px-4 text-xs disabled:opacity-40"
+                    data-testid="admin-all-prev"
+                  >
+                    {t("forms.prev", "← Предишна")}
+                  </button>
+                  <span className="text-xs font-mono px-2">
+                    {Math.floor(allOffset / ALL_PAGE_SIZE) + 1} / {Math.max(1, Math.ceil(allTotal / ALL_PAGE_SIZE))}
+                  </span>
+                  <button
+                    onClick={() => setAllOffset(allOffset + ALL_PAGE_SIZE)}
+                    disabled={allOffset + ALL_PAGE_SIZE >= allTotal}
+                    className="btn btn-secondary !py-1.5 !px-4 text-xs disabled:opacity-40"
+                    data-testid="admin-all-next"
+                  >
+                    {t("forms.next", "Следваща →")}
+                  </button>
+                </div>
               </div>
             )}
           </div>

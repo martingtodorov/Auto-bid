@@ -2167,7 +2167,20 @@ async def withdraw_listing(auction_id: str, user: dict = Depends(get_current_use
 
 
 @api.get("/admin/auctions")
-async def admin_list_all(q: Optional[str] = None, status: Optional[str] = None, include_archived: int = 0, _admin: dict = Depends(require_admin_or_moderator)):
+async def admin_list_all(
+    q: Optional[str] = None,
+    status: Optional[str] = None,
+    include_archived: int = 0,
+    limit: int = 25,
+    offset: int = 0,
+    paginated: int = 0,
+    _admin: dict = Depends(require_admin_or_moderator),
+):
+    """List auctions for admin panel.
+
+    Returns a flat list (legacy clients) by default. When `paginated=1`, returns
+    `{items, total, limit, offset}` so the admin UI can show pagination controls.
+    """
     query: dict = {}
     # Hide archived listings from the "All listings" tab — they live in their own Archive tab.
     if not include_archived:
@@ -2182,6 +2195,20 @@ async def admin_list_all(q: Optional[str] = None, status: Optional[str] = None, 
         import re
         rx = {"$regex": re.escape(q.strip()), "$options": "i"}
         query["$or"] = [{"title": rx}, {"make": rx}, {"model": rx}, {"seller_name": rx}, {"id": rx}]
+    limit = max(1, min(200, int(limit)))
+    offset = max(0, int(offset))
+    if paginated:
+        total = await db.auctions.count_documents(query)
+        items = (
+            await db.auctions.find(query, {"_id": 0})
+            .sort("created_at", -1)
+            .skip(offset)
+            .limit(limit)
+            .to_list(limit)
+        )
+        for a in items:
+            a["status"] = _auction_status(a)
+        return {"items": items, "total": int(total), "limit": limit, "offset": offset}
     items = await db.auctions.find(query, {"_id": 0}).sort("created_at", -1).limit(300).to_list(300)
     for a in items:
         a["status"] = _auction_status(a)

@@ -324,7 +324,7 @@ export default function ImageUploader({
             data-testid={`${testId}-add`}
           >
             <Upload size={18} />
-            <span className="text-[11px]">Добави</span>
+            <span className="text-[11px]">{t("forms.add", "Добави")}</span>
           </button>
         )}
       </div>
