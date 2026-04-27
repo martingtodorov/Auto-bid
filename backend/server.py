@@ -2049,10 +2049,17 @@ async def withdraw_listing(auction_id: str, user: dict = Depends(get_current_use
 
 
 @api.get("/admin/auctions")
-async def admin_list_all(q: Optional[str] = None, status: Optional[str] = None, _admin: dict = Depends(require_admin_or_moderator)):
-    query = {}
+async def admin_list_all(q: Optional[str] = None, status: Optional[str] = None, include_archived: int = 0, _admin: dict = Depends(require_admin_or_moderator)):
+    query: dict = {}
+    # Hide archived listings from the "All listings" tab — they live in their own Archive tab.
+    if not include_archived:
+        query["is_archived"] = {"$ne": True}
+        query["status"] = {"$ne": "archived"}
     if status:
+        # Allow explicit override via ?status=archived
         query["status"] = status
+        if status == "archived":
+            query.pop("is_archived", None)
     if q:
         import re
         rx = {"$regex": re.escape(q.strip()), "$options": "i"}
