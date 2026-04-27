@@ -109,28 +109,28 @@ html[data-theme="dark"] nav { background-color: hsl(var(--bg)) !important; }
 
 /* Buttons that are explicitly "secondary" / outlined keep dark surface */
 html[data-theme="dark"] .btn-secondary {
-    background-color: hsl(var(--surface)) !important;
+    background-color: transparent !important;
     color: hsl(var(--ink)) !important;
-    border-color: hsl(var(--line)) !important;
+    border-color: hsl(var(--ink) / 0.6) !important;
 }
 html[data-theme="dark"] .btn-secondary:hover {
-    background-color: hsl(var(--surface-2)) !important;
+    background-color: hsl(var(--ink)) !important;
+    color: #000 !important;
+    border-color: hsl(var(--ink)) !important;
 }
 
-/* Light primary buttons (e.g. "Place bid", "Browse auctions") — keep
- * dark background with white text in BOTH themes. The default rule
- * uses `hsl(var(--ink))` which would flip to white in dark mode, so
- * pin it to a fixed dark grey here. */
+/* Primary buttons in dark mode — switch to bright accent so they pop
+ * against pure black surfaces (Sign up / Place bid / Browse auctions). */
 html[data-theme="dark"] .btn-primary {
-    background: #111 !important;
-    color: #fff !important;
-    border-color: #111 !important;
-    box-shadow: none !important;
-}
-html[data-theme="dark"] .btn-primary:hover {
     background: hsl(var(--accent)) !important;
     color: #000 !important;
     border-color: hsl(var(--accent)) !important;
+    box-shadow: none !important;
+}
+html[data-theme="dark"] .btn-primary:hover {
+    background: hsl(var(--accent) / 0.85) !important;
+    color: #000 !important;
+    border-color: hsl(var(--accent) / 0.85) !important;
     box-shadow: none !important;
 }
 

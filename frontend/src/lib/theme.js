@@ -1,23 +1,44 @@
 /**
- * Theme manager — light / dark / system.
+ * Theme manager — light / dark.
  *
- * Sets `data-theme` on <html>; CSS reads it via the `html[data-theme="dark"]`
- * selector in index.css. Persists choice in localStorage; if the user picks
- * "system" we follow `prefers-color-scheme` and react to OS-level changes.
+ * Sets `data-theme` on <html>; CSS reads it via `html[data-theme="dark"]`
+ * in index.css. The user's choice is persisted in BOTH a first-party cookie
+ * (1 year, SameSite=Lax) AND localStorage so a re-login or a cross-tab flow
+ * carries the preference. Cookie is the source of truth — localStorage is
+ * a fallback for embedded WebViews where document.cookie is restricted.
  */
 const KEY = "ab.theme";
+const COOKIE = "ab_theme";
 const THEMES = ["light", "dark"];
+const ONE_YEAR = 60 * 60 * 24 * 365;
+
+function readCookie(name) {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith(name + "="));
+  return match ? decodeURIComponent(match.split("=")[1]) : null;
+}
+
+function writeCookie(name, value) {
+  if (typeof document === "undefined") return;
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${ONE_YEAR}; SameSite=Lax${secure}`;
+}
 
 export function getStoredTheme() {
-  if (typeof localStorage === "undefined") return "light";
-  const v = localStorage.getItem(KEY);
-  return THEMES.includes(v) ? v : "light";
+  const cookie = readCookie(COOKIE);
+  if (THEMES.includes(cookie)) return cookie;
+  if (typeof localStorage !== "undefined") {
+    const v = localStorage.getItem(KEY);
+    if (THEMES.includes(v)) return v;
+  }
+  return "light";
 }
 
 export function applyTheme(theme) {
   const eff = THEMES.includes(theme) ? theme : "light";
   document.documentElement.setAttribute("data-theme", eff);
-  // Mobile browser address-bar tint
   let meta = document.head.querySelector('meta[name="theme-color"]');
   if (!meta) {
     meta = document.createElement("meta");
@@ -29,7 +50,10 @@ export function applyTheme(theme) {
 
 export function setTheme(theme) {
   if (!THEMES.includes(theme)) theme = "light";
-  localStorage.setItem(KEY, theme);
+  writeCookie(COOKIE, theme);
+  if (typeof localStorage !== "undefined") {
+    try { localStorage.setItem(KEY, theme); } catch (e) {}
+  }
   applyTheme(theme);
   window.dispatchEvent(new CustomEvent("ab:theme-changed", { detail: { theme } }));
 }
