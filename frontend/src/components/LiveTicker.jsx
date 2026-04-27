@@ -25,7 +25,7 @@ export default function LiveTicker() {
   return (
     <div className="bg-black text-white overflow-hidden border-b border-[hsl(var(--line))]" data-testid="live-ticker">
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 h-9 flex items-center gap-4">
-        <div className="flex-1 overflow-hidden relative">
+        <div className="flex-1 overflow-hidden relative ticker-scroll">
           <div className="flex gap-10 whitespace-nowrap animate-marquee">
             {loop.map((a, i) => (
               <Link key={i} to={`/auctions/${a.id}`} className="flex items-center gap-3 text-xs font-mono text-white/80 hover:text-white transition" data-testid={`ticker-item-${i}`}>
