@@ -152,6 +152,7 @@ export default function Nav() {
                 </Link>
                 <Link to="/my-listings" onClick={() => setOpen(false)} className="block py-2 text-sm" data-testid="mobile-nav-my-listings">{t("nav.my_listings")}</Link>
                 <Link to="/watchlist" onClick={() => setOpen(false)} className="block py-2 text-sm" data-testid="mobile-nav-watchlist">{t("nav.watchlist")}</Link>
+                <Link to="/inbox" onClick={() => setOpen(false)} className="block py-2 text-sm" data-testid="mobile-nav-inbox">{t("nav.notifications", t("inbox.title", "Известия"))}</Link>
                 <Link to="/settings" onClick={() => setOpen(false)} className="block py-2 text-sm" data-testid="mobile-nav-settings">{t("nav.settings")}</Link>
               </div>
             )}

@@ -77,14 +77,20 @@ export default function AuctionCard({ auction, compact = false }) {
               {isSold ? t("auction.sold_for") : t("auction.current_bid_label")}
             </div>
             <div className="font-serif text-2xl mt-1 flex items-baseline gap-1.5" data-testid={`auction-price-${auction.id}`}>
-              {formatEUR(auction.current_bid_eur)}
+              {auction.vat_status === "vat_inclusive" && Number(auction.vat_rate_pct) > 0
+                ? formatEUR(Math.round(Number(auction.current_bid_eur || 0) * (1 + Number(auction.vat_rate_pct) / 100)))
+                : formatEUR(auction.current_bid_eur)}
               {auction.vat_status === "vat_inclusive" && (
                 <span className="text-[10px] uppercase tracking-wider text-[hsl(var(--ink-muted))] font-sans font-semibold">
-                  {t("auction.without_vat", "без ДДС")}
+                  {t("auction.incl_vat", "вкл. ДДС")}
                 </span>
               )}
             </div>
-            <div className="text-xs text-[hsl(var(--ink-muted))] font-mono">{formatLocal(auction.current_bid_eur, lang)}</div>
+            <div className="text-xs text-[hsl(var(--ink-muted))] font-mono">
+              {auction.vat_status === "vat_inclusive" && Number(auction.vat_rate_pct) > 0
+                ? formatLocal(Math.round(Number(auction.current_bid_eur || 0) * (1 + Number(auction.vat_rate_pct) / 100)), lang)
+                : formatLocal(auction.current_bid_eur, lang)}
+            </div>
             {!isSold && auction.buy_now_eur && Number(auction.buy_now_eur) > Number(auction.current_bid_eur || 0) && (
               <div
                 className="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[hsl(var(--accent-soft))] border border-[hsl(var(--accent))]/30 text-[11px] font-semibold text-[hsl(var(--accent-ink))]"
@@ -92,7 +98,11 @@ export default function AuctionCard({ auction, compact = false }) {
                 title={t("auction.buy_now_title", "Купи сега")}
               >
                 <Zap size={11} />
-                <span>{t("auction.buy_now_short", "Купи сега")}: {formatEUR(auction.buy_now_eur)}</span>
+                <span>{t("auction.buy_now_short", "Купи сега")}: {formatEUR(
+                  auction.vat_status === "vat_inclusive" && Number(auction.vat_rate_pct) > 0
+                    ? Math.round(Number(auction.buy_now_eur) * (1 + Number(auction.vat_rate_pct) / 100))
+                    : auction.buy_now_eur
+                )}</span>
               </div>
             )}
           </div>

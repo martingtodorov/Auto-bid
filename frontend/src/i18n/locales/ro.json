@@ -112,6 +112,7 @@
     "vat_exempt_badge": "Scutit de TVA",
     "vat_short": "TVA",
     "without_vat": "fără TVA",
+    "incl_vat": "incl. TVA",
     "buy_now_short": "Cumpără acum",
     "price_with_vat": "Cu TVA {{rate}}%",
     "buyer_fee_label": "Taxă cumpărător",
@@ -598,6 +599,19 @@
     "mark_all_read": "Marchează toate",
     "view_all": "Toate notificările →",
     "unread_count": "{{count}} necitite"
+  },
+  "dashboard": {
+    "overline": "Profil",
+    "greeting": "Bună, {{name}}",
+    "stats": {
+      "bids": "Oferte",
+      "active": "Licitații active",
+      "won": "Câștigate"
+    },
+    "history_title": "Istoricul ofertelor mele",
+    "empty_bids": "Nu aveți oferte încă.",
+    "browse_auctions": "Răsfoiți licitațiile →",
+    "auction_link": "Licitația #{{id}}"
   },
   "notifications": {
     "types": {

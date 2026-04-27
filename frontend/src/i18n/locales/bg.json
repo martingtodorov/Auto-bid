@@ -112,6 +112,7 @@
     "vat_exempt_badge": "Освободена от ДДС",
     "vat_short": "ДДС",
     "without_vat": "без ДДС",
+    "incl_vat": "вкл. ДДС",
     "buy_now_short": "Купи сега",
     "price_with_vat": "С ДДС {{rate}}%",
     "buyer_fee_label": "Такса на купувача",
@@ -598,6 +599,19 @@
     "mark_all_read": "Маркирай всички",
     "view_all": "Всички известия →",
     "unread_count": "{{count}} непрочетени"
+  },
+  "dashboard": {
+    "overline": "Профил",
+    "greeting": "Здравейте, {{name}}",
+    "stats": {
+      "bids": "Наддавания",
+      "active": "Активни търгове",
+      "won": "Печеливши"
+    },
+    "history_title": "История на моите наддавания",
+    "empty_bids": "Все още нямате наддавания.",
+    "browse_auctions": "Разгледайте търговете →",
+    "auction_link": "Търг #{{id}}"
   },
   "notifications": {
     "types": {

@@ -227,11 +227,17 @@ export default function AuctionDetailPage() {
   const startBid = () => {
     setError("");
     if (!user) { navigate("/login?next=/auctions/" + id); return; }
-    const amt = Number(bidAmount);
-    const min = nextBid.min_next_eur || (Math.floor(a.current_bid_eur) + bidStepFor(a.current_bid_eur));
-    if (!amt || amt < min) { setError(`Минималната следваща наддавка е €${min}`); return; }
-    // If credit covers this bid — skip preauth modal and post directly
-    if (credit && Number(credit.max_amount_eur) >= amt) {
+    // The user types a GROSS (incl. VAT) amount when the listing is VAT-inclusive.
+    // The backend always tracks bids in NET — so convert here before validation.
+    const typed = Number(bidAmount);
+    const netAmt = vatRate > 0 ? typed / (1 + vatRate / 100) : typed;
+    const minNet = nextBid.min_next_eur || (Math.floor(a.current_bid_eur) + bidStepFor(a.current_bid_eur));
+    if (!typed || netAmt < minNet - 0.5) {
+      const minDisplay = vatRate > 0 ? Math.ceil(minNet * (1 + vatRate / 100)) : minNet;
+      setError(`${t("auction.min_bid_error", "Минималната следваща наддавка е")} €${minDisplay.toLocaleString()}`);
+      return;
+    }
+    if (credit && Number(credit.max_amount_eur) >= netAmt) {
       confirmBid(null);
       return;
     }
@@ -242,7 +248,9 @@ export default function AuctionDetailPage() {
     setShowPreauth(false);
     setPlacing(true);
     try {
-      const payload = { amount_eur: Number(bidAmount) };
+      const typed = Number(bidAmount);
+      const netAmt = vatRate > 0 ? Math.round(typed / (1 + vatRate / 100)) : typed;
+      const payload = { amount_eur: netAmt };
       if (paymentMethodId) payload.payment_method_id = paymentMethodId;
       await api.post(`/auctions/${id}/bids`, payload);
     } catch (e) {
@@ -564,13 +572,18 @@ export default function AuctionDetailPage() {
 
                 <div className="mt-6">
                   <div className="overline text-[hsl(var(--ink-muted))]">{a.status === "sold" ? t("auction.sold_for") : t("auction.current_bid_label")}</div>
-                  <div className="font-serif text-5xl mt-2" data-testid="current-bid">{formatEUR(a.current_bid_eur)}</div>
-                  <div className="text-sm text-[hsl(var(--ink-muted))] font-mono mt-1">{formatLocal(a.current_bid_eur, i18n.language)}</div>
-                  {vatRate > 0 && currentBidGross > 0 && (
-                    <div className="mt-3 p-3 rounded-card border border-[hsl(var(--line))] bg-[hsl(var(--surface))]" data-testid="vat-gross-block">
-                      <div className="overline text-[hsl(var(--ink-muted))]">{t("auction.price_with_vat", "С ДДС {{rate}}%", { rate: vatRate })}</div>
-                      <div className="font-serif text-2xl mt-0.5">{formatEUR(currentBidGross)}</div>
-                      <div className="text-xs text-[hsl(var(--ink-muted))] font-mono mt-0.5">{formatLocal(currentBidGross, i18n.language)}</div>
+                  <div className="font-serif text-5xl mt-2 flex items-baseline gap-2 flex-wrap" data-testid="current-bid">
+                    {formatEUR(vatRate > 0 ? currentBidGross : a.current_bid_eur)}
+                    {vatRate > 0 && (
+                      <span className="text-[11px] uppercase tracking-wider text-[hsl(var(--ink-muted))] font-sans font-semibold">
+                        {t("auction.incl_vat", "вкл. ДДС")} {vatRate}%
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-sm text-[hsl(var(--ink-muted))] font-mono mt-1">{formatLocal(vatRate > 0 ? currentBidGross : a.current_bid_eur, i18n.language)}</div>
+                  {vatRate > 0 && (
+                    <div className="mt-2 text-xs text-[hsl(var(--ink-muted))]" data-testid="vat-net-block">
+                      {t("auction.without_vat_label", "Без ДДС")}: <span className="font-mono text-[hsl(var(--ink))]">{formatEUR(a.current_bid_eur)}</span>
                     </div>
                   )}
                   {a.high_bidder_name && (
@@ -592,12 +605,16 @@ export default function AuctionDetailPage() {
 
                 {isLive && (
                   <div className="mt-6 rule-t pt-5">
-                    <label className="overline text-[hsl(var(--ink-muted))] block mb-2">{t("auction.your_bid_eur")}</label>
+                    <label className="overline text-[hsl(var(--ink-muted))] block mb-2">
+                      {vatRate > 0
+                        ? t("auction.your_bid_eur_gross", "Вашата наддавка (EUR, вкл. ДДС {{rate}}%)", { rate: vatRate })
+                        : t("auction.your_bid_eur")}
+                    </label>
                     <div className="flex gap-2">
                       <input
                         type="number"
-                        min={nextBid.min_next_eur}
-                        step={nextBid.step_eur}
+                        min={vatRate > 0 ? Math.ceil(Number(nextBid.min_next_eur || 0) * (1 + vatRate / 100)) : nextBid.min_next_eur}
+                        step={vatRate > 0 ? Math.max(1, Math.round(Number(nextBid.step_eur || 0) * (1 + vatRate / 100))) : nextBid.step_eur}
                         value={bidAmount}
                         onChange={(e) => setBidAmount(e.target.value)}
                         className="flex-1 border border-[hsl(var(--line))] h-12 px-3 text-base"
@@ -607,13 +624,16 @@ export default function AuctionDetailPage() {
                         {placing ? "…" : t("auction.place_bid")}
                       </button>
                     </div>
-                    {vatRate > 0 && bidAmountGross > 0 && (
-                      <div className="mt-2 flex items-baseline justify-between gap-2 px-1" data-testid="bid-gross-preview">
-                        <span className="text-xs text-[hsl(var(--ink-muted))]">{t("auction.your_bid_with_vat", "С ДДС {{rate}}%", { rate: vatRate })}</span>
-                        <span className="font-mono text-sm font-semibold text-[hsl(var(--accent-ink))]">{formatEUR(bidAmountGross)}</span>
+                    {vatRate > 0 && Number(bidAmount) > 0 && (
+                      <div className="mt-2 flex items-baseline justify-between gap-2 px-1" data-testid="bid-net-preview">
+                        <span className="text-xs text-[hsl(var(--ink-muted))]">{t("auction.without_vat_label", "Без ДДС")}</span>
+                        <span className="font-mono text-sm text-[hsl(var(--ink))]">{formatEUR(Math.round(Number(bidAmount) / (1 + vatRate / 100)))}</span>
                       </div>
                     )}
-                    <p className="text-xs text-[hsl(var(--ink-muted))] mt-2">{t("auction.min_next_bid", { min: nextBid.min_next_eur?.toLocaleString(intlLocale(i18n.language)), step: nextBid.step_eur?.toLocaleString(intlLocale(i18n.language)) })}</p>
+                    <p className="text-xs text-[hsl(var(--ink-muted))] mt-2">{t("auction.min_next_bid", {
+                      min: (vatRate > 0 ? Math.ceil(Number(nextBid.min_next_eur || 0) * (1 + vatRate / 100)) : Number(nextBid.min_next_eur || 0)).toLocaleString(intlLocale(i18n.language)),
+                      step: (vatRate > 0 ? Math.round(Number(nextBid.step_eur || 0) * (1 + vatRate / 100)) : Number(nextBid.step_eur || 0)).toLocaleString(intlLocale(i18n.language)),
+                    })}</p>
 
                     <div className="mt-4 p-3 rounded-card bg-[hsl(var(--accent-soft))] border border-[hsl(var(--accent))]/20 flex items-start gap-2">
                       <Shield size={14} className="text-[hsl(var(--accent))] shrink-0 mt-0.5" />
@@ -662,10 +682,17 @@ export default function AuctionDetailPage() {
                       <Zap size={16} className="text-[hsl(var(--accent))]" />
                       <span className="overline text-[hsl(var(--accent-ink))] font-semibold">{t("auction.buy_now_title", "Купи сега")}</span>
                     </div>
-                    <div className="font-serif text-3xl text-[hsl(var(--ink))]" data-testid="buy-now-price">{formatEUR(a.buy_now_eur)}</div>
+                    <div className="font-serif text-3xl text-[hsl(var(--ink))] flex items-baseline gap-2 flex-wrap" data-testid="buy-now-price">
+                      {formatEUR(vatRate > 0 ? grossOf(a.buy_now_eur) : a.buy_now_eur)}
+                      {vatRate > 0 && (
+                        <span className="text-[10px] uppercase tracking-wider text-[hsl(var(--ink-muted))] font-sans font-semibold">
+                          {t("auction.incl_vat", "вкл. ДДС")} {vatRate}%
+                        </span>
+                      )}
+                    </div>
                     {vatRate > 0 && (
                       <div className="text-xs text-[hsl(var(--ink-muted))] font-mono mt-0.5">
-                        {t("auction.price_with_vat", "С ДДС {{rate}}%", { rate: vatRate })}: <span className="text-[hsl(var(--ink))] font-semibold">{formatEUR(grossOf(a.buy_now_eur))}</span>
+                        {t("auction.without_vat_label", "Без ДДС")}: <span className="text-[hsl(var(--ink))]">{formatEUR(a.buy_now_eur)}</span>
                       </div>
                     )}
                     <p className="text-xs text-[hsl(var(--ink-muted))] mt-2">{t("auction.buy_now_hint", "Купувайте веднага без да чакате края на търга. Резервът се счита за изпълнен.")}</p>

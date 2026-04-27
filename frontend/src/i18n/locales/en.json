@@ -112,6 +112,7 @@
     "vat_exempt_badge": "VAT exempt",
     "vat_short": "VAT",
     "without_vat": "ex. VAT",
+    "incl_vat": "incl. VAT",
     "buy_now_short": "Buy now",
     "price_with_vat": "With VAT {{rate}}%",
     "buyer_fee_label": "Buyer's fee",
@@ -598,6 +599,19 @@
     "mark_all_read": "Mark all read",
     "view_all": "View all →",
     "unread_count": "{{count}} unread"
+  },
+  "dashboard": {
+    "overline": "Profile",
+    "greeting": "Hello, {{name}}",
+    "stats": {
+      "bids": "Bids",
+      "active": "Active auctions",
+      "won": "Won"
+    },
+    "history_title": "My bidding history",
+    "empty_bids": "You haven't placed any bids yet.",
+    "browse_auctions": "Browse auctions →",
+    "auction_link": "Auction #{{id}}"
   },
   "notifications": {
     "types": {

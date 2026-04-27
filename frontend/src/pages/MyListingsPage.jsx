@@ -54,7 +54,13 @@ export default function MyListingsPage() {
 
   const startEdit = (a) => {
     setEditing(a.id);
-    setEditForm({ title: a.title, description: a.description, starting_bid_eur: a.starting_bid_eur, reserve_eur: a.reserve_eur || "" });
+    setEditForm({
+      title: a.title,
+      description: a.description,
+      starting_bid_eur: a.starting_bid_eur,
+      reserve_eur: a.reserve_eur || "",
+      buy_now_eur: a.buy_now_eur || "",
+    });
   };
   const saveEdit = async (id) => {
     setErr("");
