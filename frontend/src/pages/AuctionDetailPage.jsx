@@ -283,7 +283,15 @@ export default function AuctionDetailPage() {
   ];
 
   const isLive = a.status === "live";
-  const preauthPreview = buyerFeeFor(Number(bidAmount));
+  // VAT helpers — when an auction is sold WITH VAT (vat_inclusive),
+  // the bid amount is treated as net and the gross is what the buyer
+  // actually pays. Buyer fee + preauth are computed on the GROSS so
+  // the platform charges its commission on the full price.
+  const vatRate = a.vat_status === "vat_inclusive" ? Number(a.vat_rate_pct || 0) : 0;
+  const grossOf = (net) => Math.round(Number(net || 0) * (1 + vatRate / 100));
+  const currentBidGross = grossOf(a.current_bid_eur);
+  const bidAmountGross = grossOf(Number(bidAmount));
+  const preauthPreview = buyerFeeFor(bidAmountGross);
   const hasPendingCounterForMe = false;  // superseded by NegotiationPortal
   const isAdmin = user?.role === "admin";
 
@@ -521,6 +529,15 @@ export default function AuctionDetailPage() {
                     : <span className="pill pill-live">{formatTimeLeft(tl, t)}</span>}
                   {a.has_reserve && <span className="pill" data-testid="with-reserve">{t("auction.with_reserve")}</span>}
                   {a.has_reserve === false && <span className="pill no-reserve-gradient" data-testid="no-reserve">{t("auction.no_reserve_badge")}</span>}
+                  {a.vat_status === "vat_inclusive" ? (
+                    <span className="pill" data-testid="vat-inclusive" style={{ background: "hsl(var(--accent-soft))", color: "hsl(var(--accent-ink))", borderColor: "hsl(var(--accent))" }}>
+                      {t("auction.vat_inclusive_badge", "С ДДС {{rate}}%", { rate: vatRate })}
+                    </span>
+                  ) : a.vat_status === "exempt" ? (
+                    <span className="pill" data-testid="vat-exempt">
+                      {t("auction.vat_exempt_badge", "Освободена от ДДС")}
+                    </span>
+                  ) : null}
                   <span className="overline text-[hsl(var(--ink-muted))] ml-auto">{a.bid_count || 0} {t("auction.bids_word")}</span>
                 </div>
 
@@ -528,6 +545,13 @@ export default function AuctionDetailPage() {
                   <div className="overline text-[hsl(var(--ink-muted))]">{a.status === "sold" ? t("auction.sold_for") : t("auction.current_bid_label")}</div>
                   <div className="font-serif text-5xl mt-2" data-testid="current-bid">{formatEUR(a.current_bid_eur)}</div>
                   <div className="text-sm text-[hsl(var(--ink-muted))] font-mono mt-1">{formatLocal(a.current_bid_eur, i18n.language)}</div>
+                  {vatRate > 0 && currentBidGross > 0 && (
+                    <div className="mt-3 p-3 rounded-card border border-[hsl(var(--line))] bg-[hsl(var(--surface))]" data-testid="vat-gross-block">
+                      <div className="overline text-[hsl(var(--ink-muted))]">{t("auction.price_with_vat", "С ДДС {{rate}}%", { rate: vatRate })}</div>
+                      <div className="font-serif text-2xl mt-0.5">{formatEUR(currentBidGross)}</div>
+                      <div className="text-xs text-[hsl(var(--ink-muted))] font-mono mt-0.5">{formatLocal(currentBidGross, i18n.language)}</div>
+                    </div>
+                  )}
                   {a.high_bidder_name && (
                     <div className="mt-2 text-xs text-[hsl(var(--ink-muted))]">{t("auction.leading_bidder")}: <span className="text-[hsl(var(--ink))]">{a.high_bidder_name}</span></div>
                   )}
@@ -569,6 +593,11 @@ export default function AuctionDetailPage() {
                       <div className="text-xs leading-relaxed">
                         <div className="font-semibold text-[hsl(var(--accent-ink))]">{t("auction.buyer_fee_label")} {formatEUR(preauthPreview)}</div>
                         <div className="text-[hsl(var(--ink-muted))] mt-0.5">{t("auction.buyer_fee_detail", { pct: settings.buyer_fee_pct, min: settings.buyer_fee_min_eur, max: settings.buyer_fee_max_eur })}</div>
+                        {vatRate > 0 && bidAmountGross > 0 && (
+                          <div className="text-[hsl(var(--ink-muted))] mt-1">
+                            {t("auction.buyer_fee_on_gross", "Изчислено върху цена с ДДС: {{gross}}", { gross: formatEUR(bidAmountGross) })}
+                          </div>
+                        )}
                       </div>
                     </div>
 

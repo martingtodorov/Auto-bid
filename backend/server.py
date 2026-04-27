@@ -196,6 +196,24 @@ def _buyer_fee(amount_eur: float) -> float:
     )
 
 
+def _gross_amount(net_eur: float, auction: dict) -> float:
+    """Apply VAT rate to the bid when an auction is sold WITH VAT.
+    For VAT-exempt listings the gross equals the net.
+    """
+    if auction.get("vat_status") != "vat_inclusive":
+        return float(net_eur or 0)
+    rate = auction.get("vat_rate_pct") or 0
+    try:
+        return round(float(net_eur or 0) * (1 + float(rate) / 100.0), 2)
+    except Exception:
+        return float(net_eur or 0)
+
+
+def _buyer_fee_on_auction(amount_eur: float, auction: dict) -> float:
+    """Buyer's premium charged on the gross (incl. VAT) price."""
+    return _buyer_fee(_gross_amount(amount_eur, auction))
+
+
 def _auction_status(a: dict) -> str:
     from helpers import auction_status as _as
     return _as(a)
@@ -668,11 +686,15 @@ async def create_auction(request: Request, payload: AuctionCreate, user: dict = 
     if vat and vat not in ("exempt", "vat_inclusive"):
         raise HTTPException(status_code=400, detail="vat_status трябва да е 'exempt' или 'vat_inclusive'")
     if vat == "vat_inclusive":
-        if not doc.get("price_net_eur") or not doc.get("price_gross_eur"):
-            raise HTTPException(status_code=400, detail="За 'неосвободена от ДДС' са задължителни нетна и брутна цена")
-        if float(doc["price_gross_eur"]) <= float(doc["price_net_eur"]):
-            raise HTTPException(status_code=400, detail="Брутната цена трябва да е по-голяма от нетната")
+        rate = doc.get("vat_rate_pct")
+        if rate is None or float(rate) <= 0 or float(rate) > 50:
+            raise HTTPException(status_code=400, detail="ДДС % трябва да е между 1 и 50")
+        doc["vat_rate_pct"] = float(rate)
+        # legacy net/gross fields no longer used
+        doc["price_net_eur"] = None
+        doc["price_gross_eur"] = None
     else:
+        doc["vat_rate_pct"] = None
         doc["price_net_eur"] = None
         doc["price_gross_eur"] = None
 
@@ -1159,7 +1181,8 @@ async def create_or_increase_credit(auction_id: str, payload: BiddingCreditCreat
 
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat()
-    preauth_amount = round(float(payload.max_amount_eur) * 0.02, 2)
+    # Buyer's premium (preauth) is computed on the gross — incl. VAT for vat_inclusive auctions
+    preauth_amount = _buyer_fee_on_auction(payload.max_amount_eur, a)
 
     existing = await db.bidding_credits.find_one(
         {"auction_id": auction_id, "user_id": user["id"], "status": "authorized"},
@@ -1259,7 +1282,7 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
         raise HTTPException(status_code=402, detail="Необходима е валидна карта за наддаване")
 
     bid_id = str(uuid.uuid4())
-    fee_amount = _buyer_fee(amount)
+    fee_amount = _buyer_fee_on_auction(amount, a)
 
     # Release this user's previous active preauths on this auction (only if not credit-backed)
     if not credit_covers:
@@ -1430,7 +1453,7 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
 @api.get("/auctions/{auction_id}/next-bid")
 async def next_bid_info(auction_id: str):
     """Returns the minimum next valid bid amount and the estimated buyer fee for it."""
-    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0, "current_bid_eur": 1, "ends_at": 1, "status": 1})
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0, "current_bid_eur": 1, "ends_at": 1, "status": 1, "vat_status": 1, "vat_rate_pct": 1})
     if not a:
         raise HTTPException(status_code=404, detail="Търгът не е намерен")
     current = float(a.get("current_bid_eur", 0))
@@ -1440,7 +1463,10 @@ async def next_bid_info(auction_id: str):
         "current_bid_eur": current,
         "step_eur": step,
         "min_next_eur": min_next,
-        "buyer_fee_eur": _buyer_fee(min_next),
+        "buyer_fee_eur": _buyer_fee_on_auction(min_next, a),
+        "vat_status": a.get("vat_status"),
+        "vat_rate_pct": a.get("vat_rate_pct"),
+        "min_next_eur_gross": _gross_amount(min_next, a),
     }
 
 

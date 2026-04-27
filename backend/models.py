@@ -54,8 +54,9 @@ class AuctionCreate(BaseModel):
     reserve_eur: Optional[float] = None
     no_reserve: Optional[bool] = False
     vat_status: Optional[str] = None  # "exempt" | "vat_inclusive"
-    price_net_eur: Optional[float] = None
-    price_gross_eur: Optional[float] = None
+    vat_rate_pct: Optional[float] = None  # e.g. 20.0 — used when vat_status == "vat_inclusive"
+    price_net_eur: Optional[float] = None  # legacy, kept for back-compat
+    price_gross_eur: Optional[float] = None  # legacy, kept for back-compat
     duration_days: int = 10
     contact_email: EmailStr
     contact_phone: str = Field(min_length=5, max_length=32)
@@ -86,6 +87,7 @@ class AuctionUpdate(BaseModel):
     reserve_eur: Optional[float] = None
     no_reserve: Optional[bool] = None
     vat_status: Optional[str] = None
+    vat_rate_pct: Optional[float] = None
     price_net_eur: Optional[float] = None
     price_gross_eur: Optional[float] = None
     images: Optional[List[str]] = None
@@ -127,6 +129,7 @@ class AdminAuctionUpdate(BaseModel):
     reserve_eur: Optional[float] = None
     no_reserve: Optional[bool] = None
     vat_status: Optional[str] = None
+    vat_rate_pct: Optional[float] = None
     price_net_eur: Optional[float] = None
     price_gross_eur: Optional[float] = None
     current_bid_eur: Optional[float] = None

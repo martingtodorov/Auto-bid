@@ -210,10 +210,10 @@ export default function LandingPage() {
             </p>
           </div>
           <div className="lg:col-span-5 lg:justify-self-end flex flex-wrap gap-3">
-            <Link to="/register" className="btn !border-white bg-white !text-black hover:!bg-[hsl(var(--accent))] hover:!text-black hover:!border-[hsl(var(--accent))]" data-testid="cta-register">
+            <Link to="/register" className="btn !border-white !bg-[#fff] !text-[#0a0a0a] hover:!bg-[hsl(var(--accent))] hover:!text-[#0a0a0a] hover:!border-[hsl(var(--accent))]" data-testid="cta-register">
               {t("cta.register_free")}
             </Link>
-            <Link to="/sell" className="btn !border-white/60 bg-transparent !text-white hover:!bg-white hover:!text-black" data-testid="cta-sell">
+            <Link to="/sell" className="btn !border-white/60 bg-transparent !text-white hover:!bg-[#fff] hover:!text-[#0a0a0a]" data-testid="cta-sell">
               {t("cta.sell_car")}
             </Link>
           </div>

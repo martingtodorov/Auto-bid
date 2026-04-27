@@ -127,7 +127,7 @@ function DefaultHowItWorks({ pct, brand, t }) {
       <section className="bg-[hsl(var(--ink))] text-white">
         <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-10 py-20 flex flex-col md:flex-row items-center justify-between gap-8">
           <h2 className="hero-headline text-4xl lg:text-5xl">{t("how_it_works.cta_title")}</h2>
-          <Link to="/register" className="btn !border-white bg-white !text-[hsl(var(--ink))] hover:!bg-[hsl(var(--accent))] hover:!text-white hover:!border-[hsl(var(--accent))]">{t("how_it_works.cta_btn")}</Link>
+          <Link to="/register" className="btn !border-white !bg-[#fff] !text-[#0a0a0a] hover:!bg-[hsl(var(--accent))] hover:!text-white hover:!border-[hsl(var(--accent))]">{t("how_it_works.cta_btn")}</Link>
         </div>
       </section>
     </main>

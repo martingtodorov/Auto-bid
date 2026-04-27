@@ -80,6 +80,7 @@ const emptyForm = (user) => ({
   starting_bid_eur: 5000, reserve_eur: "",
   no_reserve: false,
   vat_status: "exempt",         // "exempt" | "vat_inclusive"
+  vat_rate_pct: 20,
   price_net_eur: "",
   price_gross_eur: "",
   duration_days: 10,
@@ -181,8 +182,9 @@ export default function SellPage() {
         reserve_eur: (form.no_reserve || !form.reserve_eur) ? null : Number(form.reserve_eur),
         no_reserve: !!form.no_reserve,
         vat_status: form.vat_status || "exempt",
-        price_net_eur: form.vat_status === "vat_inclusive" && form.price_net_eur ? Number(form.price_net_eur) : null,
-        price_gross_eur: form.vat_status === "vat_inclusive" && form.price_gross_eur ? Number(form.price_gross_eur) : null,
+        vat_rate_pct: form.vat_status === "vat_inclusive" && form.vat_rate_pct ? Number(form.vat_rate_pct) : null,
+        price_net_eur: null,
+        price_gross_eur: null,
         duration_days: Number(form.duration_days),
         contact_email: form.contact_email.trim(),
         contact_phone: form.contact_phone.trim(),
@@ -359,15 +361,23 @@ export default function SellPage() {
                   ))}
                 </div>
                 {form.vat_status === "vat_inclusive" && (
-                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="sell-vat-prices">
-                    <div>
-                      <label className="overline text-[hsl(var(--ink-muted))] block mb-1.5">{t("sell.form.vat_net_price")}</label>
-                      <input type="number" required value={form.price_net_eur} onChange={(e) => set("price_net_eur", e.target.value)} className={inputCls} data-testid="sell-price-net" />
+                  <div className="mt-4" data-testid="sell-vat-rate-block">
+                    <label className="overline text-[hsl(var(--ink-muted))] block mb-1.5">{t("sell.form.vat_rate_pct", "ДДС %")}</label>
+                    <div className="relative max-w-[200px]">
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="50"
+                        required
+                        value={form.vat_rate_pct}
+                        onChange={(e) => set("vat_rate_pct", e.target.value)}
+                        className={`${inputCls} pr-10`}
+                        data-testid="sell-vat-rate"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[hsl(var(--ink-muted))] font-mono text-sm">%</span>
                     </div>
-                    <div>
-                      <label className="overline text-[hsl(var(--ink-muted))] block mb-1.5">{t("sell.form.vat_gross_price")}</label>
-                      <input type="number" required value={form.price_gross_eur} onChange={(e) => set("price_gross_eur", e.target.value)} className={inputCls} data-testid="sell-price-gross" />
-                    </div>
+                    <p className="mt-1.5 text-xs text-[hsl(var(--ink-muted))]">{t("sell.form.vat_rate_hint", "Процент ДДС, който се добавя върху наддавката (напр. 20).")}</p>
                   </div>
                 )}
               </div>
