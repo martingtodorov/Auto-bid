@@ -536,3 +536,33 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 ### Test credentials added
 - `chattest3@test.bg` / `chatpass1` — used to seed the chat thread shown in screenshots.
 
+
+
+## Security hardening — 28 Apr 2026
+
+### C3 — JWT в httpOnly cookie + CSRF (double-submit)
+- **Backend** (`/app/backend/routers/auth.py`):
+  - Помощни функции `_set_auth_cookies()` / `_clear_auth_cookies()` (`access_token` HttpOnly + `csrf_token` JS-readable, `Secure`, `SameSite=Lax`, `Max-Age=7d`).
+  - `/auth/login`, `/auth/register`, `/auth/2fa/verify` записват двете cookies при успех (токенът все още се връща в body за миграционна съвместимост).
+  - Нови `POST /auth/logout` (изчиства cookies) и `GET /auth/csrf` (връща/възстановява CSRF токен).
+- **CSRF middleware** в `/app/backend/server.py`: за `POST/PUT/PATCH/DELETE` под `/api/*` се изисква `X-CSRF-Token` header равен на `csrf_token` cookie (timing-safe `hmac.compare_digest`). Освободени са: `/api/webhooks/*`, `/api/auth/login|register|forgot-password|reset-password|2fa/verify|csrf`, както и заявки с `Authorization: Bearer ...` (не са уязвими към CSRF).
+- **Frontend**:
+  - `apiClient.js` — `withCredentials: true`, axios interceptor чете `csrf_token` cookie и поставя `X-CSRF-Token` header при мутиращи методи.
+  - `auth.js` — `refresh()` извиква `/auth/me` безусловно и разчита на cookies; `logout()` извиква `/auth/logout`. Стари `localStorage` токени се изчистват при login/register (миграция).
+  - `LanguageSwitcher.jsx` използва `useAuth().user` вместо `localStorage.autobid_token`.
+
+### M1 / M2 — Email enumeration prevention
+- `/auth/login`: при липсващ потребител се изпълнява bcrypt срещу `_DUMMY_BCRYPT_HASH`, за да се изравни времето за отговор. Съобщенията за грешка вече са еднакви (`"Грешен имейл или парола"`).
+- `/auth/forgot-password` (вече беше унифициран) — отговорът е идентичен независимо дали имейлът съществува.
+
+### M4 — DOMPurify за CMS контент
+- `LandingPage.jsx`: hero headline, който идва от настройките на сайта, се санитизира чрез `DOMPurify.sanitize()` с whitelist от `br/em/strong/span/b/i` и атрибут само `class`.
+- Добавена зависимост `dompurify@^3.4.1`.
+
+### P0 — JSON-LD без availability
+- `seo.js → buildVehicleJsonLd()` повече **не** включва `offer.availability`. Запазени остават `price`, `priceCurrency`, `priceValidUntil`, `itemCondition`, `seller`, `priceSpecification` (когато има резерв).
+- Решение: Google генерира некоректни "Sold out" warnings за активни търгове; цената сама по себе си е достатъчна за Rich Price snippet.
+
+### Тест статус
+- `/app/test_reports/iteration_9.json` — 15/16 backend pytest passed (1 skipped — banned user fixture), Playwright E2E flows OK.
+- Тестов файл: `/app/backend/tests/test_security_c3_csrf.py`.
