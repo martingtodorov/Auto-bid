@@ -1212,7 +1212,18 @@ async def import_from_mobile_bg(request: Request, payload: MobileBgImport):
 
 # ---- Bids ----
 @api.get("/auctions/{auction_id}/bids")
-async def list_bids(auction_id: str):
+async def list_bids(auction_id: str, request: Request):
+    # Hide bid history for archived listings — only admins/moderators can see.
+    a = await db.auctions.find_one(
+        {"id": auction_id},
+        {"_id": 0, "is_archived": 1, "status": 1},
+    )
+    if not a:
+        raise HTTPException(status_code=404, detail="Търгът не е намерен")
+    if a.get("is_archived") or a.get("status") == "archived":
+        viewer = await get_optional_user(request)
+        if not (viewer and viewer.get("role") in ("admin", "moderator")):
+            raise HTTPException(status_code=404, detail="Търгът не е намерен")
     from services import bidding as bidding_svc
     return await bidding_svc.list_bids(auction_id, limit=50)
 
@@ -1631,10 +1642,14 @@ async def translate_comment(comment_id: str, request: Request, lang: str = Query
 
 
 @api.get("/auctions/{auction_id}/comments")
-async def list_comments(auction_id: str):
-    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0, "seller_id": 1})
+async def list_comments(auction_id: str, request: Request):
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0, "seller_id": 1, "is_archived": 1, "status": 1})
     if not a:
         raise HTTPException(status_code=404, detail="Търгът не е намерен")
+    if a.get("is_archived") or a.get("status") == "archived":
+        viewer = await get_optional_user(request)
+        if not (viewer and viewer.get("role") in ("admin", "moderator")):
+            raise HTTPException(status_code=404, detail="Търгът не е намерен")
     items = await db.comments.find({"auction_id": auction_id}, {"_id": 0}).sort("created_at", -1).limit(200).to_list(200)
     return [_public_comment(c, a) for c in items]
 
