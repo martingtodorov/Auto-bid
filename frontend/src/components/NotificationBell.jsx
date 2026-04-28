@@ -76,7 +76,7 @@ export default function NotificationBell() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
-        className="relative w-10 h-10 rounded-full border border-[hsl(var(--line))] hover:bg-[hsl(var(--surface))] transition-colors flex items-center justify-center"
+        className="relative w-9 h-9 rounded-full border border-[hsl(var(--line))] hover:bg-[hsl(var(--surface))] transition-colors flex items-center justify-center"
         aria-label="Notifications"
         data-testid="notification-bell"
       >
