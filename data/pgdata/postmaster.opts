@@ -1,0 +1,1 @@
+/usr/lib/postgresql/15/bin/postgres "-D" "/app/data/pgdata" "-c" "config_file=/etc/postgresql/15/main/postgresql.conf" "-c" "data_directory=/app/data/pgdata"

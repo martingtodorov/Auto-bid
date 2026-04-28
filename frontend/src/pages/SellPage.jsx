@@ -168,6 +168,16 @@ export default function SellPage() {
         setLoading(false);
         return;
       }
+      // Цените се въвеждат като брутни (с ДДС) когато сделката е vat_inclusive.
+      // Backend очаква нетни стойности → конвертираме gross → net = gross / (1 + rate/100).
+      const isVatIncl = form.vat_status === "vat_inclusive";
+      const vatRate = isVatIncl && form.vat_rate_pct ? Number(form.vat_rate_pct) : 0;
+      const grossToNet = (gross) => {
+        const g = Number(gross);
+        if (!g) return g;
+        if (!isVatIncl || !vatRate) return g;
+        return Math.round((g / (1 + vatRate / 100)) * 100) / 100;
+      };
       const payload = {
         ...form,
         images: [...ext, ...bp, ...wh, ...intr],
@@ -179,12 +189,12 @@ export default function SellPage() {
         mileage_km: Number(form.mileage_km),
         power_hp: Number(form.power_hp),
         engine_cc: Number(form.engine_cc),
-        starting_bid_eur: Number(form.starting_bid_eur),
-        reserve_eur: (form.no_reserve || !form.reserve_eur) ? null : Number(form.reserve_eur),
+        starting_bid_eur: grossToNet(form.starting_bid_eur),
+        reserve_eur: (form.no_reserve || !form.reserve_eur) ? null : grossToNet(form.reserve_eur),
         no_reserve: !!form.no_reserve,
-        buy_now_eur: form.buy_now_eur ? Number(form.buy_now_eur) : null,
+        buy_now_eur: form.buy_now_eur ? grossToNet(form.buy_now_eur) : null,
         vat_status: form.vat_status || "exempt",
-        vat_rate_pct: form.vat_status === "vat_inclusive" && form.vat_rate_pct ? Number(form.vat_rate_pct) : null,
+        vat_rate_pct: isVatIncl && form.vat_rate_pct ? Number(form.vat_rate_pct) : null,
         price_net_eur: null,
         price_gross_eur: null,
         duration_days: Number(form.duration_days),
@@ -375,24 +385,24 @@ export default function SellPage() {
                 )}
               </div>
             </Field>
-            <Field label={t("sell.form.starting_bid_eur")}>
+            <Field label={t("sell.form.starting_bid_eur") + (form.vat_status === "vat_inclusive" ? " (с ДДС)" : "")}>
               <input type="number" required value={form.starting_bid_eur} onChange={(e) => set("starting_bid_eur", e.target.value)} className={inputCls} data-testid="sell-starting-bid" />
               {form.vat_status === "vat_inclusive" && Number(form.starting_bid_eur) > 0 && Number(form.vat_rate_pct) > 0 && (
-                <p className="mt-1.5 text-xs text-[hsl(var(--accent-ink))]" data-testid="sell-starting-bid-gross">
-                  {t("sell.form.with_vat_hint", "С ДДС {{rate}}%: {{amount}} €", {
+                <p className="mt-1.5 text-xs text-[hsl(var(--ink-muted))]" data-testid="sell-starting-bid-net">
+                  {t("sell.form.without_vat_hint", "Без ДДС {{rate}}%: {{amount}} €", {
                     rate: form.vat_rate_pct,
-                    amount: Math.round(Number(form.starting_bid_eur) * (1 + Number(form.vat_rate_pct) / 100)).toLocaleString("bg-BG"),
+                    amount: (Number(form.starting_bid_eur) / (1 + Number(form.vat_rate_pct) / 100)).toLocaleString("bg-BG", { maximumFractionDigits: 2 }),
                   })}
                 </p>
               )}
             </Field>
-            <Field label={t("sell.form.reserve_eur")}>
+            <Field label={t("sell.form.reserve_eur") + (form.vat_status === "vat_inclusive" ? " (с ДДС)" : "")}>
               <input type="number" value={form.reserve_eur} disabled={form.no_reserve} onChange={(e) => set("reserve_eur", e.target.value)} className={`${inputCls} ${form.no_reserve ? "opacity-50" : ""}`} data-testid="sell-reserve" />
               {!form.no_reserve && form.vat_status === "vat_inclusive" && Number(form.reserve_eur) > 0 && Number(form.vat_rate_pct) > 0 && (
-                <p className="mt-1.5 text-xs text-[hsl(var(--accent-ink))]" data-testid="sell-reserve-gross">
-                  {t("sell.form.with_vat_hint", "С ДДС {{rate}}%: {{amount}} €", {
+                <p className="mt-1.5 text-xs text-[hsl(var(--ink-muted))]" data-testid="sell-reserve-net">
+                  {t("sell.form.without_vat_hint", "Без ДДС {{rate}}%: {{amount}} €", {
                     rate: form.vat_rate_pct,
-                    amount: Math.round(Number(form.reserve_eur) * (1 + Number(form.vat_rate_pct) / 100)).toLocaleString("bg-BG"),
+                    amount: (Number(form.reserve_eur) / (1 + Number(form.vat_rate_pct) / 100)).toLocaleString("bg-BG", { maximumFractionDigits: 2 }),
                   })}
                 </p>
               )}
@@ -401,7 +411,7 @@ export default function SellPage() {
                 {t("sell.form.no_reserve_label")}
               </label>
             </Field>
-            <Field label={t("sell.form.buy_now_eur", "Купи сега (без ДДС, EUR) — по избор")} span={2}>
+            <Field label={form.vat_status === "vat_inclusive" ? t("sell.form.buy_now_eur_incl", "Купи сега (с ДДС, EUR) — по избор") : t("sell.form.buy_now_eur", "Купи сега (без ДДС, EUR) — по избор")} span={2}>
               <input
                 type="number"
                 value={form.buy_now_eur}
@@ -411,10 +421,10 @@ export default function SellPage() {
                 data-testid="sell-buy-now"
               />
               {form.buy_now_eur && Number(form.buy_now_eur) > 0 && form.vat_status === "vat_inclusive" && Number(form.vat_rate_pct) > 0 && (
-                <p className="mt-1.5 text-xs text-[hsl(var(--accent-ink))]" data-testid="sell-buy-now-gross">
-                  {t("sell.form.with_vat_hint", "С ДДС {{rate}}%: {{amount}} €", {
+                <p className="mt-1.5 text-xs text-[hsl(var(--ink-muted))]" data-testid="sell-buy-now-net">
+                  {t("sell.form.without_vat_hint", "Без ДДС {{rate}}%: {{amount}} €", {
                     rate: form.vat_rate_pct,
-                    amount: Math.round(Number(form.buy_now_eur) * (1 + Number(form.vat_rate_pct) / 100)).toLocaleString("bg-BG"),
+                    amount: (Number(form.buy_now_eur) / (1 + Number(form.vat_rate_pct) / 100)).toLocaleString("bg-BG", { maximumFractionDigits: 2 }),
                   })}
                 </p>
               )}
