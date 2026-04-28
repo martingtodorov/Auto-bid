@@ -94,7 +94,7 @@ export default function Nav() {
           </div>
 
           {/* Mobile-only group: bell + hamburger sit close together on the right */}
-          <div className="md:hidden flex items-center gap-1">
+          <div className="md:hidden flex items-center gap-5">
             {user && <NotificationBell />}
             <button
               className="-m-2 p-2 flex items-center justify-center"
