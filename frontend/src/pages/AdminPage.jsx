@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Navigate, Link } from "react-router-dom";
-import { Check, X, Clock, AlertCircle, DollarSign, Archive, Ban, Edit3, Eye, Trash2, RotateCcw, Search, List, Users, BarChart3, Trash, RefreshCw, CreditCard, ScrollText, Tag, Pause, Play, Star, StarOff, Copy, XCircle, Gavel, Mail, Inbox, FileEdit, MessageCircle } from "lucide-react";
+import { Check, X, Clock, AlertCircle, DollarSign, Archive, Ban, Edit3, Eye, Trash2, RotateCcw, Search, List, Users, BarChart3, Trash, RefreshCw, CreditCard, ScrollText, Tag, Pause, Play, Star, StarOff, Copy, XCircle, Gavel, Mail, Inbox, FileEdit, MessageCircle, Activity } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth, formatError } from "../lib/auth";
 import { api, formatEUR, formatKM } from "../lib/apiClient";
@@ -17,6 +17,7 @@ import AdminEmailTemplatesTab from "../components/AdminEmailTemplatesTab";
 import AdminSellerRequestsTab from "../components/AdminSellerRequestsTab";
 import AdminArchiveTab from "../components/AdminArchiveTab";
 import AdminChatPanel from "../components/AdminChatPanel";
+import AdminHealthTab from "../components/AdminHealthTab";
 
 const STATUS_LABELS = {
   pending: "Очаква",
@@ -251,6 +252,7 @@ export default function AdminPage() {
     { k: "stripe", label: t("admin.tabs.stripe"), icon: CreditCard, adminOnly: true },
     { k: "notifications", label: t("admin.tabs.notifications"), icon: Mail },
     { k: "chat", label: "Чат", icon: MessageCircle },
+    { k: "health", label: "Здраве", icon: Activity, adminOnly: true },
     { k: "templates", label: t("admin.tabs.templates"), icon: FileEdit, adminOnly: true },
     { k: "audit", label: t("admin.tabs.audit"), icon: ScrollText },
     { k: "settings", label: t("admin.tabs.settings"), icon: Edit3, adminOnly: true },
@@ -522,6 +524,7 @@ export default function AdminPage() {
         {tab === "makes" && <AdminMakesTab />}
         {tab === "notifications" && <AdminNotificationsTab />}
         {tab === "chat" && <AdminChatPanel />}
+        {tab === "health" && <AdminHealthTab />}
         {tab === "templates" && <AdminEmailTemplatesTab />}
         {tab === "requests" && <AdminSellerRequestsTab />}
         {tab === "archive" && <AdminArchiveTab />}

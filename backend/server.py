@@ -3459,6 +3459,111 @@ async def admin_bid_outbox_retry(event_id: str, _admin: dict = Depends(require_a
         raise HTTPException(status_code=404, detail="Събитието не е намерено")
     return {"ok": True}
 
+
+@api.get("/health")
+async def health_check():
+    """Live status of every backing service the API depends on.
+
+    Returns 200 OK as long as Mongo is reachable (Mongo is the primary store);
+    PostgreSQL/outbox/push are reported as warning-level so admin panels can
+    show a yellow indicator without paging the on-call team.
+
+    Each subsystem is probed independently with a short timeout — one slow
+    dependency should not block the whole health check.
+    """
+    import time
+    from datetime import datetime, timezone, timedelta
+
+    started = time.perf_counter()
+    out: dict = {
+        "status": "ok",
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "services": {},
+    }
+
+    async def _ping(coro, name: str, critical: bool):
+        t0 = time.perf_counter()
+        try:
+            await asyncio.wait_for(coro, timeout=3.0)
+            out["services"][name] = {
+                "status": "ok",
+                "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
+            }
+        except Exception as e:
+            out["services"][name] = {
+                "status": "error",
+                "error": str(e)[:160],
+                "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
+            }
+            if critical:
+                out["status"] = "error"
+            elif out["status"] == "ok":
+                out["status"] = "degraded"
+
+    # Mongo: cheap ping by counting users (covered by the index → fast).
+    await _ping(db.command("ping"), "mongo", critical=True)
+
+    # PostgreSQL: SELECT 1 round-trip via SQLAlchemy.
+    async def _pg():
+        from db_pg import engine
+        from sqlalchemy import text
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+
+    await _ping(_pg(), "postgres", critical=False)
+
+    # Outbox worker: how many events are stuck in pending/dead state?
+    async def _outbox():
+        from db_pg import engine
+        from sqlalchemy import text
+        async with engine.connect() as conn:
+            r = await conn.execute(text(
+                "SELECT "
+                "  COALESCE(SUM(CASE WHEN attempt_count > 0 AND attempt_count < 12 THEN 1 ELSE 0 END), 0) AS pending, "
+                "  COALESCE(SUM(CASE WHEN attempt_count >= 12 THEN 1 ELSE 0 END), 0) AS dead "
+                "FROM bid_events WHERE applied_at IS NULL"
+            ))
+            row = r.first()
+            stats = {"pending": int(row[0]), "dead": int(row[1])} if row else {"pending": 0, "dead": 0}
+            out["services"]["outbox"] = {
+                "status": "error" if stats["dead"] > 0 else ("degraded" if stats["pending"] > 50 else "ok"),
+                "pending": stats["pending"],
+                "dead_letter": stats["dead"],
+            }
+            if stats["dead"] > 0 and out["status"] == "ok":
+                out["status"] = "degraded"
+
+    try:
+        await asyncio.wait_for(_outbox(), timeout=3.0)
+    except Exception as e:
+        out["services"]["outbox"] = {"status": "unknown", "error": str(e)[:160]}
+
+    # Push subscriptions count — sanity check.
+    try:
+        push_count = await db.push_subscriptions.count_documents({})
+        out["services"]["push"] = {"status": "ok", "subscriptions": int(push_count)}
+    except Exception as e:
+        out["services"]["push"] = {"status": "unknown", "error": str(e)[:160]}
+
+    # Active live auctions count — useful operations metric.
+    try:
+        live = await db.auctions.count_documents({"status": "live"})
+        ending_soon = await db.auctions.count_documents({
+            "status": "live",
+            "ends_at": {"$lte": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()},
+        })
+        out["services"]["auctions"] = {
+            "status": "ok",
+            "live": int(live),
+            "ending_within_1h": int(ending_soon),
+        }
+    except Exception as e:
+        out["services"]["auctions"] = {"status": "unknown", "error": str(e)[:160]}
+
+    out["total_latency_ms"] = round((time.perf_counter() - started) * 1000, 1)
+    return out
+
+
 app.include_router(api)
 
 app.add_middleware(
