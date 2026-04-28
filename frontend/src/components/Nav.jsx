@@ -73,7 +73,6 @@ export default function Nav() {
                 {(user.role === "admin" || user.role === "moderator") && (
                   <Link to="/admin" className="text-sm text-[hsl(var(--accent))] whitespace-nowrap" data-testid="nav-admin">{t("nav.admin")}</Link>
                 )}
-                <Link to="/watchlist" className="text-sm whitespace-nowrap hidden xl:inline" data-testid="nav-watchlist">{t("nav.watchlist")}</Link>
                 <NotificationBell />
                 {/* User account dropdown — opens on hover (desktop). The
                     invisible padding underneath the trigger keeps the menu
@@ -94,6 +93,9 @@ export default function Nav() {
                       </Link>
                       <Link to="/my-listings" className="block px-4 py-2 text-sm hover:bg-[hsl(var(--bg))] transition-colors" data-testid="nav-menu-my-listings">
                         {t("nav.my_listings")}
+                      </Link>
+                      <Link to="/watchlist" className="block px-4 py-2 text-sm hover:bg-[hsl(var(--bg))] transition-colors" data-testid="nav-menu-watchlist">
+                        {t("nav.watchlist")}
                       </Link>
                       <Link to="/settings" className="block px-4 py-2 text-sm hover:bg-[hsl(var(--bg))] transition-colors" data-testid="nav-menu-settings">
                         {t("nav.settings")}
