@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap');
+/* Manrope + IBM Plex Mono are loaded via <link> in public/index.html
+   so they render before this stylesheet finishes parsing (faster paint). */
 
 @tailwind base;
 @tailwind components;
