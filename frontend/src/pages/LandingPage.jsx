@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, Shield, Gavel, FileCheck, Sparkles } from "lucide-react";
+import DOMPurify from "dompurify";
 import { api, formatEUR, formatLocal } from "../lib/apiClient";
 import AuctionCard from "../components/AuctionCard";
 import { setPageMeta, resetPageMeta } from "../lib/seo";
@@ -66,7 +67,14 @@ export default function LandingPage() {
                 <h1
                   className="hero-headline text-5xl sm:text-6xl lg:text-[60px] lg:leading-[1.05] mt-0"
                   data-testid="hero-headline-cms"
-                  dangerouslySetInnerHTML={{ __html: cmsHeadline.replace(/\n/g, "<br />") }}
+                  dangerouslySetInnerHTML={{
+                    // M4 (XSS): санитизираме CMS-управления headline.  Позволяваме
+                    // само <br>, <em>, <strong>, <span> — никакви скриптове/handler-и.
+                    __html: DOMPurify.sanitize(cmsHeadline.replace(/\n/g, "<br />"), {
+                      ALLOWED_TAGS: ["br", "em", "strong", "span", "b", "i"],
+                      ALLOWED_ATTR: ["class"],
+                    }),
+                  }}
                 />
               ) : (
                 <h1 className="hero-headline text-5xl sm:text-6xl lg:text-[60px] lg:leading-[1.05] mt-0 text-balance" data-testid="hero-headline-i18n">

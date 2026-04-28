@@ -3683,6 +3683,49 @@ async def waf_middleware(request: Request, call_next):
     return await call_next(request)
 
 
+# ---- CSRF middleware (C3): double-submit cookie ----
+# Защита срещу CSRF за заявки, автентикирани чрез httpOnly access_token cookie.
+# Заявки с `Authorization: Bearer ...` (стар flow или сървърни тестове) или
+# без access_token cookie се пропускат.  Webhook-овете и login/register нямат
+# нужда от CSRF, защото или нямат cookie, или сами създават такъв.
+_CSRF_EXEMPT_PATHS = (
+    "/api/webhooks/",
+    "/api/auth/login",
+    "/api/auth/register",
+    "/api/auth/forgot-password",
+    "/api/auth/reset-password",
+    "/api/auth/2fa/verify",
+    "/api/auth/csrf",
+)
+
+
+@app.middleware("http")
+async def csrf_middleware(request: Request, call_next):
+    method = request.method.upper()
+    if method in ("GET", "HEAD", "OPTIONS"):
+        return await call_next(request)
+    path = request.url.path or ""
+    if not path.startswith("/api/"):
+        return await call_next(request)
+    if any(path == p or path.startswith(p) for p in _CSRF_EXEMPT_PATHS):
+        return await call_next(request)
+    # Bearer auth flow остава освободен (CSRF е невъзможна без четене на токена).
+    auth_h = request.headers.get("Authorization", "")
+    if auth_h.startswith("Bearer "):
+        return await call_next(request)
+    cookie_token = request.cookies.get("access_token")
+    if not cookie_token:
+        # Неавтентикирана заявка — нека endpoint-ът връща 401, ако се изисква auth.
+        return await call_next(request)
+    csrf_cookie = request.cookies.get("csrf_token") or ""
+    csrf_header = request.headers.get("X-CSRF-Token") or request.headers.get("x-csrf-token") or ""
+    import hmac as _hmac
+    if not csrf_cookie or not csrf_header or not _hmac.compare_digest(csrf_cookie, csrf_header):
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"detail": "CSRF токенът липсва или е невалиден."}, status_code=403)
+    return await call_next(request)
+
+
 # ---- Maintenance mode middleware ----
 @app.middleware("http")
 async def maintenance_mode_middleware(request: Request, call_next):

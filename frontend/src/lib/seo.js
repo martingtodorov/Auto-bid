@@ -77,19 +77,11 @@ export function resetPageMeta() {
 }
 
 // Build schema.org Vehicle JSON-LD for an auction detail page.
-// Includes rich-result Offer data (price, currency, availability, priceValidUntil,
-// itemCondition, seller) so Google can render Rich Snippets (price, availability).
+// Включваме само цена + валута за Rich Price snippets.  По изрично решение
+// НЕ слагаме `availability` — Google не валидира статуса на търг достатъчно
+// добре и това генерира “Sold out / Out of stock” warnings.
 export function buildVehicleJsonLd(a, url) {
   if (!a) return null;
-
-  // --- Availability mapping for auction lifecycle --------------------------
-  // live / scheduled => InStock (biddable or soon-biddable)
-  // ended (sold)     => SoldOut
-  // cancelled/other  => Discontinued
-  let availability = "https://schema.org/InStock";
-  if (a.status === "ended" || a.status === "sold") availability = "https://schema.org/SoldOut";
-  else if (a.status === "cancelled" || a.status === "archived") availability = "https://schema.org/Discontinued";
-  else if (a.status === "scheduled" || a.status === "upcoming") availability = "https://schema.org/PreOrder";
 
   // --- Price: prefer current_bid_eur, fall back to starting_bid_eur --------
   const priceValue = Number(a.current_bid_eur ?? a.starting_bid_eur ?? 0);
@@ -100,13 +92,12 @@ export function buildVehicleJsonLd(a, url) {
     ? { "@type": "Person", name: a.seller_name }
     : { "@type": "Organization", name: "Auto&Bid", url: window.location.origin };
 
-  // --- Offer with Rich Price ------------------------------------------------
+  // --- Offer with Rich Price (no availability) -----------------------------
   const offer = {
     "@type": "Offer",
     priceCurrency: "EUR",
     price: hasPrice ? priceValue : undefined,
     url,
-    availability,
     itemCondition: "https://schema.org/UsedCondition",
     seller,
   };

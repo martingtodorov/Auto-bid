@@ -3,6 +3,7 @@ Auth routes — register, login (with 2FA challenge), me, forgot/reset password,
 Uses configure() dependency injection to avoid circular imports.
 """
 import logging
+import os
 import secrets
 import base64
 import io
@@ -10,7 +11,7 @@ import uuid as _uuid
 import hashlib
 import bcrypt
 from datetime import datetime, timezone, timedelta
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, Response
 import pyotp
 import qrcode
 
@@ -33,6 +34,56 @@ _limiter = None
 
 OTP_TTL_MIN = 15
 CHALLENGE_TTL_MIN = 5
+
+# --- Cookie auth (C3): JWT в httpOnly cookie + CSRF (double-submit) ----------
+COOKIE_TTL_DAYS = 7
+COOKIE_TTL_SEC = COOKIE_TTL_DAYS * 24 * 60 * 60
+ACCESS_COOKIE = "access_token"
+CSRF_COOKIE = "csrf_token"
+# Secure cookies на production (HTTPS).  Може да се изключи за локален dev.
+COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "1") not in ("0", "false", "False")
+COOKIE_SAMESITE = os.environ.get("COOKIE_SAMESITE", "lax")
+
+# Постоянна стойност за константно-времево сравнение при login (M1):
+# Когато потребителят не съществува, изпълняваме bcrypt срещу този dummy hash,
+# за да предотвратим timing-side-channel за откриване на регистрирани имейли.
+_DUMMY_BCRYPT_HASH = bcrypt.hashpw(b"dummy-not-a-real-password", bcrypt.gensalt()).decode("utf-8")
+
+
+def _set_auth_cookies(response: Response, token: str) -> str:
+    """Записва access_token (httpOnly) и csrf_token (readable от JS) cookies.
+
+    Връща CSRF токена, за да може да се върне и в response body, ако трябва.
+    """
+    csrf = secrets.token_urlsafe(32)
+    response.set_cookie(
+        key=ACCESS_COOKIE,
+        value=token,
+        max_age=COOKIE_TTL_SEC,
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite=COOKIE_SAMESITE,
+        path="/",
+    )
+    response.set_cookie(
+        key=CSRF_COOKIE,
+        value=csrf,
+        max_age=COOKIE_TTL_SEC,
+        httponly=False,
+        secure=COOKIE_SECURE,
+        samesite=COOKIE_SAMESITE,
+        path="/",
+    )
+    return csrf
+
+
+def _clear_auth_cookies(response: Response) -> None:
+    response.delete_cookie(
+        ACCESS_COOKIE, path="/", secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, httponly=True,
+    )
+    response.delete_cookie(
+        CSRF_COOKIE, path="/", secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, httponly=False,
+    )
 
 
 def configure(*, hash_password, verify_password, create_token, get_current_user, limiter):
@@ -68,7 +119,7 @@ def register_routes():
 
     @router.post("/register")
     @_limiter.limit("5/minute")
-    async def register(request: Request, payload: UserRegister):
+    async def register(request: Request, response: Response, payload: UserRegister):
         if not payload.terms_accepted:
             raise HTTPException(status_code=400, detail="Моля, приемете Общите условия.")
         existing = await db.users.find_one({"email": payload.email.lower()})
@@ -123,14 +174,21 @@ def register_routes():
         except Exception as e:
             logger.warning("audit_log insert failed: %s", e)
         token = _create_token(user_id, doc["email"])
-        return {"token": token, "user": _sanitize(doc)}
+        csrf = _set_auth_cookies(response, token)
+        return {"token": token, "csrf_token": csrf, "user": _sanitize(doc)}
 
     @router.post("/login")
     @_limiter.limit("10/minute")
-    async def login(request: Request, payload: UserLogin):
+    async def login(request: Request, response: Response, payload: UserLogin):
         email = payload.email.lower()
         user = await db.users.find_one({"email": email})
-        if not user or not _verify_password(payload.password, user["password_hash"]):
+        # Константно-време проверка (M1): дори при липсващ потребител изпълняваме
+        # bcrypt спрямо dummy hash, за да не може атакуващ да отгатне валидни
+        # имейли по разликата във времето на отговора.
+        if not user:
+            _verify_password(payload.password, _DUMMY_BCRYPT_HASH)
+            raise HTTPException(status_code=401, detail="Грешен имейл или парола")
+        if not _verify_password(payload.password, user["password_hash"]):
             raise HTTPException(status_code=401, detail="Грешен имейл или парола")
         if user.get("banned"):
             raise HTTPException(status_code=403, detail="Акаунтът е блокиран. За въпроси: contact@autoandbid.com")
@@ -147,11 +205,12 @@ def register_routes():
             return {"requires_2fa": True, "challenge_token": challenge}
 
         token = _create_token(user["id"], email)
-        return {"token": token, "user": _sanitize(user)}
+        csrf = _set_auth_cookies(response, token)
+        return {"token": token, "csrf_token": csrf, "user": _sanitize(user)}
 
     @router.post("/2fa/verify")
     @_limiter.limit("10/minute")
-    async def two_factor_verify(request: Request, payload: TwoFactorVerify):
+    async def two_factor_verify(request: Request, response: Response, payload: TwoFactorVerify):
         ch = await db.auth_challenges.find_one({"challenge": _sha256(payload.challenge_token)}, {"_id": 0})
         if not ch:
             raise HTTPException(status_code=401, detail="Невалиден challenge")
@@ -184,7 +243,8 @@ def register_routes():
         # Consume challenge
         await db.auth_challenges.delete_one({"challenge": _sha256(payload.challenge_token)})
         token = _create_token(user["id"], user["email"])
-        return {"token": token, "user": _sanitize(user)}
+        csrf = _set_auth_cookies(response, token)
+        return {"token": token, "csrf_token": csrf, "user": _sanitize(user)}
 
     @router.post("/2fa/enable")
     async def two_factor_enable(user: dict = Depends(_get_current_user)):
@@ -295,6 +355,28 @@ def register_routes():
         u["totp_enabled"] = bool(user.get("totp_enabled"))
         u["lang"] = (user.get("lang") or "bg")
         return u
+
+    @router.post("/logout")
+    async def logout(response: Response):
+        """Изчиства auth cookies (httpOnly access_token + csrf_token)."""
+        _clear_auth_cookies(response)
+        return {"ok": True}
+
+    @router.get("/csrf")
+    async def get_csrf(request: Request, response: Response):
+        """Връща (и обновява, ако липсва) CSRF token cookie за SPA-та.
+        Използва се от frontend при стартиране, ако access_token cookie вече
+        съществува, но csrf_token cookie е изтрит/липсва.
+        """
+        existing = request.cookies.get(CSRF_COOKIE)
+        if existing:
+            return {"csrf_token": existing}
+        csrf = secrets.token_urlsafe(32)
+        response.set_cookie(
+            key=CSRF_COOKIE, value=csrf, max_age=COOKIE_TTL_SEC,
+            httponly=False, secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, path="/",
+        )
+        return {"csrf_token": csrf}
 
     @router.post("/me/lang")
     async def set_my_lang(payload: dict, user: dict = Depends(_get_current_user)):

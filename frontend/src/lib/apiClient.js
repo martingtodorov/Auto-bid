@@ -3,13 +3,31 @@ import axios from "axios";
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API_BASE = `${BACKEND_URL}/api`;
 
+// --- C3 cookie auth helpers ---
+function readCookie(name) {
+  if (typeof document === "undefined") return null;
+  const m = document.cookie.match(new RegExp("(?:^|; )" + name.replace(/([.$?*|{}()[\]\\/+^])/g, "\\$1") + "=([^;]*)"));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 export const api = axios.create({
   baseURL: API_BASE,
+  withCredentials: true, // C3: изпращай httpOnly auth cookie
 });
 
 api.interceptors.request.use((config) => {
-  const t = localStorage.getItem("autobid_token");
-  if (t) config.headers.Authorization = `Bearer ${t}`;
+  // Backwards-compatible Bearer fallback (за стари сесии в localStorage,
+  // докато cookie-то се установи при следващ login).
+  const t = typeof localStorage !== "undefined" ? localStorage.getItem("autobid_token") : null;
+  if (t && !config.headers.Authorization) {
+    config.headers.Authorization = `Bearer ${t}`;
+  }
+  // CSRF double-submit за мутиращи заявки.
+  const method = (config.method || "get").toLowerCase();
+  if (["post", "put", "patch", "delete"].includes(method)) {
+    const csrf = readCookie("csrf_token");
+    if (csrf) config.headers["X-CSRF-Token"] = csrf;
+  }
   return config;
 });
 

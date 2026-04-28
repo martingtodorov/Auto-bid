@@ -8,13 +8,14 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    const token = localStorage.getItem("autobid_token");
-    if (!token) { setUser(null); setLoading(false); return; }
+    // C3: разчитаме на httpOnly cookie за автентикация. Извикваме /auth/me
+    // безусловно — ако няма cookie, backend ще върне 401.
     try {
       const { data } = await api.get("/auth/me");
       setUser(data);
     } catch (e) {
-      localStorage.removeItem("autobid_token");
+      // Изчистваме всякакъв стар localStorage токен (миграция от старата схема).
+      try { localStorage.removeItem("autobid_token"); } catch (_e) { /* ignore */ }
       setUser(null);
     } finally {
       setLoading(false);
@@ -29,14 +30,16 @@ export function AuthProvider({ children }) {
     if (data.requires_2fa) {
       return { requires_2fa: true, challenge_token: data.challenge_token };
     }
-    localStorage.setItem("autobid_token", data.token);
+    // C3: cookies са вече зададени от backend.  Премахваме евентуални стари
+    // localStorage стойности, за да не се ползва Bearer fallback излишно.
+    try { localStorage.removeItem("autobid_token"); } catch (_e) { /* ignore */ }
     setUser(data.user);
     return data.user;
   };
 
   const verifyTwoFactor = async (challenge_token, code) => {
     const { data } = await api.post("/auth/2fa/verify", { challenge_token, code });
-    localStorage.setItem("autobid_token", data.token);
+    try { localStorage.removeItem("autobid_token"); } catch (_e) { /* ignore */ }
     setUser(data.user);
     return data.user;
   };
@@ -47,13 +50,14 @@ export function AuthProvider({ children }) {
       terms_accepted: !!termsAccepted,
       terms_version: "v1",
     });
-    localStorage.setItem("autobid_token", data.token);
+    try { localStorage.removeItem("autobid_token"); } catch (_e) { /* ignore */ }
     setUser(data.user);
     return data.user;
   };
 
-  const logout = () => {
-    localStorage.removeItem("autobid_token");
+  const logout = async () => {
+    try { await api.post("/auth/logout"); } catch (_e) { /* ignore */ }
+    try { localStorage.removeItem("autobid_token"); } catch (_e) { /* ignore */ }
     setUser(null);
   };
 

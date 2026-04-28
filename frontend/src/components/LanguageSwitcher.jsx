@@ -2,6 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { externalUrlForLang, LANG_DOMAINS } from "../i18n";
 import { api } from "../lib/apiClient";
+import { useAuth } from "../lib/auth";
 
 const LANGS = [
   { code: "bg", label: "BG" },
@@ -11,15 +12,16 @@ const LANGS = [
 
 export default function LanguageSwitcher({ className = "" }) {
   const { i18n } = useTranslation();
+  const { user } = useAuth();
 
   const change = (lng) => {
     i18n.changeLanguage(lng);
     try { localStorage.setItem("autobids_lang", lng); } catch (_e) { /* ignore */ }
-    try {
-      if (typeof localStorage !== "undefined" && localStorage.getItem("autobid_token")) {
-        api.post("/auth/me/lang", { lang: lng }).catch(() => {});
-      }
-    } catch (_e) { /* ignore */ }
+    // C3: разчитаме на user обекта от AuthContext, тъй като httpOnly cookie
+    // не може да се чете от JS.
+    if (user) {
+      api.post("/auth/me/lang", { lang: lng }).catch(() => {});
+    }
   };
 
   const current = i18n.resolvedLanguage || "bg";
