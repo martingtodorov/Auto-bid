@@ -114,6 +114,8 @@
     "vat_short": "VAT",
     "without_vat": "ex. VAT",
     "incl_vat": "incl. VAT",
+    "without_vat_label": "Excl. VAT",
+    "your_bid_eur_gross": "Your bid (EUR, incl. VAT {{rate}}%)",
     "buy_now_short": "Buy now",
     "price_with_vat": "With VAT {{rate}}%",
     "buyer_fee_label": "Buyer's fee",
@@ -602,6 +604,27 @@
     "view_all": "View all →",
     "unread_count": "{{count}} unread"
   },
+  "chat": {
+    "support_title": "Chat with support",
+    "support_subtitle": "typical reply within 24h",
+    "support_default_name": "Support",
+    "user_default_name": "User",
+    "loading": "Loading…",
+    "no_messages": "No messages yet. Send the first one.",
+    "input_placeholder": "Type a message… (Enter to send)",
+    "input_placeholder_admin": "Reply… (Enter to send)",
+    "send": "Send",
+    "refresh": "Refresh",
+    "search_thread_placeholder": "Search conversation…",
+    "new_conversation": "+ New conversation",
+    "user_search_placeholder": "User email or name…",
+    "no_threads": "No conversations. Tap “New conversation”.",
+    "select_or_start": "Select a conversation on the left or start a new one.",
+    "no_thread_messages": "No messages in this conversation.",
+    "you_prefix": "You: ",
+    "admin_role_label": "(admin)",
+    "auto_reply_alt": "auto reply"
+  },
   "dashboard": {
     "overline": "Profile",
     "greeting": "Hello, {{name}}",
@@ -617,6 +640,14 @@
   },
   "notifications": {
     "types": {
+      "chat_admin_message": {
+        "title": "New message from support",
+        "body": "{{preview}}"
+      },
+      "chat_user_message": {
+        "title": "New message from a user",
+        "body": "{{preview}}"
+      },
       "listing_pending": {
         "title": "New listing awaiting approval",
         "body": "{{seller}}: {{title}}"

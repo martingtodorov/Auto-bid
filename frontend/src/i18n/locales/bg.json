@@ -114,6 +114,8 @@
     "vat_short": "ДДС",
     "without_vat": "без ДДС",
     "incl_vat": "вкл. ДДС",
+    "without_vat_label": "Без ДДС",
+    "your_bid_eur_gross": "Вашата наддавка (EUR, вкл. ДДС {{rate}}%)",
     "buy_now_short": "Купи сега",
     "price_with_vat": "С ДДС {{rate}}%",
     "buyer_fee_label": "Такса на купувача",
@@ -602,6 +604,27 @@
     "view_all": "Всички известия →",
     "unread_count": "{{count}} непрочетени"
   },
+  "chat": {
+    "support_title": "Чат с поддръжка",
+    "support_subtitle": "отговор обикновено в рамките на 24ч",
+    "support_default_name": "Поддръжка",
+    "user_default_name": "Потребител",
+    "loading": "Зареждане…",
+    "no_messages": "Все още няма съобщения. Напишете първото.",
+    "input_placeholder": "Напишете съобщение… (Enter = изпрати)",
+    "input_placeholder_admin": "Отговор… (Enter = изпрати)",
+    "send": "Изпрати",
+    "refresh": "Обнови",
+    "search_thread_placeholder": "Търси разговор…",
+    "new_conversation": "+ Нов разговор",
+    "user_search_placeholder": "Имейл или име на потребител…",
+    "no_threads": "Няма разговори. Натиснете „Нов разговор“.",
+    "select_or_start": "Изберете разговор отляво или стартирайте нов.",
+    "no_thread_messages": "Няма съобщения в този разговор.",
+    "you_prefix": "Вие: ",
+    "admin_role_label": "(admin)",
+    "auto_reply_alt": "автоматичен отговор"
+  },
   "dashboard": {
     "overline": "Профил",
     "greeting": "Здравейте, {{name}}",
@@ -617,6 +640,14 @@
   },
   "notifications": {
     "types": {
+      "chat_admin_message": {
+        "title": "Ново съобщение от поддръжка",
+        "body": "{{preview}}"
+      },
+      "chat_user_message": {
+        "title": "Ново съобщение от потребител",
+        "body": "{{preview}}"
+      },
       "listing_pending": {
         "title": "Нова обява за одобрение",
         "body": "{{seller}}: {{title}}"

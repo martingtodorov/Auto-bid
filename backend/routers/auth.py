@@ -79,6 +79,14 @@ def register_routes():
         ip_addr = (request.client.host if request.client else "") or ""
         ua = (request.headers.get("user-agent") or "")[:500]
         lang_hdr = (request.headers.get("accept-language") or "")[:60]
+        # Determine initial UI language from Accept-Language so push messages
+        # are localized correctly even before the user opens the app.
+        lh = (lang_hdr or "").lower()
+        initial_lang = "bg"
+        for code in ("ro", "en", "bg"):
+            if code in lh:
+                initial_lang = code
+                break
         now_iso = datetime.now(timezone.utc).isoformat()
         doc = {
             "id": user_id,
@@ -86,6 +94,7 @@ def register_routes():
             "name": payload.name.strip(),
             "password_hash": _hash_password(payload.password),
             "role": "user",
+            "lang": initial_lang,
             "created_at": now_iso,
             # T&C audit trail (required for GDPR / ZZLD proof of consent)
             "terms_accepted": True,
@@ -284,7 +293,17 @@ def register_routes():
     async def me(user: dict = Depends(_get_current_user)):
         u = _sanitize(user)
         u["totp_enabled"] = bool(user.get("totp_enabled"))
+        u["lang"] = (user.get("lang") or "bg")
         return u
+
+    @router.post("/me/lang")
+    async def set_my_lang(payload: dict, user: dict = Depends(_get_current_user)):
+        """Persist the user's UI language so push notifications are localized."""
+        lang = (payload.get("lang") or "").strip().lower()[:2]
+        if lang not in ("bg", "en", "ro"):
+            raise HTTPException(status_code=400, detail="Невалиден език")
+        await db.users.update_one({"id": user["id"]}, {"$set": {"lang": lang}})
+        return {"ok": True, "lang": lang}
 
     @router.delete("/me")
     async def delete_me(user: dict = Depends(_get_current_user)):

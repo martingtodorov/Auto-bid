@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Send, RefreshCw, MessageCircle, Search } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { api } from "../lib/apiClient";
 
 /**
@@ -7,6 +8,7 @@ import { api } from "../lib/apiClient";
  * and unread badges. Right pane: selected thread's messages + reply input.
  */
 export default function AdminChatPanel() {
+  const { t } = useTranslation();
   const [threads, setThreads] = useState([]);
   const [active, setActive] = useState(null); // {thread_user_id, user_name, ...}
   const [messages, setMessages] = useState([]);
@@ -127,11 +129,11 @@ export default function AdminChatPanel() {
           <input
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder="Търси разговор…"
+            placeholder={t("chat.search_thread_placeholder")}
             className="flex-1 bg-transparent text-sm focus:outline-none"
             data-testid="admin-chat-filter"
           />
-          <button onClick={loadThreads} className="p-1 rounded hover:bg-[hsl(var(--bg))]" title="Обнови" data-testid="admin-chat-refresh">
+          <button onClick={loadThreads} className="p-1 rounded hover:bg-[hsl(var(--bg))]" title={t("chat.refresh")} data-testid="admin-chat-refresh">
             <RefreshCw size={12} />
           </button>
         </div>
@@ -140,14 +142,14 @@ export default function AdminChatPanel() {
             onClick={() => setShowNew((v) => !v)}
             className="text-xs text-[hsl(var(--accent))] hover:underline"
             data-testid="admin-chat-new"
-          >+ Нов разговор</button>
+          >{t("chat.new_conversation")}</button>
           {showNew && (
             <div className="mt-2 relative">
               <input
                 autoFocus
                 value={userQuery}
                 onChange={(e) => setUserQuery(e.target.value)}
-                placeholder="Имейл или име на потребител…"
+                placeholder={t("chat.user_search_placeholder")}
                 className="w-full border border-[hsl(var(--line))] bg-[hsl(var(--bg))] h-8 px-2 text-xs rounded"
                 data-testid="admin-chat-user-search"
               />
@@ -171,33 +173,33 @@ export default function AdminChatPanel() {
           )}
         </div>
         <div className="flex-1 overflow-y-auto" data-testid="admin-chat-threads">
-          {loadingThreads && <p className="p-4 text-xs text-[hsl(var(--ink-muted))]">Зареждане…</p>}
+          {loadingThreads && <p className="p-4 text-xs text-[hsl(var(--ink-muted))]">{t("chat.loading")}</p>}
           {!loadingThreads && filtered.length === 0 && (
-            <p className="p-4 text-xs text-[hsl(var(--ink-muted))] italic">Няма разговори. Натиснете „Нов разговор“.</p>
+            <p className="p-4 text-xs text-[hsl(var(--ink-muted))] italic">{t("chat.no_threads")}</p>
           )}
-          {filtered.map((t) => {
-            const isActive = active?.thread_user_id === t.thread_user_id;
+          {filtered.map((thr) => {
+            const isActive = active?.thread_user_id === thr.thread_user_id;
             return (
               <button
-                key={t.thread_user_id}
-                onClick={() => setActive(t)}
+                key={thr.thread_user_id}
+                onClick={() => setActive(thr)}
                 className={`w-full text-left px-3 py-3 rule-b last:border-b-0 hover:bg-[hsl(var(--bg))] ${isActive ? "bg-[hsl(var(--bg))]" : ""}`}
-                data-testid={`admin-chat-thread-${t.thread_user_id}`}
+                data-testid={`admin-chat-thread-${thr.thread_user_id}`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <div className="font-semibold text-sm truncate">{t.user_name || t.user_email}</div>
-                  {t.unread_for_admin > 0 && (
+                  <div className="font-semibold text-sm truncate">{thr.user_name || thr.user_email}</div>
+                  {thr.unread_for_admin > 0 && (
                     <span className="bg-[hsl(var(--accent))] text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] inline-flex items-center justify-center px-1.5">
-                      {t.unread_for_admin}
+                      {thr.unread_for_admin}
                     </span>
                   )}
                 </div>
                 <div className="text-[10px] text-[hsl(var(--ink-muted))] truncate mt-0.5">
-                  {t.last_role === "admin" ? "Вие: " : ""}{t.last_message || "—"}
+                  {thr.last_role === "admin" ? t("chat.you_prefix") : ""}{thr.last_message || "—"}
                 </div>
-                {t.last_at && (
+                {thr.last_at && (
                   <div className="text-[10px] text-[hsl(var(--ink-muted))] mt-0.5 font-mono">
-                    {new Date(t.last_at).toLocaleString()}
+                    {new Date(thr.last_at).toLocaleString()}
                   </div>
                 )}
               </button>
@@ -212,7 +214,7 @@ export default function AdminChatPanel() {
           <div className="flex-1 flex items-center justify-center text-sm text-[hsl(var(--ink-muted))]">
             <div className="text-center">
               <MessageCircle size={32} className="mx-auto mb-3 opacity-40" />
-              Изберете разговор отляво или стартирайте нов.
+              {t("chat.select_or_start")}
             </div>
           </div>
         ) : (
@@ -224,9 +226,9 @@ export default function AdminChatPanel() {
               </div>
             </div>
             <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3 bg-[hsl(var(--bg))]" data-testid="admin-chat-messages">
-              {loadingMessages && <p className="text-xs text-[hsl(var(--ink-muted))]">Зареждане…</p>}
+              {loadingMessages && <p className="text-xs text-[hsl(var(--ink-muted))]">{t("chat.loading")}</p>}
               {!loadingMessages && messages.length === 0 && (
-                <p className="text-xs text-[hsl(var(--ink-muted))] italic">Няма съобщения в този разговор.</p>
+                <p className="text-xs text-[hsl(var(--ink-muted))] italic">{t("chat.no_thread_messages")}</p>
               )}
               {messages.map((m) => {
                 const mine = m.sender_role === "admin";
@@ -234,7 +236,7 @@ export default function AdminChatPanel() {
                   <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`} data-testid={`admin-chat-msg-${m.id}`}>
                     <div className={`max-w-[80%] rounded-card px-3.5 py-2 text-sm whitespace-pre-wrap break-words shadow-sm ${mine ? "bg-[hsl(var(--accent))] text-white" : "bg-[hsl(var(--surface))] text-[hsl(var(--ink))] border border-[hsl(var(--line))]"}`}>
                       <div className="text-[10px] uppercase tracking-wide opacity-70 mb-0.5">
-                        {mine ? `${m.sender_name || "Поддръжка"} (admin)` : (m.sender_name || "Потребител")}
+                        {mine ? `${m.sender_name || t("chat.support_default_name")} ${t("chat.admin_role_label")}` : (m.sender_name || t("chat.user_default_name"))}
                       </div>
                       <div>{m.body}</div>
                       <div className={`text-[10px] mt-1 ${mine ? "text-white/70" : "text-[hsl(var(--ink-muted))]"} text-right`}>
@@ -251,7 +253,7 @@ export default function AdminChatPanel() {
                 onChange={(e) => setBody(e.target.value)}
                 onKeyDown={onKey}
                 rows={2}
-                placeholder="Отговор… (Enter = изпрати)"
+                placeholder={t("chat.input_placeholder_admin")}
                 className="flex-1 border border-[hsl(var(--line))] bg-[hsl(var(--bg))] rounded-card p-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[hsl(var(--accent))]/30"
                 data-testid="admin-chat-input"
               />
@@ -262,7 +264,7 @@ export default function AdminChatPanel() {
                 className="btn btn-primary !px-4 !py-2.5 flex items-center gap-1.5 disabled:opacity-50"
                 data-testid="admin-chat-send"
               >
-                <Send size={14} /> Изпрати
+                <Send size={14} /> {t("chat.send")}
               </button>
             </div>
           </>

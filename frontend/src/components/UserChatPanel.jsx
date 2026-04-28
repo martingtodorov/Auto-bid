@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Send, MessageCircle, RefreshCw } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { api } from "../lib/apiClient";
 
 /**
@@ -9,6 +10,7 @@ import { api } from "../lib/apiClient";
  * Used by the customer in their Inbox (current user is the thread owner).
  */
 export default function UserChatPanel() {
+  const { t } = useTranslation();
   const [items, setItems] = useState([]);
   const [body, setBody] = useState("");
   const [loading, setLoading] = useState(false);
@@ -69,15 +71,15 @@ export default function UserChatPanel() {
       >
         <div className="flex items-center gap-2">
           <MessageCircle size={16} className="text-[hsl(var(--accent))]" />
-          <span className="font-semibold text-sm">Чат с поддръжка</span>
-          <span className="text-xs text-[hsl(var(--ink-muted))]">· отговор обикновено в рамките на 24ч</span>
+          <span className="font-semibold text-sm">{t("chat.support_title")}</span>
+          <span className="text-xs text-[hsl(var(--ink-muted))]">· {t("chat.support_subtitle")}</span>
         </div>
         <div className="flex items-center gap-2 text-xs text-[hsl(var(--ink-muted))]">
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); load(); }}
             className="p-1 rounded hover:bg-[hsl(var(--bg))]"
-            title="Обнови"
+            title={t("chat.refresh")}
             data-testid="user-chat-refresh"
           >
             <RefreshCw size={12} />
@@ -93,10 +95,10 @@ export default function UserChatPanel() {
             className="h-72 overflow-y-auto px-4 py-4 space-y-3 bg-[hsl(var(--bg))]"
             data-testid="user-chat-scroll"
           >
-            {loading && <p className="text-xs text-[hsl(var(--ink-muted))]">Зареждане…</p>}
+            {loading && <p className="text-xs text-[hsl(var(--ink-muted))]">{t("chat.loading")}</p>}
             {!loading && items.length === 0 && (
               <p className="text-xs text-[hsl(var(--ink-muted))] italic">
-                Все още няма съобщения. Напишете първото.
+                {t("chat.no_messages")}
               </p>
             )}
             {items.map((m) => {
@@ -116,7 +118,7 @@ export default function UserChatPanel() {
                   >
                     {!mine && (
                       <div className="text-[10px] uppercase tracking-wide opacity-70 mb-0.5">
-                        {m.sender_name || "Поддръжка"}
+                        {m.sender_name || t("chat.support_default_name")}
                       </div>
                     )}
                     <div>{m.body}</div>
@@ -135,7 +137,7 @@ export default function UserChatPanel() {
               onChange={(e) => setBody(e.target.value)}
               onKeyDown={onKey}
               rows={2}
-              placeholder="Напишете съобщение… (Enter = изпрати)"
+              placeholder={t("chat.input_placeholder")}
               className="flex-1 border border-[hsl(var(--line))] bg-[hsl(var(--bg))] rounded-card p-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[hsl(var(--accent))]/30"
               data-testid="user-chat-input"
             />
@@ -146,7 +148,7 @@ export default function UserChatPanel() {
               className="btn btn-primary !px-4 !py-2.5 flex items-center gap-1.5 disabled:opacity-50"
               data-testid="user-chat-send"
             >
-              <Send size={14} /> Изпрати
+              <Send size={14} /> {t("chat.send")}
             </button>
           </div>
         </>

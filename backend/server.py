@@ -1379,13 +1379,13 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
                 await email_outbid(prev_user["email"], prev_user["name"], a["title"], auction_id, amount)
             except Exception as e:
                 logger.error("email_outbid failed: %s", e)
-            # Web Push — outbid notification
+            # Web Push — outbid notification (localized to user's lang)
             try:
-                from services import push as push_svc
-                await push_svc.send_to_user(
+                from services import push_templates
+                await push_templates.send_template(
                     prev_high,
-                    title=f"Надминати сте · {a['title'][:60]}",
-                    body=f"Ново наддаване €{int(amount):,}. Все още можете да отговорите.",
+                    "outbid",
+                    fmt_args={"title": a["title"][:60], "amount": f"{int(amount):,}"},
                     url=f"/auctions/{auction_id}",
                     tag=f"outbid-{auction_id}",
                 )
@@ -1448,14 +1448,19 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
                 await email_seller_new_bid(seller["email"], seller.get("name", ""), a["title"], auction_id, user["name"], amount, result["bid_count"])
             except Exception as e:
                 logger.error("email_seller_new_bid failed: %s", e)
-        # Web Push — your car got a bid
+        # Web Push — your car got a bid (localized for the seller)
         if seller_id:
             try:
-                from services import push as push_svc
-                await push_svc.send_to_user(
+                from services import push_templates
+                await push_templates.send_template(
                     seller_id,
-                    title=f"Нова наддавка · {a['title'][:60]}",
-                    body=f"{user['name']} наддаде €{int(amount):,}. Общо {result['bid_count']} наддавания.",
+                    "seller_new_bid",
+                    fmt_args={
+                        "title": a["title"][:60],
+                        "bidder": user["name"],
+                        "amount": f"{int(amount):,}",
+                        "count": result["bid_count"],
+                    },
                     url=f"/auctions/{auction_id}",
                     tag=f"seller-bid-{auction_id}",
                 )
@@ -2099,14 +2104,18 @@ async def notify_matching_saved_searches(auction: dict):
                     await send_email(u["email"], f"Нова обява · {auction['title']}", html)
                 except Exception as e:
                     logger.error("saved search email failed: %s", e)
-            # Web Push — saved-search match
+            # Web Push — saved-search match (localized)
             if u:
                 try:
-                    from services import push as push_svc
-                    await push_svc.send_to_user(
+                    from services import push_templates
+                    await push_templates.send_template(
                         s["user_id"],
-                        title=f"Нова обява · {s['name']}",
-                        body=f"{auction['title']} · от €{int(auction.get('starting_bid_eur', 0)):,}",
+                        "saved_search_match",
+                        fmt_args={
+                            "name": s["name"],
+                            "title": auction["title"],
+                            "price": f"{int(auction.get('starting_bid_eur', 0)):,}",
+                        },
                         url=f"/auctions/{auction['id']}",
                         tag=f"saved-{s['id']}",
                     )

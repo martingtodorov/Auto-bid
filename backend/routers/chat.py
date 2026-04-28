@@ -235,11 +235,11 @@ def build_chat_router(db, get_current_user, require_admin_or_moderator):
         except Exception:
             pass
         try:
-            from services import push as push_service
-            await push_service.send_to_user(
+            from services import push_templates
+            await push_templates.send_template(
                 user_id,
-                title="Поддръжка ви пише",
-                body=body_clean[:140],
+                "chat_admin_message",
+                fmt_args={"preview": body_clean[:140]},
                 url="/inbox",
                 tag="chat",
             )

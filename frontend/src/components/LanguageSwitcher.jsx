@@ -2,6 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { Globe } from "lucide-react";
 import { externalUrlForLang, LANG_DOMAINS } from "../i18n";
+import { api } from "../lib/apiClient";
 
 export default function LanguageSwitcher({ className = "" }) {
   const { i18n } = useTranslation();
@@ -13,6 +14,14 @@ export default function LanguageSwitcher({ className = "" }) {
   const change = (lng) => {
     i18n.changeLanguage(lng);
     try { localStorage.setItem("autobids_lang", lng); } catch (_e) { /* ignore */ }
+    // Persist preference to backend so push notifications use the right
+    // language. Silent — failures are non-fatal (anonymous browsers, expired
+    // sessions, etc.).
+    try {
+      if (typeof localStorage !== "undefined" && localStorage.getItem("autobid_token")) {
+        api.post("/auth/me/lang", { lang: lng }).catch(() => {});
+      }
+    } catch (_e) { /* ignore */ }
   };
   const current = i18n.resolvedLanguage || "bg";
 

@@ -114,6 +114,8 @@
     "vat_short": "TVA",
     "without_vat": "fără TVA",
     "incl_vat": "incl. TVA",
+    "without_vat_label": "Fără TVA",
+    "your_bid_eur_gross": "Oferta ta (EUR, cu TVA {{rate}}%)",
     "buy_now_short": "Cumpără acum",
     "price_with_vat": "Cu TVA {{rate}}%",
     "buyer_fee_label": "Taxă cumpărător",
@@ -602,6 +604,27 @@
     "view_all": "Toate notificările →",
     "unread_count": "{{count}} necitite"
   },
+  "chat": {
+    "support_title": "Chat cu asistența",
+    "support_subtitle": "răspuns de obicei în 24h",
+    "support_default_name": "Asistență",
+    "user_default_name": "Utilizator",
+    "loading": "Se încarcă…",
+    "no_messages": "Încă niciun mesaj. Trimite primul.",
+    "input_placeholder": "Scrie un mesaj… (Enter = trimite)",
+    "input_placeholder_admin": "Răspuns… (Enter = trimite)",
+    "send": "Trimite",
+    "refresh": "Reîmprospătare",
+    "search_thread_placeholder": "Caută conversație…",
+    "new_conversation": "+ Conversație nouă",
+    "user_search_placeholder": "Email sau nume utilizator…",
+    "no_threads": "Nicio conversație. Apasă „Conversație nouă”.",
+    "select_or_start": "Selectează o conversație din stânga sau începe una nouă.",
+    "no_thread_messages": "Nicio conversație în acest fir.",
+    "you_prefix": "Tu: ",
+    "admin_role_label": "(admin)",
+    "auto_reply_alt": "răspuns automat"
+  },
   "dashboard": {
     "overline": "Profil",
     "greeting": "Bună, {{name}}",
@@ -617,6 +640,14 @@
   },
   "notifications": {
     "types": {
+      "chat_admin_message": {
+        "title": "Mesaj nou de la asistență",
+        "body": "{{preview}}"
+      },
+      "chat_user_message": {
+        "title": "Mesaj nou de la un utilizator",
+        "body": "{{preview}}"
+      },
       "listing_pending": {
         "title": "Anunț nou pentru aprobare",
         "body": "{{seller}}: {{title}}"
