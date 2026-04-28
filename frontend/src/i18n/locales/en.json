@@ -46,7 +46,8 @@
     "required": "Required",
     "confirm": "Confirm",
     "loading": "Loading…",
-    "sending": "Sending…"
+    "sending": "Sending…",
+    "add": "Add"
   },
   "auth": {
     "welcome_back": "Welcome back",

@@ -93,21 +93,18 @@ export default function Nav() {
             )}
           </div>
 
-          {/* Mobile-only bell — visible right next to the hamburger */}
-          {user && (
-            <div className="md:hidden">
-              <NotificationBell />
-            </div>
-          )}
-
-          <button
-            className="md:hidden -m-3 p-3 flex items-center justify-center"
-            onClick={() => setOpen(!open)}
-            data-testid="mobile-menu-toggle"
-            aria-label="Menu"
-          >
-            {open ? <X size={22} /> : <Menu size={22} />}
-          </button>
+          {/* Mobile-only group: bell + hamburger sit close together on the right */}
+          <div className="md:hidden flex items-center gap-1">
+            {user && <NotificationBell />}
+            <button
+              className="-m-2 p-2 flex items-center justify-center"
+              onClick={() => setOpen(!open)}
+              data-testid="mobile-menu-toggle"
+              aria-label="Menu"
+            >
+              {open ? <X size={22} /> : <Menu size={22} />}
+            </button>
+          </div>
         </div>
       </div>
 

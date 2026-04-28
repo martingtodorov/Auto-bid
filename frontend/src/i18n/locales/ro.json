@@ -46,7 +46,8 @@
     "required": "Câmp obligatoriu",
     "confirm": "Confirmă",
     "loading": "Se încarcă…",
-    "sending": "Se trimite…"
+    "sending": "Se trimite…",
+    "add": "Adaugă"
   },
   "auth": {
     "welcome_back": "Bine ai revenit",

@@ -3307,6 +3307,11 @@ from routers import inbox as _inbox_router
 _inbox = _inbox_router.build_inbox_router(db, get_current_user)
 app.include_router(_inbox)
 
+# Two-way chat between users and admins/moderators.
+from routers import chat as _chat_router
+_chat = _chat_router.build_chat_router(db, get_current_user, require_admin_or_moderator)
+app.include_router(_chat)
+
 # Stripe Checkout — manual-capture authorization holds for bidding deposits.
 # Card data is collected ONLY by Stripe's hosted Checkout — never by our website.
 from routers import stripe_holds as _stripe_holds

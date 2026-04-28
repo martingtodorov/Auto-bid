@@ -494,3 +494,45 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 - Concurrent bidders (FOR UPDATE lock)
 - Out-of-order event delivery (idempotent guards)
 
+
+---
+
+## April 28, 2026 — Operations + UX batch
+
+### Infrastructure: PostgreSQL persistence
+- `/app/scripts/start_postgres.sh` wrapper now backs the supervisor `postgresql` program.
+  - Re-installs `postgresql-15` if `/usr/lib/postgresql/15` is missing on container restart (overlay FS wipes `/usr`).
+  - Persistent data dir at `/app/data/pgdata` (the `/app` mount is the only durable volume).
+  - Bootstrap creates `autobid` user + `autobid_bids` database on first run, then `exec`s postgres in foreground.
+- Verified by deleting `/var/lib/postgresql/15/main` then restarting supervisor: bidding tables (`bids`, `bid_state`, `bid_events`) survive.
+
+### Sell page — gross input flow
+- Starting bid, reserve and buy-now inputs now treat the entered value as **gross (incl. VAT)** when `vat_status === "vat_inclusive"`.
+- Frontend converts gross → net before POST; backend storage / API contract unchanged.
+- Field labels switch to "(с ДДС)" and the helper hint shows the implied **net** value ("Без ДДС {{rate}}%: {{amount}} €").
+
+### Admin↔User two-way chat (NEW)
+- **Mongo collection**: `chat_messages` `{id, thread_user_id, sender_id, sender_role, sender_name, body, created_at, read_by_user, read_by_admin}`
+- **Backend** (`/app/backend/routers/chat.py`):
+  - `GET /api/me/chat/messages` · `POST /api/me/chat/messages` · `POST /api/me/chat/read` · `GET /api/me/chat/unread-count`
+  - `GET /api/admin/chat/threads` (aggregation grouped by user, with last message + unread count)
+  - `GET /api/admin/chat/threads/{user_id}/messages` · `POST /api/admin/chat/threads/{user_id}/messages` · `POST /api/admin/chat/threads/{user_id}/read`
+  - Side effects on send: admin→user fans out inbox notification + Web Push to the customer; user→admin notifies all admins/moderators in their inbox bell.
+- **Frontend**:
+  - `AdminChatPanel.jsx` — new "Чат" tab in Admin Panel with threads list (with unread badges + "Нов разговор" user-search) and a chat pane.
+  - `UserChatPanel.jsx` — collapsible panel pinned at the top of `InboxPage` for the customer to converse with support.
+- Verified end-to-end via curl (user→admin and admin→user) and screenshots of both UIs.
+
+### Drag-to-reorder photos — touch support
+- Existing desktop HTML5 drag in `SellerRequestModal` extended with **long-press touch drag** (220 ms hold, floating ghost element, drop-target highlighting).
+- Up/down arrow buttons are now permanently visible on mobile (not hover-gated).
+- `ImageUploader.jsx` already had cross-uploader touch drag (no change needed).
+
+### Misc UX polish
+- Mobile nav: bell icon and hamburger button grouped in a single flex container (`gap-1`) so they sit immediately next to each other instead of being pushed apart by `gap-6`.
+- Admin Panel → All listings: each row now has a **Преглед** button (`Eye` icon) opening the auction detail in a new tab.
+- i18n: added `forms.add` key (BG "Добави" / EN "Add" / RO "Adaugă") so the "Add photo" button in `ImageUploader` translates correctly across all locales.
+
+### Test credentials added
+- `chattest3@test.bg` / `chatpass1` — used to seed the chat thread shown in screenshots.
+

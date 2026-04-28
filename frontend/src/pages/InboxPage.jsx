@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { CheckCheck } from "lucide-react";
 import { api } from "../lib/apiClient";
 import { resolveNotification } from "../lib/notifications";
+import UserChatPanel from "../components/UserChatPanel";
 
 /** Full-page inbox listing the user's notifications with pagination. */
 export default function InboxPage() {
@@ -57,6 +58,8 @@ export default function InboxPage() {
           </button>
         )}
       </div>
+
+      <UserChatPanel />
 
       {loading && <p className="text-sm text-[hsl(var(--ink-muted))]">…</p>}
       {!loading && items.length === 0 && (

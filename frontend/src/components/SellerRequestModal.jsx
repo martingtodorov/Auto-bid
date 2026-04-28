@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
-import { X, Star, FileEdit, Images, ArrowUp, ArrowDown, Trash2 } from "lucide-react";
+import { X, Star, FileEdit, Images, ArrowUp, ArrowDown, Trash2, GripVertical } from "lucide-react";
 import { api } from "../lib/apiClient";
 import { formatError } from "../lib/auth";
 import { useTranslation } from "react-i18next";
+
+const LONG_PRESS_MS = 220;
 
 /**
  * Seller self-service requests for a single auction.
@@ -30,6 +32,7 @@ export default function SellerRequestModal({ auction, mode, onClose, onDone }) {
   // Reorder state
   const [images, setImages] = useState(() => Array.from(auction?.images || []));
   const dragItem = useRef(null);
+  const touchState = useRef({ active: false, startX: 0, startY: 0, fromIdx: null, ghost: null, longPressTimer: null, lastTargetIdx: null });
 
   // Modal close on Escape
   useEffect(() => {
@@ -81,6 +84,86 @@ export default function SellerRequestModal({ auction, mode, onClose, onDone }) {
     });
   };
   const onDragEnd = () => { dragItem.current = null; };
+
+  // Touch (mobile) drag — long-press creates a floating ghost that follows the finger.
+  const clearGhost = () => {
+    if (touchState.current.ghost) {
+      touchState.current.ghost.remove();
+      touchState.current.ghost = null;
+    }
+  };
+  const clearTargetHighlight = () => {
+    document.querySelectorAll('[data-reorder-drop-target="true"]').forEach((el) => el.removeAttribute("data-reorder-drop-target"));
+  };
+  useEffect(() => () => { clearGhost(); clearTargetHighlight(); }, []);
+
+  const onTouchStart = (e, idx, src) => {
+    if (e.touches.length !== 1) return;
+    const tch = e.touches[0];
+    touchState.current.startX = tch.clientX;
+    touchState.current.startY = tch.clientY;
+    touchState.current.fromIdx = idx;
+    touchState.current.active = false;
+    if (touchState.current.longPressTimer) clearTimeout(touchState.current.longPressTimer);
+    touchState.current.longPressTimer = setTimeout(() => {
+      touchState.current.active = true;
+      try { if (navigator.vibrate) navigator.vibrate(12); } catch {}
+      const ghost = document.createElement("div");
+      ghost.style.cssText = `position:fixed;left:0;top:0;width:120px;height:90px;background-image:url("${src.replace(/"/g, '\\"')}");background-size:cover;background-position:center;border-radius:8px;box-shadow:0 12px 32px rgba(0,0,0,.35);pointer-events:none;z-index:9999;transform:translate(${tch.clientX - 60}px, ${tch.clientY - 45}px) scale(1.05);border:2px solid hsl(158 60% 30%);`;
+      document.body.appendChild(ghost);
+      touchState.current.ghost = ghost;
+      document.body.style.overflow = "hidden";
+    }, LONG_PRESS_MS);
+  };
+  const onTouchMove = (e) => {
+    if (!touchState.current.longPressTimer && !touchState.current.active) return;
+    const tch = e.touches[0];
+    const dx = tch.clientX - touchState.current.startX;
+    const dy = tch.clientY - touchState.current.startY;
+    if (!touchState.current.active) {
+      if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
+        clearTimeout(touchState.current.longPressTimer);
+        touchState.current.longPressTimer = null;
+      }
+      return;
+    }
+    e.preventDefault();
+    if (touchState.current.ghost) {
+      touchState.current.ghost.style.transform = `translate(${tch.clientX - 60}px, ${tch.clientY - 45}px) scale(1.05)`;
+    }
+    const el = document.elementFromPoint(tch.clientX, tch.clientY);
+    clearTargetHighlight();
+    touchState.current.lastTargetIdx = null;
+    if (el) {
+      const slot = el.closest("[data-reorder-slot]");
+      if (slot) {
+        slot.setAttribute("data-reorder-drop-target", "true");
+        touchState.current.lastTargetIdx = parseInt(slot.getAttribute("data-reorder-idx"), 10);
+      }
+    }
+    const margin = 60;
+    if (tch.clientY < margin) window.scrollBy(0, -8);
+    else if (tch.clientY > window.innerHeight - margin) window.scrollBy(0, 8);
+  };
+  const onTouchEnd = () => {
+    if (touchState.current.longPressTimer) clearTimeout(touchState.current.longPressTimer);
+    touchState.current.longPressTimer = null;
+    const wasActive = touchState.current.active;
+    const fromIdx = touchState.current.fromIdx;
+    const targetIdx = touchState.current.lastTargetIdx;
+    clearGhost();
+    clearTargetHighlight();
+    document.body.style.overflow = "";
+    touchState.current.active = false;
+    if (wasActive && fromIdx != null && targetIdx != null && targetIdx !== fromIdx) {
+      setImages((list) => {
+        const n = [...list];
+        const [moved] = n.splice(fromIdx, 1);
+        n.splice(targetIdx, 0, moved);
+        return n;
+      });
+    }
+  };
 
   const moveUp = (i) => {
     if (i <= 0) return;
@@ -188,16 +271,23 @@ export default function SellerRequestModal({ auction, mode, onClose, onDone }) {
                       onDragStart={() => onDragStart(i)}
                       onDragOver={(e) => onDragOver(e, i)}
                       onDragEnd={onDragEnd}
-                      className="relative rounded-card border border-[hsl(var(--line))] overflow-hidden bg-[hsl(var(--surface))] cursor-move group"
+                      onTouchStart={(e) => onTouchStart(e, i, src)}
+                      onTouchMove={onTouchMove}
+                      onTouchEnd={onTouchEnd}
+                      onTouchCancel={onTouchEnd}
+                      data-reorder-slot="true"
+                      data-reorder-idx={i}
+                      className="relative rounded-card border border-[hsl(var(--line))] overflow-hidden bg-[hsl(var(--surface))] cursor-move group select-none transition data-[reorder-drop-target=true]:border-[hsl(var(--accent))] data-[reorder-drop-target=true]:ring-2 data-[reorder-drop-target=true]:ring-[hsl(var(--accent))]/40"
                       data-testid={`reorder-item-${i}`}
+                      style={{ touchAction: "pan-y" }}
                     >
                       <div className="aspect-[4/3]">
-                        <img src={src} alt={`#${i+1}`} className="w-full h-full object-cover pointer-events-none" />
+                        <img src={src} alt={`#${i+1}`} className="w-full h-full object-cover pointer-events-none" draggable="false" />
                       </div>
-                      <div className="absolute top-1 left-1 bg-black/70 text-white text-xs font-mono px-1.5 py-0.5 rounded">
-                        #{i + 1}{i === 0 ? " • корица" : ""}
+                      <div className="absolute top-1 left-1 bg-black/70 text-white text-xs font-mono px-1.5 py-0.5 rounded flex items-center gap-1 pointer-events-none">
+                        <GripVertical size={10} /> #{i + 1}{i === 0 ? " • корица" : ""}
                       </div>
-                      <div className="absolute bottom-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="absolute bottom-1 right-1 flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                         <button
                           type="button"
                           onClick={() => moveUp(i)}
@@ -220,6 +310,11 @@ export default function SellerRequestModal({ auction, mode, onClose, onDone }) {
                     </div>
                   ))}
                 </div>
+              )}
+              {images.length > 0 && (
+                <p className="text-[11px] text-[hsl(var(--ink-muted))] mt-2">
+                  Плъзнете снимките с мишка (десктоп) или натиснете и задръжте, за да ги преместите (мобилни). Първата снимка е корица.
+                </p>
               )}
             </>
           )}

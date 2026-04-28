@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Navigate, Link } from "react-router-dom";
-import { Check, X, Clock, AlertCircle, DollarSign, Archive, Ban, Edit3, Trash2, RotateCcw, Search, List, Users, BarChart3, Trash, RefreshCw, CreditCard, ScrollText, Tag, Pause, Play, Star, StarOff, Copy, XCircle, Gavel, Mail, Inbox, FileEdit } from "lucide-react";
+import { Check, X, Clock, AlertCircle, DollarSign, Archive, Ban, Edit3, Eye, Trash2, RotateCcw, Search, List, Users, BarChart3, Trash, RefreshCw, CreditCard, ScrollText, Tag, Pause, Play, Star, StarOff, Copy, XCircle, Gavel, Mail, Inbox, FileEdit, MessageCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth, formatError } from "../lib/auth";
 import { api, formatEUR, formatKM } from "../lib/apiClient";
@@ -16,6 +16,7 @@ import AdminNotificationsTab from "../components/AdminNotificationsTab";
 import AdminEmailTemplatesTab from "../components/AdminEmailTemplatesTab";
 import AdminSellerRequestsTab from "../components/AdminSellerRequestsTab";
 import AdminArchiveTab from "../components/AdminArchiveTab";
+import AdminChatPanel from "../components/AdminChatPanel";
 
 const STATUS_LABELS = {
   pending: "Очаква",
@@ -249,6 +250,7 @@ export default function AdminPage() {
     { k: "makes", label: t("admin.tabs.makes"), icon: Tag, adminOnly: true },
     { k: "stripe", label: t("admin.tabs.stripe"), icon: CreditCard, adminOnly: true },
     { k: "notifications", label: t("admin.tabs.notifications"), icon: Mail },
+    { k: "chat", label: "Чат", icon: MessageCircle },
     { k: "templates", label: t("admin.tabs.templates"), icon: FileEdit, adminOnly: true },
     { k: "audit", label: t("admin.tabs.audit"), icon: ScrollText },
     { k: "settings", label: t("admin.tabs.settings"), icon: Edit3, adminOnly: true },
@@ -409,6 +411,9 @@ export default function AdminPage() {
                       <button onClick={() => setEditingId(a.id)} className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1" data-testid={`edit-${a.id}`}>
                         <Edit3 size={12} /> Редактирай
                       </button>
+                      <a href={`/auctions/${a.id}`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1" data-testid={`preview-${a.id}`} title="Отвори обявата в нов раздел">
+                        <Eye size={12} /> Преглед
+                      </a>
                       {a.status === "pending" && (
                         <button onClick={() => approve(a.id)} disabled={busy === a.id} className="btn btn-accent !py-1.5 !px-3 text-xs flex items-center gap-1" data-testid={`quick-approve-${a.id}`}>
                           <Check size={12} /> Одобри
@@ -516,6 +521,7 @@ export default function AdminPage() {
         {tab === "audit" && <AdminAuditLogTab />}
         {tab === "makes" && <AdminMakesTab />}
         {tab === "notifications" && <AdminNotificationsTab />}
+        {tab === "chat" && <AdminChatPanel />}
         {tab === "templates" && <AdminEmailTemplatesTab />}
         {tab === "requests" && <AdminSellerRequestsTab />}
         {tab === "archive" && <AdminArchiveTab />}
