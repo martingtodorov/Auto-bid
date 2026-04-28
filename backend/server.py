@@ -1509,6 +1509,8 @@ async def buy_now(auction_id: str, request: Request, user: dict = Depends(get_cu
     if float(a.get("current_bid_eur") or 0) > bn:
         raise HTTPException(status_code=400, detail="Текущата наддавка вече надвишава цената 'Купи сега'.")
     now = datetime.now(timezone.utc)
+    # Buyer's premium for Buy Now: 2% of the gross (incl. VAT) price, clamped
+    # by the platform's configured min/max in admin Settings (default 150 / 4000).
     fee_amount = _buyer_fee_on_auction(bn, a)
     update = {
         "status": "sold",

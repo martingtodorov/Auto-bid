@@ -705,6 +705,16 @@ export default function AuctionDetailPage() {
                       </div>
                     )}
                     <p className="text-xs text-[hsl(var(--ink-muted))] mt-2">{t("auction.buy_now_hint", "Купувайте веднага без да чакате края на търга. Резервът се счита за изпълнен.")}</p>
+                    {(() => {
+                      const grossPrice = vatRate > 0 ? grossOf(a.buy_now_eur) : Number(a.buy_now_eur || 0);
+                      const buyNowFee = buyerFeeFor(grossPrice);
+                      return buyNowFee > 0 && (
+                        <div className="mt-2 text-xs text-[hsl(var(--ink-muted))]" data-testid="buy-now-fee-preview">
+                          {t("auction.buyer_fee_label")}: <span className="font-mono text-[hsl(var(--ink))]">{formatEUR(buyNowFee)}</span>
+                          <span className="ml-1">({settings.buyer_fee_pct}% {t("auction.incl_vat", "вкл. ДДС")})</span>
+                        </div>
+                      );
+                    })()}
                     <button
                       onClick={onBuyNow}
                       disabled={!user || buyingNow}
