@@ -69,3 +69,10 @@ async def init_pg_schema() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("PostgreSQL bidding schema ready")
+
+
+async def dispose_engine() -> None:
+    """Drop the SQLAlchemy connection pool so the next call uses fresh
+    connections. Used between retries when PG is starting up — otherwise
+    the pool may latch onto a half-open socket."""
+    await engine.dispose()

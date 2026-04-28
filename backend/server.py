@@ -3013,7 +3013,22 @@ async def seed_admin():
 
 @app.on_event("startup")
 async def on_startup():
-    await db.users.create_index("email", unique=True)
+    # ----- MongoDB: wait until reachable before creating indexes -----
+    # On cold container starts, both Mongo and the API spin up in parallel.
+    # We retry up to ~60s instead of crashing the worker loop.
+    mongo_ready = False
+    for attempt in range(1, 31):  # ~60s max wait
+        try:
+            await db.users.create_index("email", unique=True)
+            mongo_ready = True
+            if attempt > 1:
+                logger.warning("MongoDB became ready after %d retries", attempt)
+            break
+        except Exception as e:
+            logger.warning("Mongo bootstrap attempt %d failed: %s", attempt, e)
+            await asyncio.sleep(2)
+    if not mongo_ready:
+        logger.error("MongoDB still unavailable after 30 retries — proceeding (operations will surface errors)")
     await db.auctions.create_index("id", unique=True)
     await db.auctions.create_index([("status", 1), ("ends_at", 1)])
     # NOTE: legacy Mongo `bids` index kept for old archive data; new bids live in Postgres.
@@ -3027,12 +3042,12 @@ async def on_startup():
     await db.makes.create_index("name", unique=True)
     await db.audit_log.create_index([("at", -1)])
     # PostgreSQL bidding subsystem — retry with backoff so transient PG
-    # readiness issues at boot don't crash the entire app. Supervisor
-    # starts both processes in parallel, so on a cold container we may
-    # race PG by a few seconds.
-    from db_pg import init_pg_schema
+    # readiness issues at boot don't crash the entire app. Cold-start
+    # scenarios where PG binaries need re-installation can take up to
+    # 2 minutes, so we keep retrying for ~5 minutes total.
+    from db_pg import init_pg_schema, dispose_engine
     pg_ready = False
-    for attempt in range(1, 16):  # ~30s max wait
+    for attempt in range(1, 151):  # ~5 minutes max wait (150 × 2s)
         try:
             await init_pg_schema()
             pg_ready = True
@@ -3040,12 +3055,22 @@ async def on_startup():
                 logger.warning("PostgreSQL became ready after %d retries", attempt)
             break
         except Exception as e:
-            logger.warning("init_pg_schema attempt %d failed: %s", attempt, e)
+            # Backoff: log only every 5 attempts to keep the log readable on
+            # long cold starts.
+            if attempt % 5 == 1:
+                logger.warning("init_pg_schema attempt %d failed: %s", attempt, e)
+            # Drop any cached engine state so the next try uses a fresh
+            # connection — prevents the SQLAlchemy pool from latching onto
+            # a stale "starting up" socket.
+            try:
+                await dispose_engine()
+            except Exception:
+                pass
             await asyncio.sleep(2)
     if not pg_ready:
         # Don't crash — the API still serves all Mongo-backed endpoints.
         # Bid endpoints will surface their own errors when the user tries.
-        logger.error("PostgreSQL still unavailable after 15 retries — starting in degraded mode")
+        logger.error("PostgreSQL still unavailable after 150 retries — starting in degraded mode")
     # Transactional-outbox worker (drains bid_events → MongoDB)
     from services import outbox_worker
     app.state._outbox_stop = asyncio.Event()
