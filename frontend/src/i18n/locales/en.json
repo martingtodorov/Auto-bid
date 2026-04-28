@@ -438,6 +438,7 @@
       "contact_phone": "Phone number",
       "photos": "Car photos",
       "photos_hint": "Please upload all required photos: min. 8 exterior, 4 wheels (one each), 1 front bumper, 4 interior. The first exterior photo is the cover.",
+      "photos_budget": "Used: {{used}} MB / {{total}} (max 10 MB per photo)",
       "exterior": "Exterior",
       "exterior_helper": "Photos from all sides of the car",
       "bumper": "Front bumper",
@@ -603,6 +604,12 @@
     "mark_all_read": "Mark all read",
     "view_all": "View all →",
     "unread_count": "{{count}} unread"
+  },
+  "uploader": {
+    "image_too_large": "{{name}} is {{size}} — max {{max}} per photo.",
+    "total_too_large": "Total {{current}}, this photo adds {{incoming}} — limit is {{max}}.",
+    "decode_failed": "Could not read {{name}}.",
+    "too_many": "You can upload at most {{max}} photos in this category."
   },
   "chat": {
     "support_title": "Chat with support",

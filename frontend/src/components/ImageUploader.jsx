@@ -1,8 +1,12 @@
 import React, { useRef, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Upload, X, Image as ImageIcon, AlertCircle, Check, Move, GripVertical, ArrowRightLeft } from "lucide-react";
+import { toast } from "sonner";
 
-const MAX_SIZE = 2 * 1024 * 1024;
+// Per-image hard cap (raw bytes the user picks from disk). Mirrors the
+// backend `IMAGE_MAX_RAW_BYTES` so feedback is immediate and consistent.
+const MAX_IMG_BYTES = 10 * 1024 * 1024;        // 10 MB per file
+const MAX_LISTING_BYTES = 120 * 1024 * 1024;   // 120 MB total per listing
 const LONG_PRESS_MS = 220;
 
 // Shared pointer-drag state across all uploader instances (cross-category drag)
@@ -40,6 +44,11 @@ export default function ImageUploader({
   category,
   onMoveBetween,
   availableCategories = [],
+  // Optional callback used by parent (e.g. SellPage) to report cumulative
+  // bytes across ALL uploaders for a single listing — needed to enforce the
+  // 120 MB total-listing budget across categorised buckets.
+  totalBudgetBytes = MAX_LISTING_BYTES,
+  currentTotalBytes = 0,
 }) {
   const { t } = useTranslation();
   const ref = useRef(null);
@@ -51,6 +60,10 @@ export default function ImageUploader({
   // Cleanup on unmount
   useEffect(() => () => { clearGhost(); clearTargetHighlight(); }, []);
 
+  // Re-encode the image client-side so we don't ship multi-MB camera
+  // originals over the wire. The server still re-optimizes everything for
+  // a single source of truth, but trimming here cuts upload time on slow
+  // connections (notably mobile uploads).
   const compress = (file) =>
     new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -58,7 +71,7 @@ export default function ImageUploader({
         const img = new Image();
         img.onload = () => {
           const canvas = document.createElement("canvas");
-          const maxDim = 1600;
+          const maxDim = 1920;
           let w = img.width, h = img.height;
           if (w > maxDim || h > maxDim) {
             if (w > h) { h = (h / w) * maxDim; w = maxDim; }
@@ -67,7 +80,7 @@ export default function ImageUploader({
           canvas.width = w; canvas.height = h;
           const ctx = canvas.getContext("2d");
           ctx.drawImage(img, 0, 0, w, h);
-          resolve(canvas.toDataURL("image/jpeg", 0.82));
+          resolve(canvas.toDataURL("image/jpeg", 0.85));
         };
         img.onerror = reject;
         img.src = e.target.result;
@@ -76,14 +89,60 @@ export default function ImageUploader({
       reader.readAsDataURL(file);
     });
 
+  // Approximate raw bytes inside a `data:image/...;base64,...` URL.
+  const dataUrlBytes = (url) => {
+    if (!url || typeof url !== "string") return 0;
+    const i = url.indexOf(",");
+    if (i < 0) return 0;
+    return Math.floor((url.length - i - 1) * 0.75);
+  };
+
   const handleFiles = async (files) => {
-    const arr = Array.from(files).slice(0, max - images.length);
-    const compressed = [];
-    for (const f of arr) {
-      if (f.size > MAX_SIZE * 3) continue;
-      try { compressed.push(await compress(f)); } catch {}
+    const fmt = (n) => `${(n / 1024 / 1024).toFixed(1)} MB`;
+    const arr = Array.from(files);
+    const slotsLeft = Math.max(0, max - images.length);
+    if (arr.length > slotsLeft) {
+      toast.warning(t("uploader.too_many", { max }));
     }
-    onChange([...images, ...compressed]);
+    const accepted = [];
+    let runningTotal = currentTotalBytes;
+
+    for (const f of arr.slice(0, slotsLeft)) {
+      // 1) raw per-file size (fast path before any decoding)
+      if (f.size > MAX_IMG_BYTES) {
+        toast.error(t("uploader.image_too_large", { name: f.name, size: fmt(f.size), max: "10 MB" }));
+        continue;
+      }
+      // 2) Heuristic budget check — would adding this file blow the listing cap?
+      //    We use the raw file size as the upper bound (compression usually
+      //    halves it, so this is intentionally conservative).
+      if (runningTotal + f.size > totalBudgetBytes) {
+        toast.error(t("uploader.total_too_large", {
+          current: fmt(runningTotal),
+          incoming: fmt(f.size),
+          max: "120 MB",
+        }));
+        break;
+      }
+      try {
+        const dataUrl = await compress(f);
+        const compressedBytes = dataUrlBytes(dataUrl);
+        // Recheck against the cap with the actual encoded size.
+        if (runningTotal + compressedBytes > totalBudgetBytes) {
+          toast.error(t("uploader.total_too_large", {
+            current: fmt(runningTotal),
+            incoming: fmt(compressedBytes),
+            max: "120 MB",
+          }));
+          break;
+        }
+        runningTotal += compressedBytes;
+        accepted.push(dataUrl);
+      } catch {
+        toast.error(t("uploader.decode_failed", { name: f.name }));
+      }
+    }
+    if (accepted.length) onChange([...images, ...accepted]);
   };
 
   const remove = (idx) => onChange(images.filter((_, i) => i !== idx));

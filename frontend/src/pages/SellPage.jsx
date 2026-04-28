@@ -462,54 +462,91 @@ export default function SellPage() {
             <Field label={t("sell.form.photos")} span={2}>
               <div className="space-y-3">
                 <div className="text-xs text-[hsl(var(--ink-muted))] leading-relaxed">{t("sell.form.photos_hint")}</div>
-                <ImageUploader
-                  label={t("sell.form.exterior")}
-                  helper={t("sell.form.exterior_helper")}
-                  min={8}
-                  max={20}
-                  images={form.images_exterior}
-                  onChange={(list) => set("images_exterior", list)}
-                  testId="uploader-exterior"
-                  category="images_exterior"
-                  onMoveBetween={movePhoto}
-                  availableCategories={IMG_CATEGORIES.filter((c) => c.id !== "images_exterior")}
-                />
-                <ImageUploader
-                  label={t("sell.form.bumper")}
-                  helper={t("sell.form.bumper_helper")}
-                  min={1}
-                  max={4}
-                  images={form.images_bumper}
-                  onChange={(list) => set("images_bumper", list)}
-                  testId="uploader-bumper"
-                  category="images_bumper"
-                  onMoveBetween={movePhoto}
-                  availableCategories={IMG_CATEGORIES.filter((c) => c.id !== "images_bumper")}
-                />
-                <ImageUploader
-                  label={t("sell.form.wheels")}
-                  helper={t("sell.form.wheels_helper")}
-                  min={4}
-                  max={8}
-                  images={form.images_wheels}
-                  onChange={(list) => set("images_wheels", list)}
-                  testId="uploader-wheels"
-                  category="images_wheels"
-                  onMoveBetween={movePhoto}
-                  availableCategories={IMG_CATEGORIES.filter((c) => c.id !== "images_wheels")}
-                />
-                <ImageUploader
-                  label={t("sell.form.interior")}
-                  helper={t("sell.form.interior_helper")}
-                  min={4}
-                  max={12}
-                  images={form.images_interior}
-                  onChange={(list) => set("images_interior", list)}
-                  testId="uploader-interior"
-                  category="images_interior"
-                  onMoveBetween={movePhoto}
-                  availableCategories={IMG_CATEGORIES.filter((c) => c.id !== "images_interior")}
-                />
+                {(() => {
+                  // Aggregate raw bytes across every category so each uploader
+                  // can know how much of the 120 MB budget is already used.
+                  const dataUrlBytes = (url) => {
+                    if (!url || typeof url !== "string") return 0;
+                    const i = url.indexOf(",");
+                    if (i < 0) return 0;
+                    return Math.floor((url.length - i - 1) * 0.75);
+                  };
+                  const allImgs = [
+                    ...(form.images_exterior || []),
+                    ...(form.images_bumper || []),
+                    ...(form.images_wheels || []),
+                    ...(form.images_interior || []),
+                  ];
+                  const usedBytes = allImgs.reduce((s, u) => s + dataUrlBytes(u), 0);
+                  const usedMB = (usedBytes / 1024 / 1024).toFixed(1);
+                  const pct = Math.min(100, (usedBytes / (120 * 1024 * 1024)) * 100);
+                  const near = pct > 80;
+                  return (
+                    <>
+                      <div className="text-xs text-[hsl(var(--ink-muted))]" data-testid="photos-budget">
+                        <span>{t("sell.form.photos_budget", { used: usedMB, total: "120 MB" })}</span>
+                        <div className="h-1 mt-1 rounded-full bg-[hsl(var(--line))] overflow-hidden">
+                          <div
+                            className={`h-full transition-all ${near ? "bg-[hsl(var(--danger))]" : "bg-[hsl(var(--accent))]"}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                      <ImageUploader
+                        label={t("sell.form.exterior")}
+                        helper={t("sell.form.exterior_helper")}
+                        min={8}
+                        max={20}
+                        images={form.images_exterior}
+                        onChange={(list) => set("images_exterior", list)}
+                        testId="uploader-exterior"
+                        category="images_exterior"
+                        onMoveBetween={movePhoto}
+                        availableCategories={IMG_CATEGORIES.filter((c) => c.id !== "images_exterior")}
+                        currentTotalBytes={usedBytes - (form.images_exterior || []).reduce((s, u) => s + dataUrlBytes(u), 0)}
+                      />
+                      <ImageUploader
+                        label={t("sell.form.bumper")}
+                        helper={t("sell.form.bumper_helper")}
+                        min={1}
+                        max={4}
+                        images={form.images_bumper}
+                        onChange={(list) => set("images_bumper", list)}
+                        testId="uploader-bumper"
+                        category="images_bumper"
+                        onMoveBetween={movePhoto}
+                        availableCategories={IMG_CATEGORIES.filter((c) => c.id !== "images_bumper")}
+                        currentTotalBytes={usedBytes - (form.images_bumper || []).reduce((s, u) => s + dataUrlBytes(u), 0)}
+                      />
+                      <ImageUploader
+                        label={t("sell.form.wheels")}
+                        helper={t("sell.form.wheels_helper")}
+                        min={4}
+                        max={8}
+                        images={form.images_wheels}
+                        onChange={(list) => set("images_wheels", list)}
+                        testId="uploader-wheels"
+                        category="images_wheels"
+                        onMoveBetween={movePhoto}
+                        availableCategories={IMG_CATEGORIES.filter((c) => c.id !== "images_wheels")}
+                        currentTotalBytes={usedBytes - (form.images_wheels || []).reduce((s, u) => s + dataUrlBytes(u), 0)}
+                      />
+                      <ImageUploader
+                        label={t("sell.form.interior")}
+                        helper={t("sell.form.interior_helper")}
+                        min={4}
+                        max={12}
+                        images={form.images_interior}
+                        onChange={(list) => set("images_interior", list)}
+                        testId="uploader-interior"
+                        category="images_interior"
+                        onMoveBetween={movePhoto}
+                        availableCategories={IMG_CATEGORIES.filter((c) => c.id !== "images_interior")}
+                        currentTotalBytes={usedBytes - (form.images_interior || []).reduce((s, u) => s + dataUrlBytes(u), 0)}
+                      />
+                    </>
+                  );
+                })()}
               </div>
             </Field>
             <Field label={t("sell.form.description")} span={2}>

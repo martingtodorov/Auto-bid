@@ -624,13 +624,17 @@ async def translate_auction_description(
 @api.post("/auctions")
 @limiter.limit("10/minute")
 async def create_auction(request: Request, payload: AuctionCreate, user: dict = Depends(get_current_user)):
-    # --- Size limits (DoS protection against huge base64 images) ---
-    # Each image is a base64 data URL or https URL. Cap per-image + total payload.
-    MAX_PER_IMG = 5 * 1024 * 1024        # 5 MB per image (base64 overhead considered)
-    MAX_TOTAL_IMGS = 120
-    MAX_TOTAL_PAYLOAD = 120 * 1024 * 1024  # 120 MB aggregate
+    # --- Image validation, optimization & thumbnail generation ---
+    # Per-image hard cap: 10 MB raw (post-decode). Total per listing: 120 MB.
+    # Server-side Pillow re-encodes everything to JPEG @ ≤1920px / q=85 and
+    # generates 400px thumbnails — strips EXIF, kills SVG-injection vectors.
+    from services import image_processing as imgproc
 
-    total_bytes = 0
+    MAX_PER_IMG_RAW = imgproc.IMAGE_MAX_RAW_BYTES   # 10 MB
+    MAX_TOTAL_IMGS = 120
+    MAX_TOTAL_PAYLOAD_RAW = 120 * 1024 * 1024       # 120 MB aggregate
+
+    total_raw = 0
     total_count = 0
     for bucket in (payload.images, payload.images_exterior, payload.images_wheels,
                    payload.images_bumper, payload.images_interior):
@@ -639,15 +643,23 @@ async def create_auction(request: Request, payload: AuctionCreate, user: dict = 
         for item in bucket:
             if not isinstance(item, str):
                 continue
-            size = len(item)
-            if size > MAX_PER_IMG:
-                raise HTTPException(status_code=413, detail="Една от снимките е твърде голяма (макс. 5 MB всяка)")
-            total_bytes += size
+            sz = imgproc.raw_bytes_of(item) if item.startswith("data:image/") else 0
+            if sz > MAX_PER_IMG_RAW:
+                mb = round(sz / 1024 / 1024, 1)
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Една от снимките е твърде голяма ({mb} MB). Макс. 10 MB на снимка.",
+                )
+            total_raw += sz
             total_count += 1
     if total_count > MAX_TOTAL_IMGS:
         raise HTTPException(status_code=413, detail=f"Твърде много снимки (макс. {MAX_TOTAL_IMGS})")
-    if total_bytes > MAX_TOTAL_PAYLOAD:
-        raise HTTPException(status_code=413, detail="Общият размер на снимките надвишава 120 MB")
+    if total_raw > MAX_TOTAL_PAYLOAD_RAW:
+        mb = round(total_raw / 1024 / 1024, 1)
+        raise HTTPException(
+            status_code=413,
+            detail=f"Общият размер на снимките е {mb} MB — надвишава лимита от 120 MB.",
+        )
 
     # Validate per-category image minimums (when using categorized uploader)
     exterior = payload.images_exterior or []
@@ -671,15 +683,26 @@ async def create_auction(request: Request, payload: AuctionCreate, user: dict = 
     else:
         merged = list(payload.images or [])
 
+    # Optimize on a worker thread — Pillow is sync and CPU-bound.
+    web_urls, thumb_urls, errs = await asyncio.to_thread(imgproc.optimize_many, merged)
+    if errs:
+        # Surface first 3 errors so user sees actionable feedback.
+        msg = "; ".join(errs[:3])
+        if len(errs) > 3:
+            msg += f"; и още {len(errs) - 3}"
+        raise HTTPException(status_code=400, detail=f"Грешка при обработката на снимки: {msg}")
+
     auction_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
     ends_at = now + timedelta(days=payload.duration_days)
     doc = payload.model_dump()
-    # Offload images to configured storage backend (inline|s3). Runs in a
-    # worker thread so a slow S3 upload doesn't stall the event loop.
+    # Persist optimized JPEGs (and thumbnails) to the configured storage
+    # backend. Runs off the event loop because S3 uploads can be slow.
     from storage import store_images
-    merged = await asyncio.to_thread(store_images, merged)
-    doc["images"] = merged
+    web_urls = await asyncio.to_thread(store_images, web_urls)
+    thumb_urls = await asyncio.to_thread(store_images, thumb_urls)
+    doc["images"] = web_urls
+    doc["thumbnails"] = thumb_urls
 
     # ---- VAT validation ----
     vat = (doc.get("vat_status") or "").strip() or None
@@ -2144,6 +2167,49 @@ async def update_listing(auction_id: str, payload: AuctionUpdate, user: dict = D
     if not is_admin:
         for forbidden in ("status", "featured", "ends_at"):
             update.pop(forbidden, None)
+
+    # If any image bucket is being updated, enforce the same size caps and
+    # re-encode through the optimizer + thumbnail pipeline (mirror create flow).
+    image_keys = ("images", "images_exterior", "images_wheels", "images_bumper", "images_interior")
+    if any(k in update for k in image_keys):
+        from services import image_processing as imgproc
+
+        MAX_PER_IMG_RAW = imgproc.IMAGE_MAX_RAW_BYTES
+        MAX_TOTAL_PAYLOAD_RAW = 120 * 1024 * 1024
+        total_raw = 0
+        for k in image_keys:
+            for item in (update.get(k) or []):
+                if not isinstance(item, str):
+                    continue
+                sz = imgproc.raw_bytes_of(item) if item.startswith("data:image/") else 0
+                if sz > MAX_PER_IMG_RAW:
+                    mb = round(sz / 1024 / 1024, 1)
+                    raise HTTPException(status_code=413, detail=f"Една от снимките е твърде голяма ({mb} MB). Макс. 10 MB на снимка.")
+                total_raw += sz
+        if total_raw > MAX_TOTAL_PAYLOAD_RAW:
+            mb = round(total_raw / 1024 / 1024, 1)
+            raise HTTPException(status_code=413, detail=f"Общият размер на снимките е {mb} MB — надвишава лимита от 120 MB.")
+
+        # Optimize each provided bucket independently — caller wants the
+        # bucket structure preserved.
+        thumb_buckets: dict[str, list[str]] = {}
+        for k in image_keys:
+            urls = update.get(k)
+            if not urls:
+                continue
+            web, thumb, errs = await asyncio.to_thread(imgproc.optimize_many, urls)
+            if errs:
+                msg = "; ".join(errs[:3])
+                raise HTTPException(status_code=400, detail=f"Грешка при обработката на снимки: {msg}")
+            from storage import store_images
+            web = await asyncio.to_thread(store_images, web)
+            thumb = await asyncio.to_thread(store_images, thumb)
+            update[k] = web
+            thumb_buckets[k] = thumb
+        # When the consolidated `images` list was rebuilt, also refresh
+        # the `thumbnails` array stored on the doc.
+        if "images" in update:
+            update["thumbnails"] = thumb_buckets["images"]
 
     if update:
         if "starting_bid_eur" in update and status in ("pending", "rejected") and not is_admin:

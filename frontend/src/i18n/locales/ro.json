@@ -438,6 +438,7 @@
       "contact_phone": "Număr de telefon",
       "photos": "Fotografii ale mașinii",
       "photos_hint": "Încarcă toate fotografiile necesare: minim 8 de exterior, 4 de jante (câte una din fiecare), 1 a barei frontale, 4 de interior. Prima fotografie exterioară va fi coperta.",
+      "photos_budget": "Folosit: {{used}} MB / {{total}} (max 10 MB per fotografie)",
       "exterior": "Exterior",
       "exterior_helper": "Fotografii din toate părțile mașinii",
       "bumper": "Bara frontală",
@@ -603,6 +604,12 @@
     "mark_all_read": "Marchează toate",
     "view_all": "Toate notificările →",
     "unread_count": "{{count}} necitite"
+  },
+  "uploader": {
+    "image_too_large": "{{name}} are {{size}} — max {{max}} per fotografie.",
+    "total_too_large": "Total {{current}}, această fotografie adaugă {{incoming}} — limita este {{max}}.",
+    "decode_failed": "Nu s-a putut citi {{name}}.",
+    "too_many": "Poți încărca maxim {{max}} fotografii în această categorie."
   },
   "chat": {
     "support_title": "Chat cu asistența",
