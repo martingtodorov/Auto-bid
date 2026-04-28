@@ -17,6 +17,7 @@ from fastapi.responses import PlainTextResponse
 from starlette.middleware.cors import CORSMiddleware
 import re
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import ReturnDocument
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
 
 from emails import email_outbid, email_won, email_approved, email_rejected, email_seller_new_bid, email_seller_new_comment, email_vin_delivery
@@ -1545,23 +1546,38 @@ async def buy_now(auction_id: str, request: Request, user: dict = Depends(get_cu
     if not bn or float(bn) <= 0:
         raise HTTPException(status_code=400, detail="Тази обява няма зададена цена 'Купи сега'.")
     bn = float(bn)
-    if float(a.get("current_bid_eur") or 0) > bn:
-        raise HTTPException(status_code=400, detail="Текущата наддавка вече надвишава цената 'Купи сега'.")
     now = datetime.now(timezone.utc)
     # Buyer's premium for Buy Now: 2% of the gross (incl. VAT) price, clamped
     # by the platform's configured min/max in admin Settings (default 150 / 4000).
     fee_amount = _buyer_fee_on_auction(bn, a)
-    update = {
-        "status": "sold",
-        "current_bid_eur": bn,
-        "high_bidder_id": user["id"],
-        "high_bidder_name": user["name"],
-        "ends_at": now.isoformat(),
-        "sold_at": now.isoformat(),
-        "sold_via_buy_now": True,
-        "bid_count": int(a.get("bid_count") or 0) + 1,
-    }
-    await db.auctions.update_one({"id": auction_id}, {"$set": update})
+    # Atomic claim — only one user can buy. Conditions:
+    #   • Auction is still live (not already sold/finalized/archived).
+    #   • Current bid hasn't surpassed the buy-now price meanwhile.
+    # Two clicks at the same time → exactly one wins, the other gets 409.
+    claim = await db.auctions.find_one_and_update(
+        {
+            "id": auction_id,
+            "status": {"$in": ["live", "scheduled"]},
+            "is_archived": {"$ne": True},
+            "current_bid_eur": {"$lte": bn},
+        },
+        {
+            "$set": {
+                "status": "sold",
+                "current_bid_eur": bn,
+                "high_bidder_id": user["id"],
+                "high_bidder_name": user["name"],
+                "ends_at": now.isoformat(),
+                "sold_at": now.isoformat(),
+                "sold_via_buy_now": True,
+            },
+            "$inc": {"bid_count": 1},
+        },
+        return_document=ReturnDocument.AFTER,
+        projection={"_id": 0, "bid_count": 1},
+    )
+    if not claim:
+        raise HTTPException(status_code=409, detail="Търгът вече е продаден или цената е надвишена.")
     await hub.broadcast(auction_id, {
         "type": "buy_now",
         "auction_id": auction_id,
@@ -1576,7 +1592,7 @@ async def buy_now(auction_id: str, request: Request, user: dict = Depends(get_cu
             if seller and seller.get("email"):
                 await email_seller_new_bid(
                     seller["email"], seller.get("name", ""), a["title"], auction_id,
-                    user["name"], bn, update["bid_count"],
+                    user["name"], bn, int(claim.get("bid_count", 1)),
                 )
         except Exception as e:
             logger.warning("buy-now seller email failed: %s", e)
@@ -2375,6 +2391,20 @@ async def admin_bulk_hard_delete(payload: dict, request: Request, admin: dict = 
         await db.watches.delete_many({"auction_id": aid})
         await db.bidding_credits.delete_many({"auction_id": aid})
         await db.vin_requests.delete_many({"auction_id": aid})
+        # Also wipe ancillary records that reference the auction.
+        try:
+            await db.reviews.delete_many({"auction_id": aid})
+        except Exception:
+            pass
+        try:
+            await db.bid_authorizations.delete_many({"auction_id": aid})
+        except Exception:
+            pass
+        # Inbox notifications attached to this auction.
+        try:
+            await db.inbox_notifications.delete_many({"data.auction_id": aid})
+        except Exception:
+            pass
         await db.auctions.delete_one({"id": aid})
         deleted.append(aid)
         await _audit_log(
@@ -2416,6 +2446,43 @@ async def admin_update_auction(auction_id: str, payload: AdminAuctionUpdate, _ad
 
     if "vin" in update and update["vin"]:
         update["vin"] = update["vin"].strip().upper()
+
+    # Image limits enforcement (mirror create flow): admin upload also goes
+    # through 10MB-per-image / 120MB-total caps + re-encoding pipeline.
+    image_keys = ("images", "images_exterior", "images_wheels", "images_bumper", "images_interior")
+    if any(k in update for k in image_keys):
+        from services import image_processing as imgproc
+        from storage import store_images as _store_images
+        MAX_PER_IMG_RAW = imgproc.IMAGE_MAX_RAW_BYTES
+        MAX_TOTAL_PAYLOAD_RAW = 120 * 1024 * 1024
+        total_raw = 0
+        for k in image_keys:
+            for item in (update.get(k) or []):
+                if not isinstance(item, str):
+                    continue
+                sz = imgproc.raw_bytes_of(item) if item.startswith("data:image/") else 0
+                if sz > MAX_PER_IMG_RAW:
+                    mb = round(sz / 1024 / 1024, 1)
+                    raise HTTPException(status_code=413, detail=f"Една от снимките е твърде голяма ({mb} MB). Макс. 10 MB на снимка.")
+                total_raw += sz
+        if total_raw > MAX_TOTAL_PAYLOAD_RAW:
+            mb = round(total_raw / 1024 / 1024, 1)
+            raise HTTPException(status_code=413, detail=f"Общият размер на снимките е {mb} MB — надвишава лимита от 120 MB.")
+        thumb_buckets = {}
+        for k in image_keys:
+            urls = update.get(k)
+            if not urls:
+                continue
+            web, thumb, errs = await asyncio.to_thread(imgproc.optimize_many, urls)
+            if errs:
+                msg = "; ".join(errs[:3])
+                raise HTTPException(status_code=400, detail=f"Грешка при обработката на снимки: {msg}")
+            web = await asyncio.to_thread(_store_images, web)
+            thumb = await asyncio.to_thread(_store_images, thumb)
+            update[k] = web
+            thumb_buckets[k] = thumb
+        if "images" in update:
+            update["thumbnails"] = thumb_buckets["images"]
 
     if update:
         await db.auctions.update_one({"id": auction_id}, {"$set": update})
@@ -2675,15 +2742,15 @@ async def public_profile(user_id: str):
     if not u:
         raise HTTPException(status_code=404, detail="Потребителят не е намерен")
     sold_listings = await db.auctions.find(
-        {"seller_id": user_id, "status": "sold"},
+        {"seller_id": user_id, "status": "sold", "is_archived": {"$ne": True}},
         {"_id": 0},
     ).sort("finalized_at", -1).limit(60).to_list(60)
     purchases = await db.auctions.find(
-        {"high_bidder_id": user_id, "status": "sold"},
+        {"high_bidder_id": user_id, "status": "sold", "is_archived": {"$ne": True}},
         {"_id": 0},
     ).sort("finalized_at", -1).limit(60).to_list(60)
     active = await db.auctions.find(
-        {"seller_id": user_id, "status": "live"},
+        {"seller_id": user_id, "status": "live", "is_archived": {"$ne": True}},
         {"_id": 0},
     ).limit(12).to_list(12)
     listings_sold = [_public_auction(a) for a in sold_listings]
@@ -3056,6 +3123,12 @@ async def on_startup():
     await db.bidding_credits.create_index([("auction_id", 1), ("user_id", 1)])
     await db.makes.create_index("name", unique=True)
     await db.audit_log.create_index([("at", -1)])
+    # Stripe webhook idempotency dedupe collection (unique on Stripe event id).
+    try:
+        await db.stripe_processed_events.create_index("id", unique=True)
+        await db.stripe_processed_events.create_index([("received_at", -1)])
+    except Exception:
+        pass
     # PostgreSQL bidding subsystem — retry with backoff so transient PG
     # readiness issues at boot don't crash the entire app. Cold-start
     # scenarios where PG binaries need re-installation can take up to

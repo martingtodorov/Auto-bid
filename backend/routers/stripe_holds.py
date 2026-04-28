@@ -220,6 +220,22 @@ def build_stripe_router(db, get_current_user):
             logger.warning("[stripe] webhook signature verification failed: %s", e)
             raise HTTPException(status_code=400, detail="Invalid signature")
 
+        # Idempotency: Stripe will retry on 5xx and may deliver an event up
+        # to 3 days. Reject duplicate events so we don't double-apply state.
+        event_id = event.get("id")
+        if event_id:
+            try:
+                await db.stripe_processed_events.insert_one({
+                    "id": event_id,
+                    "type": event.get("type"),
+                    "received_at": datetime.now(timezone.utc).isoformat(),
+                })
+            except Exception:
+                # Duplicate key → already processed. Acknowledge with 200 so
+                # Stripe stops retrying.
+                logger.info("[stripe] duplicate webhook %s ignored", event_id)
+                return {"received": True, "duplicate": True}
+
         et = event["type"]
         obj = event["data"]["object"]
         now_iso = datetime.now(timezone.utc).isoformat()
