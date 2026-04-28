@@ -76,11 +76,11 @@ export default function LandingPage() {
               <p className="mt-5 text-base lg:text-lg text-[hsl(var(--ink-muted))] leading-relaxed max-w-xl" data-testid="hero-subtitle">
                 {cmsSubtitle || t("hero.subtitle")}
               </p>
-              <div className="mt-6 flex flex-wrap gap-3">
-                <Link to="/auctions" className="btn btn-primary !px-6 sm:!px-8 whitespace-nowrap" data-testid="hero-cta-browse">
-                  {t("hero.browse")} <ArrowRight size={16} className="ml-2" />
+              <div className="mt-6 flex flex-nowrap gap-2 sm:gap-3">
+                <Link to="/auctions" className="btn btn-primary !px-3 sm:!px-8 !text-xs sm:!text-sm whitespace-nowrap" data-testid="hero-cta-browse">
+                  {t("hero.browse")} <ArrowRight size={14} className="ml-1.5 sm:ml-2" />
                 </Link>
-                <Link to="/sell" className="btn btn-sell-gradient !px-6 sm:!px-8 whitespace-nowrap" data-testid="hero-cta-sell">
+                <Link to="/sell" className="btn btn-sell-gradient !px-3 sm:!px-8 !text-xs sm:!text-sm whitespace-nowrap" data-testid="hero-cta-sell">
                   {t("hero.sell_cta")}
                 </Link>
               </div>
