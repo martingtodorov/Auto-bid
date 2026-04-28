@@ -18,13 +18,17 @@ Mongo collection `chat_messages`:
 Side effects on send:
   - admin → user: notify_user inbox + web push to the customer
   - user  → admin: notify_admins inbox (admins can refresh chat panel)
+
+Rate limiting: chat endpoints are rate-limited to prevent spam (a malicious
+user could otherwise hammer admins; admins themselves are trusted but the
+limit also stops a stuck UI from saturating Mongo).
 """
 from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional, List
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 
@@ -36,8 +40,16 @@ class SendMessageBody(BaseModel):
     body: str = Field(..., min_length=1, max_length=4000)
 
 
-def build_chat_router(db, get_current_user, require_admin_or_moderator):
+def build_chat_router(db, get_current_user, require_admin_or_moderator, limiter=None):
     router = APIRouter(prefix="/api", tags=["chat"])
+
+    # Use the central app limiter when supplied; fall back to a no-op so the
+    # decorators stay valid in unit tests / standalone usage.
+    if limiter is None:
+        from slowapi import Limiter
+        from slowapi.util import get_remote_address
+        limiter = Limiter(key_func=get_remote_address)
+    _chat_limiter = limiter
 
     # ---------- USER side ----------
 
@@ -64,7 +76,8 @@ def build_chat_router(db, get_current_user, require_admin_or_moderator):
         return {"unread": int(n)}
 
     @router.post("/me/chat/messages")
-    async def my_chat_send(payload: SendMessageBody, user: dict = Depends(get_current_user)):
+    @_chat_limiter.limit("20/minute")
+    async def my_chat_send(request: Request, payload: SendMessageBody, user: dict = Depends(get_current_user)):
         body_clean = payload.body.strip()
         if not body_clean:
             raise HTTPException(status_code=400, detail="Празно съобщение")
@@ -196,7 +209,8 @@ def build_chat_router(db, get_current_user, require_admin_or_moderator):
         return {"items": items, "user": u}
 
     @router.post("/admin/chat/threads/{user_id}/messages")
-    async def admin_thread_send(user_id: str, payload: SendMessageBody,
+    @_chat_limiter.limit("60/minute")
+    async def admin_thread_send(request: Request, user_id: str, payload: SendMessageBody,
                                 admin: dict = Depends(require_admin_or_moderator)):
         # Verify the recipient exists.
         recipient = await db.users.find_one({"id": user_id}, {"_id": 0, "id": 1, "name": 1, "email": 1})
