@@ -76,7 +76,12 @@ export default function AuctionDetailPage() {
       const step = bidStepFor(ra.data.current_bid_eur);
       const minNext = rn.data?.min_next_eur || (Math.floor(ra.data.current_bid_eur) + step);
       setNextBid(rn.data || { min_next_eur: minNext, buyer_fee_eur: buyerFeeFor(minNext), step_eur: step });
-      setBidAmount(String(Math.floor(minNext)));
+      // Prefill the bid input with the gross-equivalent of `minNext` when the
+      // auction is sold INCL. VAT — the user is shown a gross value in the
+      // input and we convert back to net only on submit (see `startBid`).
+      const rate = ra.data.vat_status === "vat_inclusive" ? Number(ra.data.vat_rate_pct || 0) : 0;
+      const minDisplay = rate > 0 ? Math.ceil(minNext * (1 + rate / 100)) : minNext;
+      setBidAmount(String(Math.floor(minDisplay)));
     } catch (e) {
       if (e?.response?.status === 404) setNotFound(true);
       else console.error(e);
@@ -198,7 +203,11 @@ export default function AuctionDetailPage() {
           const step = bidStepFor(msg.current_bid_eur);
           const newMin = Math.floor(msg.current_bid_eur) + step;
           setNextBid({ min_next_eur: newMin, buyer_fee_eur: buyerFeeFor(newMin), step_eur: step });
-          setBidAmount((cur) => String(Math.max(newMin, Number(cur || 0))));
+          // bidAmount is held in GROSS when the auction is vat_inclusive — bump
+          // the displayed gross min, not the net one.
+          const rate = (a && a.vat_status === "vat_inclusive") ? Number(a.vat_rate_pct || 0) : 0;
+          const newMinDisplay = rate > 0 ? Math.ceil(newMin * (1 + rate / 100)) : newMin;
+          setBidAmount((cur) => String(Math.max(newMinDisplay, Number(cur || 0))));
         } else if (msg.type === "comment") {
           setComments((prev) => {
             if (prev.some((c) => c.id === msg.comment.id)) return prev;
@@ -312,14 +321,14 @@ export default function AuctionDetailPage() {
   ];
 
   const isLive = a.status === "live";
-  // VAT helpers — when an auction is sold WITH VAT (vat_inclusive),
-  // the bid amount is treated as net and the gross is what the buyer
-  // actually pays. Buyer fee + preauth are computed on the GROSS so
-  // the platform charges its commission on the full price.
+  // VAT helpers — when an auction is sold WITH VAT (vat_inclusive), the user
+  // enters their bid as GROSS in the input box (the label says "вкл. ДДС") and
+  // we convert to NET only on submit. `bidAmount` here is already the gross
+  // value; for vat_exempt auctions gross == net, so no conversion needed.
   const vatRate = a.vat_status === "vat_inclusive" ? Number(a.vat_rate_pct || 0) : 0;
   const grossOf = (net) => Math.round(Number(net || 0) * (1 + vatRate / 100));
   const currentBidGross = grossOf(a.current_bid_eur);
-  const bidAmountGross = grossOf(Number(bidAmount));
+  const bidAmountGross = Math.round(Number(bidAmount || 0));  // bidAmount IS gross
   const preauthPreview = buyerFeeFor(bidAmountGross);
   const hasPendingCounterForMe = false;  // superseded by NegotiationPortal
   const isAdmin = user?.role === "admin";

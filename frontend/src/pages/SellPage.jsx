@@ -385,22 +385,22 @@ export default function SellPage() {
                 )}
               </div>
             </Field>
-            <Field label={t("sell.form.starting_bid_eur") + (form.vat_status === "vat_inclusive" ? " (с ДДС)" : "")}>
+            <Field label={t("sell.form.starting_bid_eur")}>
               <input type="number" required value={form.starting_bid_eur} onChange={(e) => set("starting_bid_eur", e.target.value)} className={inputCls} data-testid="sell-starting-bid" />
               {form.vat_status === "vat_inclusive" && Number(form.starting_bid_eur) > 0 && Number(form.vat_rate_pct) > 0 && (
                 <p className="mt-1.5 text-xs text-[hsl(var(--ink-muted))]" data-testid="sell-starting-bid-net">
-                  {t("sell.form.without_vat_hint", "Без ДДС {{rate}}%: {{amount}} €", {
+                  {t("sell.form.without_vat_hint", {
                     rate: form.vat_rate_pct,
                     amount: (Number(form.starting_bid_eur) / (1 + Number(form.vat_rate_pct) / 100)).toLocaleString("bg-BG", { maximumFractionDigits: 2 }),
                   })}
                 </p>
               )}
             </Field>
-            <Field label={t("sell.form.reserve_eur") + (form.vat_status === "vat_inclusive" ? " (с ДДС)" : "")}>
+            <Field label={t("sell.form.reserve_eur")}>
               <input type="number" value={form.reserve_eur} disabled={form.no_reserve} onChange={(e) => set("reserve_eur", e.target.value)} className={`${inputCls} ${form.no_reserve ? "opacity-50" : ""}`} data-testid="sell-reserve" />
               {!form.no_reserve && form.vat_status === "vat_inclusive" && Number(form.reserve_eur) > 0 && Number(form.vat_rate_pct) > 0 && (
                 <p className="mt-1.5 text-xs text-[hsl(var(--ink-muted))]" data-testid="sell-reserve-net">
-                  {t("sell.form.without_vat_hint", "Без ДДС {{rate}}%: {{amount}} €", {
+                  {t("sell.form.without_vat_hint", {
                     rate: form.vat_rate_pct,
                     amount: (Number(form.reserve_eur) / (1 + Number(form.vat_rate_pct) / 100)).toLocaleString("bg-BG", { maximumFractionDigits: 2 }),
                   })}
@@ -411,7 +411,7 @@ export default function SellPage() {
                 {t("sell.form.no_reserve_label")}
               </label>
             </Field>
-            <Field label={form.vat_status === "vat_inclusive" ? t("sell.form.buy_now_eur_incl", "Купи сега (с ДДС, EUR) — по избор") : t("sell.form.buy_now_eur", "Купи сега (без ДДС, EUR) — по избор")} span={2}>
+            <Field label={t("sell.form.buy_now_eur")} span={2}>
               <input
                 type="number"
                 value={form.buy_now_eur}
@@ -422,7 +422,7 @@ export default function SellPage() {
               />
               {form.buy_now_eur && Number(form.buy_now_eur) > 0 && form.vat_status === "vat_inclusive" && Number(form.vat_rate_pct) > 0 && (
                 <p className="mt-1.5 text-xs text-[hsl(var(--ink-muted))]" data-testid="sell-buy-now-net">
-                  {t("sell.form.without_vat_hint", "Без ДДС {{rate}}%: {{amount}} €", {
+                  {t("sell.form.without_vat_hint", {
                     rate: form.vat_rate_pct,
                     amount: (Number(form.buy_now_eur) / (1 + Number(form.vat_rate_pct) / 100)).toLocaleString("bg-BG", { maximumFractionDigits: 2 }),
                   })}
