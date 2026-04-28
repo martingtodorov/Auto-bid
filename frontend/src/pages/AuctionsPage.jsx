@@ -148,7 +148,7 @@ export default function AuctionsPage() {
             value={filters.q}
             onChange={(e) => set("q", e.target.value)}
             placeholder={t("auctions_page.search_placeholder")}
-            className="w-full border border-[hsl(var(--line))] h-12 pl-11 pr-4 text-sm bg-white rounded-lg"
+            className="w-full border border-[hsl(var(--line))] h-12 pl-11 pr-4 text-sm bg-white rounded-card"
             data-testid="search-input"
           />
           {filters.q && (
@@ -167,7 +167,7 @@ export default function AuctionsPage() {
           <div className="flex items-stretch gap-2 sm:gap-3 w-full sm:w-auto">
             <button
               onClick={saveSearch}
-              className="flex-1 sm:flex-none border border-[hsl(var(--line))] bg-white text-[hsl(var(--ink))] hover:bg-[hsl(var(--surface))] h-12 px-3 sm:px-4 flex items-center justify-center gap-1.5 text-sm font-semibold shrink-0 rounded-lg transition-colors"
+              className="flex-1 sm:flex-none border border-[hsl(var(--line))] bg-white text-[hsl(var(--ink))] hover:bg-[hsl(var(--surface))] h-12 px-3 sm:px-4 flex items-center justify-center gap-1.5 text-sm font-semibold shrink-0 rounded-card transition-colors"
               data-testid="save-search-btn"
             >
               <BookmarkPlus size={16} />
@@ -177,7 +177,7 @@ export default function AuctionsPage() {
             <select
               value={filters.sort}
               onChange={(e) => set("sort", e.target.value)}
-              className="flex-1 sm:flex-none border border-[hsl(var(--line))] bg-white text-[hsl(var(--ink))] h-12 px-3 text-sm font-semibold rounded-lg sm:w-[150px] shrink-0 cursor-pointer hover:bg-[hsl(var(--surface))] transition-colors"
+              className="flex-1 sm:flex-none border border-[hsl(var(--line))] bg-white text-[hsl(var(--ink))] h-12 px-3 text-sm font-semibold rounded-card sm:w-[150px] shrink-0 cursor-pointer hover:bg-[hsl(var(--surface))] transition-colors"
               data-testid="sort-select"
             >
               <option value="ending_soon">{t("auctions_page.sort_ending_soon")}</option>
@@ -188,7 +188,7 @@ export default function AuctionsPage() {
             </select>
             <button
               onClick={() => setOpen(true)}
-              className="lg:hidden flex-1 sm:flex-none border border-[hsl(var(--line))] bg-white text-[hsl(var(--ink))] hover:bg-[hsl(var(--surface))] h-12 px-4 flex items-center justify-center gap-2 text-sm font-semibold shrink-0 rounded-lg transition-colors"
+              className="lg:hidden flex-1 sm:flex-none border border-[hsl(var(--line))] bg-white text-[hsl(var(--ink))] hover:bg-[hsl(var(--surface))] h-12 px-4 flex items-center justify-center gap-2 text-sm font-semibold shrink-0 rounded-card transition-colors"
               data-testid="open-filters"
             >
               <SlidersHorizontal size={16} />
