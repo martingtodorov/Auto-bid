@@ -3026,9 +3026,26 @@ async def on_startup():
     await db.bidding_credits.create_index([("auction_id", 1), ("user_id", 1)])
     await db.makes.create_index("name", unique=True)
     await db.audit_log.create_index([("at", -1)])
-    # PostgreSQL bidding subsystem (see services/bidding.py)
+    # PostgreSQL bidding subsystem — retry with backoff so transient PG
+    # readiness issues at boot don't crash the entire app. Supervisor
+    # starts both processes in parallel, so on a cold container we may
+    # race PG by a few seconds.
     from db_pg import init_pg_schema
-    await init_pg_schema()
+    pg_ready = False
+    for attempt in range(1, 16):  # ~30s max wait
+        try:
+            await init_pg_schema()
+            pg_ready = True
+            if attempt > 1:
+                logger.warning("PostgreSQL became ready after %d retries", attempt)
+            break
+        except Exception as e:
+            logger.warning("init_pg_schema attempt %d failed: %s", attempt, e)
+            await asyncio.sleep(2)
+    if not pg_ready:
+        # Don't crash — the API still serves all Mongo-backed endpoints.
+        # Bid endpoints will surface their own errors when the user tries.
+        logger.error("PostgreSQL still unavailable after 15 retries — starting in degraded mode")
     # Transactional-outbox worker (drains bid_events → MongoDB)
     from services import outbox_worker
     app.state._outbox_stop = asyncio.Event()
