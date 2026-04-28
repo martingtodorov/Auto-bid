@@ -73,14 +73,34 @@ export default function Nav() {
                 {(user.role === "admin" || user.role === "moderator") && (
                   <Link to="/admin" className="text-sm text-[hsl(var(--accent))] whitespace-nowrap" data-testid="nav-admin">{t("nav.admin")}</Link>
                 )}
-                <Link to="/my-listings" className="text-sm whitespace-nowrap hidden xl:inline" data-testid="nav-my-listings">{t("nav.my_listings")}</Link>
                 <Link to="/watchlist" className="text-sm whitespace-nowrap hidden xl:inline" data-testid="nav-watchlist">{t("nav.watchlist")}</Link>
-                <Link to="/settings" className="text-sm whitespace-nowrap hidden xl:inline" data-testid="nav-settings">{t("nav.settings")}</Link>
                 <NotificationBell />
-                <Link to="/dashboard" className="flex items-center gap-1.5 text-sm whitespace-nowrap" data-testid="nav-dashboard">
-                  <User size={16} />
-                  <span className="max-w-[110px] truncate">{user.name}</span>
-                </Link>
+                {/* User account dropdown — opens on hover (desktop). The
+                    invisible padding underneath the trigger keeps the menu
+                    open while the cursor moves down into it. */}
+                <div className="relative group" data-testid="nav-user-menu">
+                  <Link
+                    to="/dashboard"
+                    className="flex items-center gap-1.5 text-sm whitespace-nowrap py-2"
+                    data-testid="nav-dashboard"
+                  >
+                    <User size={16} />
+                    <span className="max-w-[110px] truncate">{user.name}</span>
+                  </Link>
+                  <div className="absolute right-0 top-full pt-2 hidden group-hover:block group-focus-within:block z-40">
+                    <div className="min-w-[200px] rounded-card border border-[hsl(var(--line))] bg-[hsl(var(--surface))] shadow-xl py-1.5">
+                      <Link to="/dashboard" className="block px-4 py-2 text-sm hover:bg-[hsl(var(--bg))] transition-colors" data-testid="nav-menu-profile">
+                        {t("nav.profile", "Профил")}
+                      </Link>
+                      <Link to="/my-listings" className="block px-4 py-2 text-sm hover:bg-[hsl(var(--bg))] transition-colors" data-testid="nav-menu-my-listings">
+                        {t("nav.my_listings")}
+                      </Link>
+                      <Link to="/settings" className="block px-4 py-2 text-sm hover:bg-[hsl(var(--bg))] transition-colors" data-testid="nav-menu-settings">
+                        {t("nav.settings")}
+                      </Link>
+                    </div>
+                  </div>
+                </div>
                 <button onClick={() => { logout(); navigate("/"); }} className="btn btn-secondary !py-2 !px-3 lg:!px-4 whitespace-nowrap" data-testid="nav-logout">
                   {t("nav.logout")}
                 </button>
