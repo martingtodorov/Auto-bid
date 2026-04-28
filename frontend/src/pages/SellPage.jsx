@@ -54,7 +54,7 @@ const COUNTRIES = [
   "Other",
 ];
 
-const inputCls = "w-full border border-[hsl(var(--line))] h-11 px-3 text-sm";
+const inputCls = "w-full border border-[hsl(var(--line))] h-11 px-3 text-sm rounded-card bg-[hsl(var(--surface))]";
 
 function Field({ label, children, span = 1 }) {
   return (
@@ -285,7 +285,7 @@ export default function SellPage() {
                 value={importUrl}
                 onChange={(e) => setImportUrl(e.target.value)}
                 placeholder="https://www.mobile.bg/obiava-..."
-                className="flex-1 border border-[hsl(var(--line))] h-11 px-3 text-sm bg-white"
+                className="flex-1 border border-[hsl(var(--line))] h-11 px-3 text-sm bg-[hsl(var(--surface))] rounded-card"
                 data-testid="import-url-input"
               />
               <button
@@ -550,7 +550,7 @@ export default function SellPage() {
               </div>
             </Field>
             <Field label={t("sell.form.description")} span={2}>
-              <textarea required value={form.description} onChange={(e) => set("description", e.target.value)} rows={6} className="w-full border border-[hsl(var(--line))] p-3 text-sm" placeholder={t("sell.form.description_placeholder")} data-testid="sell-description" />
+              <textarea required value={form.description} onChange={(e) => set("description", e.target.value)} rows={6} className="w-full border border-[hsl(var(--line))] p-3 text-sm rounded-card bg-[hsl(var(--surface))]" placeholder={t("sell.form.description_placeholder")} data-testid="sell-description" />
             </Field>
 
             {err && <p className="md:col-span-2 text-sm text-[hsl(var(--danger))]" data-testid="sell-error">{err}</p>}
