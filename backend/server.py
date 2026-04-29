@@ -576,9 +576,16 @@ async def get_auction(auction_id: str, request: Request):
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     if not a:
         raise HTTPException(status_code=404, detail="Търгът не е намерен")
-    # Hide archived listings from non-admins (and the seller too — they should restore via /my-listings if needed)
+    # Hide non-public listings from non-admins:
+    #   - archived (soft-deleted by admin/seller)
+    #   - rejected (refused at moderation — auto-archived)
+    #   - cancelled / withdrawn / removed (terminated by admin)
+    #   - pending (awaiting moderation — only seller may peek via /me/listings)
     viewer_is_admin = viewer and viewer.get("role") in ("admin", "moderator")
-    if (a.get("is_archived") or a.get("status") == "archived") and not viewer_is_admin:
+    is_seller = bool(viewer and viewer.get("id") == a.get("seller_id"))
+    HIDDEN_STATUSES = {"archived", "rejected", "cancelled", "withdrawn", "removed", "pending"}
+    is_archived = bool(a.get("is_archived")) or a.get("status") == "archived"
+    if (is_archived or a.get("status") in HIDDEN_STATUSES) and not viewer_is_admin and not is_seller:
         raise HTTPException(status_code=404, detail="Търгът не е намерен")
     # Phase 4: views counter (increment once per request; bots included is ok for MVP)
     try:
@@ -1918,7 +1925,17 @@ async def admin_reject(auction_id: str, payload: AdminDecision, _admin: dict = D
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     if not a:
         raise HTTPException(status_code=404, detail="Обявата не е намерена")
-    await db.auctions.update_one({"id": auction_id}, {"$set": {"status": "rejected", "rejected_reason": payload.reason or ""}})
+    # Reject + auto-archive: отказаните обяви отиват в архив, не в "Всички обяви".
+    now_iso = datetime.now(timezone.utc).isoformat()
+    await db.auctions.update_one(
+        {"id": auction_id},
+        {"$set": {
+            "status": "rejected",
+            "rejected_reason": payload.reason or "",
+            "is_archived": True,
+            "archived_at": now_iso,
+        }},
+    )
     seller = await db.users.find_one({"id": a.get("seller_id")}, {"_id": 0})
     if seller and seller.get("email"):
         try:

@@ -129,7 +129,10 @@ async def sitemap_xml(request: Request):
         ("/terms", "yearly", "0.3"),
     ]
     cursor = db.auctions.find(
-        {"status": {"$in": ["live", "sold", "ended", "reserve_not_met"]}},
+        {
+            "status": {"$in": ["live", "sold", "ended", "reserve_not_met"]},
+            "is_archived": {"$ne": True},
+        },
         {
             "_id": 0, "id": 1, "title": 1, "make": 1, "model": 1,
             "updated_at": 1, "finalized_at": 1, "created_at": 1, "status": 1,
@@ -178,7 +181,10 @@ async def sitemap_images_xml(request: Request):
     """Dedicated image-only sitemap."""
     frontend_base = _frontend_base(request)
     cursor = db.auctions.find(
-        {"status": {"$in": ["live", "sold", "ended", "reserve_not_met"]}},
+        {
+            "status": {"$in": ["live", "sold", "ended", "reserve_not_met"]},
+            "is_archived": {"$ne": True},
+        },
         {
             "_id": 0, "id": 1, "title": 1,
             "images": 1, "images_exterior": 1, "images_interior": 1,

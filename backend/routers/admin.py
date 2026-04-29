@@ -580,8 +580,16 @@ def register_routes():
         if a.get("status") in ("sold", "cancelled", "withdrawn"):
             raise HTTPException(status_code=400, detail=f"Обява със статус '{a.get('status')}' не може да бъде отказана")
         now = datetime.now(timezone.utc).isoformat()
+        # Cancel + auto-archive: отказаните обяви също отиват в архив.
         await db.auctions.update_one({"id": auction_id}, {
-            "$set": {"status": "cancelled", "cancelled_at": now, "cancel_reason": payload.reason.strip(), "cancelled_by": admin["id"]},
+            "$set": {
+                "status": "cancelled",
+                "cancelled_at": now,
+                "cancel_reason": payload.reason.strip(),
+                "cancelled_by": admin["id"],
+                "is_archived": True,
+                "archived_at": now,
+            },
         })
         await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
                         action="auction.cancel", target_type="auction", target_id=auction_id,
