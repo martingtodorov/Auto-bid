@@ -35,7 +35,7 @@ def buyer_fee(amount_eur: float, pct: float, fmin: float, fmax: float) -> float:
 
 
 # ---------- Auction status (computed from ends_at + stored status) ----------
-_STICKY_STATUSES = ("sold", "rejected", "pending", "withdrawn", "reserve_not_met", "ended", "removed")
+_STICKY_STATUSES = ("sold", "rejected", "pending", "withdrawn", "reserve_not_met", "ended", "removed", "archived", "cancelled")
 
 
 def auction_status(a: dict) -> str:
