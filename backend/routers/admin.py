@@ -159,6 +159,122 @@ def register_routes():
         items = await db.audit_log.find(query, {"_id": 0}).sort("at", -1).skip(offset).limit(limit).to_list(limit)
         return {"items": items, "total": total, "offset": offset, "limit": limit}
 
+    @router.get("/admin/audit-log/export")
+    async def admin_audit_log_export(
+        action: Optional[str] = None, actor_id: Optional[str] = None,
+        target_id: Optional[str] = None, since: Optional[str] = None, until: Optional[str] = None,
+        admin: dict = Depends(_require_admin_or_moderator),
+    ):
+        """Export audit-log записите като CSV.  Възприема същите филтри като
+        `/admin/audit-log` + опционални `since`/`until` (ISO timestamp)
+        за date-range export.  Връща streaming CSV отговор.
+        """
+        import csv as _csv
+        import io as _io
+        from fastapi.responses import StreamingResponse
+        query: dict = {}
+        if action: query["action"] = action
+        if actor_id: query["actor_id"] = actor_id
+        if target_id: query["target_id"] = target_id
+        if since or until:
+            at_q = {}
+            if since: at_q["$gte"] = since
+            if until: at_q["$lte"] = until
+            query["at"] = at_q
+
+        # Pull with reasonable cap (50k rows) — много по-голям export трябва
+        # да минава през scheduled job или Mongo native export.
+        cursor = db.audit_log.find(query, {"_id": 0}).sort("at", -1).limit(50000)
+        rows = await cursor.to_list(50000)
+
+        async def _gen():
+            buf = _io.StringIO()
+            w = _csv.writer(buf, quoting=_csv.QUOTE_ALL)
+            w.writerow(["at", "actor_id", "actor_email", "actor_role", "action",
+                        "target_id", "target_type", "ip", "user_agent", "details"])
+            yield buf.getvalue(); buf.seek(0); buf.truncate(0)
+            for r in rows:
+                details = r.get("details") or {}
+                if isinstance(details, (dict, list)):
+                    import json as _json
+                    details_str = _json.dumps(details, ensure_ascii=False, default=str)
+                else:
+                    details_str = str(details)
+                w.writerow([
+                    r.get("at", ""), r.get("actor_id", ""), r.get("actor_email", ""),
+                    r.get("actor_role", ""), r.get("action", ""),
+                    r.get("target_id", ""), r.get("target_type", ""),
+                    r.get("ip", ""), r.get("user_agent", "")[:300], details_str[:2000],
+                ])
+                yield buf.getvalue(); buf.seek(0); buf.truncate(0)
+
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""),
+                        actor_role=admin.get("role", ""),
+                        action="audit_log.export",
+                        target_id=None, target_type="audit_log",
+                        details={"rows": len(rows), "filters": {k: v for k, v in query.items()}})
+        return StreamingResponse(
+            _gen(),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="audit_log_{ts}.csv"'},
+        )
+
+    @router.delete("/admin/audit-log")
+    async def admin_audit_log_purge(
+        before: Optional[str] = None,
+        action: Optional[str] = None, actor_id: Optional[str] = None,
+        target_id: Optional[str] = None,
+        confirm: str = Query(default=""),
+        admin: dict = Depends(_require_admin),
+    ):
+        """Изтрива audit-log записи (само admin, не модератор).
+
+        Параметри:
+          - `before` (ISO timestamp) — изтрива записи < тази дата
+          - `action`, `actor_id`, `target_id` — допълнителни филтри
+          - `confirm` ТРЯБВА да е "DELETE" за да премине
+
+        Изтриването се *самó-логва* като нов audit запис, за да остане
+        проследимо кой и кога е почистил историята.
+        """
+        if confirm != "DELETE":
+            raise HTTPException(status_code=400, detail="Очаквам confirm=DELETE за изтриване")
+        query: dict = {}
+        if before:
+            query["at"] = {"$lt": before}
+        if action: query["action"] = action
+        if actor_id: query["actor_id"] = actor_id
+        if target_id: query["target_id"] = target_id
+        if not query:
+            raise HTTPException(status_code=400, detail="Поне един филтър е задължителен (before/action/actor_id/target_id)")
+        # Брой преди изтриване (за audit info)
+        will_delete = await db.audit_log.count_documents(query)
+        result = await db.audit_log.delete_many(query)
+        await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""),
+                        actor_role=admin.get("role", ""),
+                        action="audit_log.purge",
+                        target_id=None, target_type="audit_log",
+                        details={"deleted": result.deleted_count, "filters": query, "matched": will_delete})
+        return {"ok": True, "deleted": result.deleted_count}
+
+    @router.delete("/admin/audit-log/{entry_id}")
+    async def admin_audit_log_delete_one(
+        entry_id: str, admin: dict = Depends(_require_admin),
+    ):
+        """Изтрива един audit запис по `id`."""
+        # Audit-log записите използват `id` (UUID) поле
+        existing = await db.audit_log.find_one({"id": entry_id}, {"_id": 0, "action": 1})
+        if not existing:
+            raise HTTPException(status_code=404, detail="Записът не е намерен")
+        await db.audit_log.delete_one({"id": entry_id})
+        await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""),
+                        actor_role=admin.get("role", ""),
+                        action="audit_log.delete_one",
+                        target_id=entry_id, target_type="audit_log",
+                        details={"deleted_action": existing.get("action")})
+        return {"ok": True}
+
     # ---- Re-activate a sold / ended / reserve_not_met auction back to live ----
     @router.post("/admin/auctions/{auction_id}/reactivate")
     async def admin_reactivate(auction_id: str, request: Request,
