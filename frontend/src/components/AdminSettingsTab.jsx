@@ -14,11 +14,11 @@ import { getDefaultCmsHtml } from "../lib/cmsDefaults";
 //      пишещ admin (примерно: <h2>, <a href>, <table>, <img>...).
 // Ако HTML версията е попълнена → има приоритет при render.
 const CONTENT_BASES = [
-  { key: "how_it_works_content", htmlBase: "how_it_works", label: "Как работи", placeholder: "Markdown съдържание за страница „Как работи“" },
-  { key: "faq_content",          htmlBase: "faq",          label: "FAQ — Често задавани въпроси", placeholder: "## Раздел\n\n**Въпрос?**\n\nОтговор…" },
-  { key: "fees_content",         htmlBase: "fees",         label: "Такси и комисионни", placeholder: "Markdown описание на таксите" },
-  { key: "terms_content",        htmlBase: "terms",        label: "Общи условия", placeholder: "Markdown текст на общите условия" },
-  { key: "contacts_content",     htmlBase: "contacts",     label: "Контакти", placeholder: "Имейл, телефон, адрес и работно време" },
+  { key: "how_it_works_content", htmlBase: "how_it_works", label: "Как работи" },
+  { key: "faq_content",          htmlBase: "faq",          label: "FAQ — Често задавани въпроси" },
+  { key: "fees_content",         htmlBase: "fees",         label: "Такси и комисионни" },
+  { key: "terms_content",        htmlBase: "terms",        label: "Общи условия" },
+  { key: "contacts_content",     htmlBase: "contacts",     label: "Контакти" },
 ];
 const CMS_LANGS = [
   { code: "bg", flag: "🇧🇬", label: "Български" },
@@ -133,16 +133,8 @@ export default function AdminSettingsTab() {
         google_site_verification: form.google_site_verification,
         bing_site_verification: form.bing_site_verification,
         google_analytics_id: form.google_analytics_id,
-        faq_content: form.faq_content,
-        terms_content: form.terms_content,
-        contacts_content: form.contacts_content,
-        fees_content: form.fees_content,
-        how_it_works_content: form.how_it_works_content,
-        ...Object.fromEntries(
-          CONTENT_BASES.flatMap((f) =>
-            CMS_LANGS.map(({ code }) => [`${f.key}_${code}`, form[`${f.key}_${code}`] ?? ""])
-          )
-        ),
+        // Markdown CMS полетата вече не се редактират през UI, но запазваме
+        // съществуващите стойности при save (за да не ги изтрием неволно).
         // Direct-HTML payload — пропускаме полета, които все още равняват
         // default-а (не са пипнати от админа), за да не персистираме defaults.
         ...Object.fromEntries(
@@ -420,75 +412,41 @@ function Field({ label, children, testid }) {
 
 function CmsMultiLangField({ field, form, set }) {
   const [active, setActive] = useState("bg");
-  const [mode, setMode] = useState("markdown"); // "markdown" | "html"
   if (!form) return null;
-  const hasAnyHtml = CMS_LANGS.some(({ code }) => (form[`${field.htmlBase}_html_${code}`] || "").trim());
   return (
     <section className="rounded-card border border-[hsl(var(--line))] bg-white p-6" data-testid={`cms-${field.key}`}>
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <h2 className="font-serif text-2xl">{field.label}</h2>
           <p className="mt-2 text-xs text-[hsl(var(--ink-muted))]">
-            {mode === "html"
-              ? "Директен HTML — има приоритет над Markdown. Скриптове и event handler-и се премахват автоматично. Поддържат се: h1-h6, p, a, img, table, ul/ol, blockquote, code и др. Оставете празно, за да върнете Markdown / стандартното съдържание."
-              : "Markdown се поддържа. Поддържат се три езика — BG/RO/EN. Ако дадена езикова версия е празна, автоматично се показва BG версията."}
+            Директен HTML редактор. Скриптове и event handler-и се премахват автоматично при render. Поддържат се: h1-h6, p, a, img, table, ul/ol, blockquote, code и др. Оставете полето напълно празно, за да върнете стандартното съдържание на страницата.
           </p>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="inline-flex rounded-card border border-[hsl(var(--line))] overflow-hidden" data-testid={`cms-mode-${field.key}`}>
+        <div className="inline-flex rounded-card border border-[hsl(var(--line))] overflow-hidden" data-testid={`cms-tabs-${field.key}`}>
+          {CMS_LANGS.map(({ code, flag, label }, i) => (
             <button
+              key={code}
               type="button"
-              onClick={() => setMode("markdown")}
-              className={`px-3 py-1.5 text-xs ${mode === "markdown" ? "bg-[hsl(var(--ink))] text-white" : "bg-white hover:bg-[hsl(var(--surface))]"}`}
-              data-testid={`cms-mode-markdown-${field.key}`}
+              onClick={() => setActive(code)}
+              className={`px-3 py-1.5 text-xs flex items-center gap-1.5 ${i > 0 ? "border-l border-[hsl(var(--line))]" : ""} ${active === code ? "bg-[hsl(var(--ink))] text-white" : "bg-white hover:bg-[hsl(var(--surface))]"}`}
+              data-testid={`cms-tab-${field.key}-${code}`}
             >
-              Markdown
+              <span aria-hidden>{flag}</span> {label}
             </button>
-            <button
-              type="button"
-              onClick={() => setMode("html")}
-              className={`px-3 py-1.5 text-xs border-l border-[hsl(var(--line))] flex items-center gap-1.5 ${mode === "html" ? "bg-[hsl(var(--ink))] text-white" : "bg-white hover:bg-[hsl(var(--surface))]"}`}
-              data-testid={`cms-mode-html-${field.key}`}
-            >
-              HTML {hasAnyHtml && <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--accent))]" />}
-            </button>
-          </div>
-          <div className="inline-flex rounded-card border border-[hsl(var(--line))] overflow-hidden" data-testid={`cms-tabs-${field.key}`}>
-            {CMS_LANGS.map(({ code, flag, label }, i) => (
-              <button
-                key={code}
-                type="button"
-                onClick={() => setActive(code)}
-                className={`px-3 py-1.5 text-xs flex items-center gap-1.5 ${i > 0 ? "border-l border-[hsl(var(--line))]" : ""} ${active === code ? "bg-[hsl(var(--ink))] text-white" : "bg-white hover:bg-[hsl(var(--surface))]"}`}
-                data-testid={`cms-tab-${field.key}-${code}`}
-              >
-                <span aria-hidden>{flag}</span> {label}
-              </button>
-            ))}
-          </div>
+          ))}
         </div>
       </div>
-      {mode === "html" && hasAnyHtml && (
-        <div className="mt-3 px-3 py-2 rounded-card bg-[hsl(var(--accent-soft))] text-[hsl(var(--accent))] text-xs inline-flex items-center gap-2">
-          <span className="font-semibold">⚠ Активен HTML режим:</span>
-          <span>Тази страница в момента се показва от HTML версията (Markdown полето се игнорира).</span>
-        </div>
-      )}
       {CMS_LANGS.map(({ code }) => {
-        const mdKey = `${field.key}_${code}`;
         const htmlKey = `${field.htmlBase}_html_${code}`;
-        const key = mode === "html" ? htmlKey : mdKey;
         return (
           <textarea
-            key={`${key}-${mode}`}
-            rows={mode === "html" ? 16 : 12}
-            value={form[key] ?? ""}
-            placeholder={mode === "html"
-              ? `<h2>Заглавие</h2>\n<p>Въведете текст с <strong>HTML</strong> форматиране…</p>\n<ul>\n  <li>точка</li>\n</ul>`
-              : field.placeholder}
-            onChange={(e) => set(key, e.target.value)}
+            key={htmlKey}
+            rows={16}
+            value={form[htmlKey] ?? ""}
+            placeholder={`<h2>Заглавие</h2>\n<p>Въведете текст с <strong>HTML</strong> форматиране…</p>\n<ul>\n  <li>точка</li>\n</ul>`}
+            onChange={(e) => set(htmlKey, e.target.value)}
             className={`mt-3 w-full border border-[hsl(var(--line))] p-3 text-sm font-mono ${active === code ? "" : "hidden"}`}
-            data-testid={mode === "html" ? `content-${htmlKey}` : `content-${mdKey}`}
+            data-testid={`content-${htmlKey}`}
             spellCheck={false}
           />
         );
