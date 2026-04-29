@@ -221,11 +221,31 @@ export default function AuctionsPage() {
       </div>
 
       {open && (
-        <div className="fixed inset-0 z-50 bg-black/40 lg:hidden" onClick={() => setOpen(false)}>
-          <div className="absolute inset-y-0 right-0 w-[88vw] max-w-sm bg-white overflow-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="p-4 flex items-center justify-between rule-b">
+        <div
+          className="fixed inset-0 z-50 lg:hidden"
+          onClick={() => setOpen(false)}
+          data-testid="filters-drawer"
+        >
+          {/* Backdrop fade-in */}
+          <div className="absolute inset-0 bg-black/40 animate-[fadeIn_180ms_ease-out_both]" />
+          {/* Panel slides in from right */}
+          <div
+            className="absolute inset-y-0 right-0 w-[88vw] max-w-sm bg-white overflow-auto shadow-2xl animate-[slideInRight_260ms_cubic-bezier(0.22,1,0.36,1)_both]"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("auctions_page.filters")}
+          >
+            <div className="p-4 flex items-center justify-between rule-b sticky top-0 bg-white z-10">
               <span className="font-serif text-xl">{t("auctions_page.filters")}</span>
-              <button onClick={() => setOpen(false)}><X /></button>
+              <button
+                onClick={() => setOpen(false)}
+                className="p-2 -mr-2 rounded-full hover:bg-[hsl(var(--surface))] transition-colors"
+                aria-label="Затвори"
+                data-testid="close-filters"
+              >
+                <X />
+              </button>
             </div>
             <div className="p-4">{Sidebar}</div>
           </div>
