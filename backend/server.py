@@ -67,12 +67,14 @@ def verify_password(plain: str, hashed: str) -> bool:
     except Exception:
         return False
 
-def create_token(user_id: str, email: str, days: int = 7) -> str:
+def create_token(user_id: str, email: str, days: int = 7, sid: str | None = None) -> str:
     payload = {
         "sub": user_id,
         "email": email,
         "exp": datetime.now(timezone.utc) + timedelta(days=days),
     }
+    if sid:
+        payload["sid"] = sid
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 async def get_current_user(request: Request) -> dict:
@@ -86,6 +88,26 @@ async def get_current_user(request: Request) -> dict:
         raise HTTPException(status_code=401, detail="Не сте автентикиран")
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        # Session-aware validation: ако токенът има `sid`, проверяваме че
+        # сесията не е отзована / изтрита от потребителя.
+        sid = payload.get("sid")
+        if sid:
+            sess = await db.sessions.find_one({"id": sid}, {"_id": 0})
+            if not sess:
+                raise HTTPException(status_code=401, detail="Сесията е прекратена")
+            # rate-limited last_seen update (всяка ~60с)
+            try:
+                last_seen = sess.get("last_seen_at")
+                now = datetime.now(timezone.utc)
+                if not last_seen or (now - datetime.fromisoformat(last_seen)).total_seconds() > 60:
+                    await db.sessions.update_one(
+                        {"id": sid},
+                        {"$set": {"last_seen_at": now.isoformat(),
+                                  "ip": (request.client.host if request.client else "") or sess.get("ip", "")}},
+                    )
+            except Exception:
+                pass
+            request.state.sid = sid
         user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
         if not user:
             raise HTTPException(status_code=401, detail="Потребителят не е намерен")

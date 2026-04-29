@@ -566,3 +566,17 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 ### Тест статус
 - `/app/test_reports/iteration_9.json` — 15/16 backend pytest passed (1 skipped — banned user fixture), Playwright E2E flows OK.
 - Тестов файл: `/app/backend/tests/test_security_c3_csrf.py`.
+
+### Сесии (устройства) — 29 Apr 2026
+- **JWT** разширен с `sid` claim → връзка към `sessions` Mongo колекция.
+- **`get_current_user`** валидира session при всяка заявка; ако сесията е изтрита/изтекла → 401.  Last-seen update е rate-limited (1×/мин).
+- **Парсване на User-Agent** чрез `user-agents==2.2.0`: показва модел на телефон (iPhone, Pixel 8 Pro и т.н.), browser, OS версия, IP, last-seen.
+- **Endpoints**:
+  - `GET /api/auth/sessions` — списък с `is_current` маркер
+  - `DELETE /api/auth/sessions/{sid}` — изход от едно устройство
+  - `POST /api/auth/sessions/revoke-others` — изход от всички други
+  - `POST /api/auth/sessions/revoke-all` — изход от всички (включително текущото)
+- **Frontend**: `SessionsSection.jsx` в Account Settings показва Smartphone/Tablet/Monitor икона, badge "Текуща сесия" + "Запомни ме", IP + relative time.
+- `/auth/logout` сега и изтрива текущия session запис (не само cookies).
+- Curl-проверено end-to-end: revoke от една сесия инвалидира токена на другото устройство в реално време (401).
+

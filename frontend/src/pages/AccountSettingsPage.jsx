@@ -6,6 +6,7 @@ import { useAuth, formatError } from "../lib/auth";
 import { api } from "../lib/apiClient";
 import TwoFactorSection from "../components/TwoFactorSection";
 import PushSettings from "../components/PushSettings";
+import SessionsSection from "../components/SessionsSection";
 
 export default function AccountSettingsPage() {
   const { t } = useTranslation();
@@ -129,6 +130,8 @@ export default function AccountSettingsPage() {
         </section>
 
         <TwoFactorSection />
+
+        <SessionsSection />
 
         <div className="mt-8">
           <PushSettings />

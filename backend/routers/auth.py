@@ -14,6 +14,7 @@ from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, Depends, Request, Response
 import pyotp
 import qrcode
+from user_agents import parse as _parse_ua
 
 from deps import db
 from models import (
@@ -87,6 +88,84 @@ def _clear_auth_cookies(response: Response) -> None:
     response.delete_cookie(
         CSRF_COOKIE, path="/", secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE, httponly=False,
     )
+
+
+# --- Sessions: устройства и активни сесии ------------------------------------
+def _device_info_from_request(request: Request) -> dict:
+    """Парсва User-Agent + IP заглавията и връща читаемо описание на устройството."""
+    ua_string = (request.headers.get("user-agent") or "")[:500]
+    ip = (request.client.host if request.client else "") or ""
+    # Уважаваме X-Forwarded-For при reverse proxy (вземаме първия публичен hop).
+    fwd = request.headers.get("x-forwarded-for") or ""
+    if fwd:
+        ip = fwd.split(",")[0].strip() or ip
+    info = {"user_agent": ua_string, "ip": ip,
+            "browser": "Unknown", "os": "Unknown", "device_label": "Непознато устройство",
+            "device_type": "desktop"}
+    if not ua_string:
+        return info
+    try:
+        ua = _parse_ua(ua_string)
+        b_ver = (ua.browser.version_string or "").strip()
+        o_ver = (ua.os.version_string or "").strip()
+        info["browser"] = (f"{ua.browser.family} {b_ver}".strip()) or "Unknown"
+        info["os"] = (f"{ua.os.family} {o_ver}".strip()) or "Unknown"
+        if ua.is_mobile or ua.is_tablet:
+            info["device_type"] = "tablet" if ua.is_tablet else "mobile"
+            brand = (ua.device.brand or "").strip()
+            model = (ua.device.model or "").strip()
+            family = (ua.device.family or "").strip()
+            # Apple/iOS не разкрива конкретен модел — използваме "iPhone"/"iPad" + версия
+            if family.lower() == "iphone":
+                info["device_label"] = f"iPhone · iOS {o_ver}".strip(" ·")
+            elif family.lower() == "ipad":
+                info["device_label"] = f"iPad · iPadOS {o_ver}".strip(" ·")
+            elif brand and model:
+                info["device_label"] = f"{brand} {model}".strip()
+            elif family and family != "Other":
+                info["device_label"] = family
+            else:
+                info["device_label"] = "Мобилно устройство"
+        elif ua.is_pc:
+            info["device_type"] = "desktop"
+            os_family = (ua.os.family or "").strip()
+            if os_family.lower().startswith("mac"):
+                info["device_label"] = f"Mac · macOS {o_ver}".strip(" ·")
+            elif os_family.lower().startswith("windows"):
+                info["device_label"] = f"Windows {o_ver} компютър".strip()
+            elif os_family.lower().startswith("linux") or "ubuntu" in os_family.lower():
+                info["device_label"] = f"{os_family} компютър".strip()
+            else:
+                info["device_label"] = f"{os_family or 'Desktop'} компютър".strip()
+        elif ua.is_bot:
+            info["device_type"] = "bot"
+            info["device_label"] = f"Bot ({ua.browser.family})".strip()
+    except Exception:
+        pass
+    return info
+
+
+async def _create_session(user_id: str, request: Request, *, remember: bool, ttl_days: int) -> dict:
+    """Създава нов session документ и връща го (със `id` за JWT `sid` claim)."""
+    now = datetime.now(timezone.utc)
+    info = _device_info_from_request(request)
+    sid = str(_uuid.uuid4())
+    doc = {
+        "id": sid,
+        "user_id": user_id,
+        "remember": bool(remember),
+        "created_at": now.isoformat(),
+        "last_seen_at": now.isoformat(),
+        "expires_at": (now + timedelta(days=ttl_days)).isoformat(),
+        "user_agent": info["user_agent"],
+        "ip": info["ip"],
+        "browser": info["browser"],
+        "os": info["os"],
+        "device_label": info["device_label"],
+        "device_type": info["device_type"],
+    }
+    await db.sessions.insert_one(doc)
+    return doc
 
 
 def configure(*, hash_password, verify_password, create_token, get_current_user, limiter):
@@ -176,8 +255,10 @@ def register_routes():
             })
         except Exception as e:
             logger.warning("audit_log insert failed: %s", e)
-        token = _create_token(user_id, doc["email"])
-        csrf = _set_auth_cookies(response, token)
+        # Default 7-day session при регистрация (no "remember" UX тук).
+        sess = await _create_session(user_id, request, remember=False, ttl_days=COOKIE_TTL_DAYS)
+        token = _create_token(user_id, doc["email"], days=COOKIE_TTL_DAYS, sid=sess["id"])
+        csrf = _set_auth_cookies(response, token, max_age_sec=COOKIE_TTL_SEC)
         return {"token": token, "csrf_token": csrf, "user": _sanitize(doc)}
 
     @router.post("/login")
@@ -214,6 +295,9 @@ def register_routes():
             return {"requires_2fa": True, "challenge_token": challenge}
 
         token = _create_token(user["id"], email, days=ttl_days)
+        # Създаваме session документ за този login.
+        sess = await _create_session(user["id"], request, remember=remember, ttl_days=ttl_days)
+        token = _create_token(user["id"], email, days=ttl_days, sid=sess["id"])
         csrf = _set_auth_cookies(response, token, max_age_sec=ttl_sec)
         return {"token": token, "csrf_token": csrf, "user": _sanitize(user)}
 
@@ -255,7 +339,8 @@ def register_routes():
         remember = bool(ch.get("remember"))
         ttl_days = REMEMBER_TTL_DAYS if remember else COOKIE_TTL_DAYS
         ttl_sec = ttl_days * 24 * 60 * 60
-        token = _create_token(user["id"], user["email"], days=ttl_days)
+        sess = await _create_session(user["id"], request, remember=remember, ttl_days=ttl_days)
+        token = _create_token(user["id"], user["email"], days=ttl_days, sid=sess["id"])
         csrf = _set_auth_cookies(response, token, max_age_sec=ttl_sec)
         return {"token": token, "csrf_token": csrf, "user": _sanitize(user)}
 
@@ -370,10 +455,71 @@ def register_routes():
         return u
 
     @router.post("/logout")
-    async def logout(response: Response):
-        """Изчиства auth cookies (httpOnly access_token + csrf_token)."""
+    async def logout(request: Request, response: Response):
+        """Изчиства auth cookies (httpOnly access_token + csrf_token) и
+        изтрива текущата сесия от sessions колекцията (ако има)."""
+        sid = None
+        # Опитваме да разпознаем sid от JWT без верификация (токенът може да
+        # е изтекъл, но за маркиране на сесия за изтриване това е достатъчно).
+        import jwt as _jwt
+        tok = None
+        a = request.headers.get("Authorization", "")
+        if a.startswith("Bearer "):
+            tok = a[7:]
+        if not tok:
+            tok = request.cookies.get(ACCESS_COOKIE)
+        if tok:
+            try:
+                p = _jwt.decode(tok, options={"verify_signature": False})
+                sid = p.get("sid")
+            except Exception:
+                sid = None
+        if sid:
+            try:
+                await db.sessions.delete_one({"id": sid})
+            except Exception:
+                pass
         _clear_auth_cookies(response)
         return {"ok": True}
+
+    # ---- Sessions management (изход от устройства) ----
+    @router.get("/sessions")
+    async def list_sessions(request: Request, user: dict = Depends(_get_current_user)):
+        """Списък активни сесии за текущия потребител с маркер за активната."""
+        cursor = db.sessions.find({"user_id": user["id"]}, {"_id": 0, "user_agent": 0})
+        items = []
+        current_sid = getattr(request.state, "sid", None)
+        async for s in cursor:
+            s["is_current"] = (s.get("id") == current_sid)
+            items.append(s)
+        # Най-нови първо
+        items.sort(key=lambda x: x.get("last_seen_at", ""), reverse=True)
+        return {"sessions": items, "current_sid": current_sid}
+
+    @router.delete("/sessions/{sid}")
+    async def revoke_session(sid: str, request: Request, user: dict = Depends(_get_current_user)):
+        """Прекратява избрана сесия (само ако принадлежи на текущия потребител)."""
+        res = await db.sessions.delete_one({"id": sid, "user_id": user["id"]})
+        if res.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Сесията не е намерена")
+        return {"ok": True, "revoked": sid}
+
+    @router.post("/sessions/revoke-others")
+    async def revoke_other_sessions(request: Request, response: Response, user: dict = Depends(_get_current_user)):
+        """Изход от всички устройства (без текущото)."""
+        current_sid = getattr(request.state, "sid", None)
+        q = {"user_id": user["id"]}
+        if current_sid:
+            q["id"] = {"$ne": current_sid}
+        res = await db.sessions.delete_many(q)
+        return {"ok": True, "revoked_count": res.deleted_count}
+
+    @router.post("/sessions/revoke-all")
+    async def revoke_all_sessions(request: Request, response: Response, user: dict = Depends(_get_current_user)):
+        """Изход от всички устройства, включително текущото."""
+        res = await db.sessions.delete_many({"user_id": user["id"]})
+        _clear_auth_cookies(response)
+        return {"ok": True, "revoked_count": res.deleted_count}
 
     @router.get("/csrf")
     async def get_csrf(request: Request, response: Response):
