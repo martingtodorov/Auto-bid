@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { api } from "../lib/apiClient";
 import { formatError } from "../lib/auth";
 import { refreshSettings } from "../lib/settings";
+import { getDefaultCmsHtml } from "../lib/cmsDefaults";
 
 // Each CMS content field now has BG/RO/EN variants.  The legacy non-suffixed
 // field (e.g. `faq_content`) is kept for backwards compatibility and is used
@@ -27,6 +28,10 @@ const CMS_LANGS = [
 
 export default function AdminSettingsTab() {
   const [form, setForm] = useState(null);
+  // Запомняме default HTML стойностите при load — на save изпращаме само
+  // полета, които админът РЕАЛНО е променил (иначе бихме персистирали
+  // целия default за всички 5 страници при първо запазване).
+  const [initialHtmlDefaults, setInitialHtmlDefaults] = useState({});
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
@@ -36,6 +41,38 @@ export default function AdminSettingsTab() {
   const load = async () => {
     try {
       const { data } = await api.get("/admin/settings");
+      // Prefill default HTML за всеки празен `<base>_html_<lang>` →
+      // позволява на админа да вижда и редактира текущото съдържание като
+      // starting point.  НЕ се записва в DB докато не натисне "Запази".
+      const ctx = {
+        pct: data.buyer_fee_pct ?? 2,
+        min: data.buyer_fee_min_eur ?? 150,
+        max: data.buyer_fee_max_eur ?? 4000,
+        brand: "Auto&Bid",
+      };
+      const htmlPrefill = Object.fromEntries(
+        CONTENT_BASES.flatMap((f) =>
+          CMS_LANGS.map(({ code }) => {
+            const stored = (data[`${f.htmlBase}_html_${code}`] || "").trim();
+            return [
+              `${f.htmlBase}_html_${code}`,
+              stored || getDefaultCmsHtml(f.htmlBase, code, ctx),
+            ];
+          })
+        )
+      );
+      // Запазваме кои полета са били prefill-нати с default (не stored).
+      // На Save ще пропуснем тези, които не са променяни.
+      const defaultsMap = Object.fromEntries(
+        CONTENT_BASES.flatMap((f) =>
+          CMS_LANGS.map(({ code }) => {
+            const stored = (data[`${f.htmlBase}_html_${code}`] || "").trim();
+            const def = getDefaultCmsHtml(f.htmlBase, code, ctx);
+            return [`${f.htmlBase}_html_${code}`, stored ? null : def];
+          })
+        )
+      );
+      setInitialHtmlDefaults(defaultsMap);
       setForm({
         buyer_fee_pct: data.buyer_fee_pct ?? 2.0,
         buyer_fee_min_eur: data.buyer_fee_min_eur ?? 150,
@@ -56,18 +93,14 @@ export default function AdminSettingsTab() {
         contacts_content: data.contacts_content ?? "",
         fees_content: data.fees_content ?? "",
         how_it_works_content: data.how_it_works_content ?? "",
-        // Multi-language CMS variants (Phase 7)
+        // Multi-language CMS variants (Phase 7) — Markdown
         ...Object.fromEntries(
           CONTENT_BASES.flatMap((f) =>
             CMS_LANGS.map(({ code }) => [`${f.key}_${code}`, data[`${f.key}_${code}`] ?? ""])
           )
         ),
-        // Direct-HTML CMS варианти (нов режим)
-        ...Object.fromEntries(
-          CONTENT_BASES.flatMap((f) =>
-            CMS_LANGS.map(({ code }) => [`${f.htmlBase}_html_${code}`, data[`${f.htmlBase}_html_${code}`] ?? ""])
-          )
-        ),
+        // Direct-HTML CMS варианти (нов режим) — prefill с default ако е празно
+        ...htmlPrefill,
         og_image_url: data.og_image_url ?? "",
         favicon_url: data.favicon_url ?? "",
         maintenance_mode: !!data.maintenance_mode,
@@ -110,10 +143,20 @@ export default function AdminSettingsTab() {
             CMS_LANGS.map(({ code }) => [`${f.key}_${code}`, form[`${f.key}_${code}`] ?? ""])
           )
         ),
-        // Direct-HTML payload
+        // Direct-HTML payload — пропускаме полета, които все още равняват
+        // default-а (не са пипнати от админа), за да не персистираме defaults.
         ...Object.fromEntries(
           CONTENT_BASES.flatMap((f) =>
-            CMS_LANGS.map(({ code }) => [`${f.htmlBase}_html_${code}`, form[`${f.htmlBase}_html_${code}`] ?? ""])
+            CMS_LANGS.map(({ code }) => {
+              const key = `${f.htmlBase}_html_${code}`;
+              const cur = form[key] ?? "";
+              const def = initialHtmlDefaults[key];
+              if (def != null && cur === def) {
+                // Незасегнат default — НЕ изпращаме (запазваме stored като "").
+                return [key, undefined];
+              }
+              return [key, cur];
+            }).filter(([, v]) => v !== undefined)
           )
         ),
         og_image_url: form.og_image_url,
