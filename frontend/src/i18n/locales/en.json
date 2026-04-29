@@ -174,20 +174,16 @@
     "counter_declined": "Counter-offer declined"
   },
   "preauth": {
-    "confirm_card": "Confirm your card",
+    "confirm_card": "Confirm bid",
     "buyer_fee": "Buyer's fee",
     "fee_detail": "{{pct}}% of the bid (min. €{{min}}, max. €{{max}}). Pre-authorised on your card until settlement. Fully released if you lose; charged if you win.",
-    "card_number": "Card number",
-    "validity": "Expiry",
-    "cvc": "CVC",
-    "card_name": "Name on card",
-    "err_invalid_number": "Invalid card number",
-    "err_invalid_exp": "Invalid expiry (MM/YY)",
-    "err_invalid_cvc": "Invalid CVC",
-    "err_missing_name": "Enter the name on the card",
-    "processing": "Processing…",
+    "stripe_secure_title": "Secured by Stripe",
+    "stripe_secure_body": "Card details are entered on Stripe's secure page. {{brand}} never sees or stores your card number.",
+    "redirecting": "Redirecting to Stripe…",
+    "powered_by_stripe": "Secure payment by Stripe",
     "authorize_cta": "Authorize {{amount}} and bid",
-    "test_mode": "Test mode · Use 4242 4242 4242 4242"
+    "stripe_cancelled": "Stripe payment was cancelled.",
+    "stripe_pending": "Stripe payment is still being processed. Please try again in a minute."
   },
   "credit": {
     "title_new": "Bidding credit",
@@ -210,6 +206,8 @@
     "releasing": "Releasing…",
     "cancel": "Cancel",
     "processing": "Processing…",
+    "redirecting": "Redirecting…",
+    "stripe_secure_body": "Card details are entered on Stripe's secure page. We never see or store your card number.",
     "increase_cta": "Increase",
     "block_cta": "Block {{amount}}"
   },

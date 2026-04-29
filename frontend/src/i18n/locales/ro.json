@@ -174,20 +174,16 @@
     "counter_declined": "Contra-ofertă refuzată"
   },
   "preauth": {
-    "confirm_card": "Confirmă cardul",
+    "confirm_card": "Confirmă oferta",
     "buyer_fee": "Comision cumpărător",
     "fee_detail": "{{pct}}% din ofertă (min. €{{min}}, max. €{{max}}). Se blochează pe card până la finalizare. La pierdere se eliberează integral; la câștig se percepe.",
-    "card_number": "Număr card",
-    "validity": "Valabilitate",
-    "cvc": "CVC",
-    "card_name": "Nume pe card",
-    "err_invalid_number": "Număr de card invalid",
-    "err_invalid_exp": "Valabilitate invalidă (LL/AA)",
-    "err_invalid_cvc": "Cod CVC invalid",
-    "err_missing_name": "Introdu numele de pe card",
-    "processing": "Se procesează…",
+    "stripe_secure_title": "Securizat prin Stripe",
+    "stripe_secure_body": "Datele cardului sunt introduse pe pagina securizată a Stripe. {{brand}} nu vede și nu stochează numărul cardului tău.",
+    "redirecting": "Redirecționare către Stripe…",
+    "powered_by_stripe": "Plată securizată prin Stripe",
     "authorize_cta": "Autorizează {{amount}} și licitează",
-    "test_mode": "Mod test · Folosește 4242 4242 4242 4242"
+    "stripe_cancelled": "Plata prin Stripe a fost anulată.",
+    "stripe_pending": "Plata prin Stripe este încă în curs de procesare. Te rugăm să încerci din nou peste un minut."
   },
   "credit": {
     "title_new": "Credit de licitare",
@@ -210,6 +206,8 @@
     "releasing": "Se eliberează…",
     "cancel": "Anulează",
     "processing": "Se procesează…",
+    "redirecting": "Redirecționare…",
+    "stripe_secure_body": "Datele cardului sunt introduse pe pagina securizată a Stripe. Nu vedem și nu stocăm numărul cardului.",
     "increase_cta": "Mărește",
     "block_cta": "Blochează {{amount}}"
   },

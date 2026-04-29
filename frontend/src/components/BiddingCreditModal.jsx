@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useTranslation, Trans } from "react-i18next";
-import { X, Shield, Zap, CreditCard, TrendingUp } from "lucide-react";
+import { X, Shield, Zap, ShieldCheck, ExternalLink, TrendingUp } from "lucide-react";
 import { api, formatEUR } from "../lib/apiClient";
 import { formatError } from "../lib/auth";
 import { useSiteSettings, computeBuyerFee } from "../lib/settings";
@@ -36,7 +36,6 @@ export default function BiddingCreditModal({ auctionId, currentBid, currentCredi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [minAllowed]);
 
-  const [cardNumber, setCardNumber] = useState(currentCredit?.card_last4 ? `4242 4242 4242 ${currentCredit.card_last4}` : "4242 4242 4242 4242");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [releasing, setReleasing] = useState(false);
@@ -47,6 +46,11 @@ export default function BiddingCreditModal({ auctionId, currentBid, currentCredi
   const feeMin = Number(settings?.buyer_fee_min_eur ?? 150);
   const feeMax = Number(settings?.buyer_fee_max_eur ?? 4000);
 
+  /**
+   * Stripe-first flow: новият или увеличеният кредит се потвърждава през
+   * хоствана Stripe Checkout страница (manual capture).  Никакви картови
+   * данни не се въвеждат тук.
+   */
   const submit = async () => {
     setErr(""); setBusy(true);
     try {
@@ -55,17 +59,28 @@ export default function BiddingCreditModal({ auctionId, currentBid, currentCredi
         setBusy(false);
         return;
       }
-      const pmId = cardNumber.replace(/\s/g, "").trim();
-      if (pmId.length < 4) { setErr(t("credit.err_invalid_card")); setBusy(false); return; }
-      const { data } = await api.post(`/auctions/${auctionId}/bidding-credit`, {
-        max_amount_eur: Number(amount),
-        payment_method_id: pmId,
+      // Запазваме pending credit интента в localStorage за post-redirect
+      // финализиране в AuctionDetailPage useEffect.
+      try {
+        localStorage.setItem(
+          `pending_credit_${auctionId}`,
+          JSON.stringify({ max_amount_eur: Number(amount), at: Date.now() })
+        );
+      } catch (_e) { /* ignore */ }
+      const { data } = await api.post("/stripe/authorizations/create-checkout", {
+        auction_id: auctionId,
+        bidding_limit_eur: Number(amount),
+        origin: window.location.origin,
       });
-      onSaved && onSaved(data.credit);
-      onClose();
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error("Stripe checkout URL липсва.");
+      }
     } catch (e) {
       setErr(formatError(e));
-    } finally { setBusy(false); }
+      setBusy(false);
+    }
   };
 
   const release = async () => {
@@ -89,7 +104,7 @@ export default function BiddingCreditModal({ auctionId, currentBid, currentCredi
             </div>
             <h2 className="font-serif text-2xl">{currentCredit ? t("credit.title_increase") : t("credit.title_new")}</h2>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-[hsl(var(--surface))] rounded-full"><X size={18} /></button>
+          <button onClick={onClose} disabled={busy} className="p-2 hover:bg-[hsl(var(--surface))] rounded-full"><X size={18} /></button>
         </div>
 
         <div className="p-6 space-y-5">
@@ -158,21 +173,11 @@ export default function BiddingCreditModal({ auctionId, currentBid, currentCredi
           </div>
 
           {!currentCredit && (
-            <div>
-              <label className="overline text-[hsl(var(--ink-muted))] mb-2 flex items-center gap-1.5">
-                <CreditCard size={11} /> {t("credit.card_number")}
-              </label>
-              <input
-                type="text"
-                value={cardNumber}
-                onChange={(e) => setCardNumber(e.target.value)}
-                placeholder="4242 4242 4242 4242"
-                className="w-full border border-[hsl(var(--line))] h-11 px-3 text-sm font-mono"
-                data-testid="credit-card-input"
-              />
-              <p className="mt-1.5 text-xs text-[hsl(var(--ink-muted))]">
-                {t("credit.test_mode")}
-              </p>
+            <div className="rounded-card border border-[hsl(var(--accent))]/20 bg-[hsl(var(--accent-soft))] p-3 flex items-start gap-2.5" data-testid="credit-stripe-notice">
+              <ShieldCheck size={15} className="text-[hsl(var(--accent))] shrink-0 mt-0.5" />
+              <div className="text-xs leading-relaxed text-[hsl(var(--ink))]/80">
+                {t("credit.stripe_secure_body", "Картовите данни се въвеждат на защитената страница на Stripe. Никога не виждаме и не съхраняваме номера на картата.")}
+              </div>
             </div>
           )}
 
@@ -187,7 +192,13 @@ export default function BiddingCreditModal({ auctionId, currentBid, currentCredi
             <div className="flex-1" />
             <button onClick={onClose} disabled={busy || releasing} className="btn btn-secondary">{t("credit.cancel")}</button>
             <button onClick={submit} disabled={busy || releasing} className="btn btn-accent flex items-center gap-2" data-testid="credit-submit">
-              <Zap size={14} /> {busy ? t("credit.processing") : currentCredit ? t("credit.increase_cta") : t("credit.block_cta", { amount: formatEUR(preauthAmount) })}
+              {busy ? (
+                <>{t("credit.redirecting", "Пренасочване…")}</>
+              ) : currentCredit ? (
+                <><ExternalLink size={14} /> {t("credit.increase_cta")}</>
+              ) : (
+                <><ExternalLink size={14} /> {t("credit.block_cta", { amount: formatEUR(preauthAmount) })}</>
+              )}
             </button>
           </div>
         </div>

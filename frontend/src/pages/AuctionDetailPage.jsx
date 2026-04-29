@@ -262,12 +262,85 @@ export default function AuctionDetailPage() {
       const payload = { amount_eur: netAmt };
       if (paymentMethodId) payload.payment_method_id = paymentMethodId;
       await api.post(`/auctions/${id}/bids`, payload);
+      // refresh auction so user sees updated current_bid immediately
+      await load();
     } catch (e) {
       setError(formatError(e));
     } finally {
       setPlacing(false);
     }
   };
+
+  // ─── Post-Stripe-Checkout return handler ───
+  // When the user returns from Stripe's hosted checkout, the URL contains
+  // `?stripe_session_id=cs_test_...`. We then:
+  //   1. Pull the active authorization for this auction;
+  //   2. If a pending bid is in localStorage, place it (auth covers preauth);
+  //   3. If a pending credit intent is in localStorage, register it;
+  //   4. Clear the URL params.
+  // The card data was handled entirely by Stripe — we never see the PAN.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sid = params.get("stripe_session_id");
+    const cancelled = params.get("stripe_cancelled");
+    if (cancelled) {
+      setError(t("preauth.stripe_cancelled", "Плащането през Stripe бе отказано."));
+      params.delete("stripe_cancelled");
+      window.history.replaceState({}, "", `${window.location.pathname}${params.toString() ? "?" + params : ""}`);
+      try { localStorage.removeItem(`pending_bid_${id}`); } catch (_e) { /* ignore */ }
+      try { localStorage.removeItem(`pending_credit_${id}`); } catch (_e) { /* ignore */ }
+      return;
+    }
+    if (!sid || !id) return;
+    let cancel = false;
+    (async () => {
+      // Stripe webhook may take ~1-2s after redirect to mark auth active.
+      // Poll up to 6× (12s total) for `authorizations/active`.
+      let auth = null;
+      for (let i = 0; i < 6 && !cancel; i++) {
+        try {
+          const { data } = await api.get(`/stripe/authorizations/active`, { params: { auction_id: id } });
+          if (data && data.id) { auth = data; break; }
+        } catch (_e) { /* ignore */ }
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+      if (cancel) return;
+      if (!auth) {
+        setError(t("preauth.stripe_pending", "Плащането през Stripe все още се обработва. Моля, опитайте отново след минута."));
+        return;
+      }
+      // Финализираме pending действие: 1) pending_credit → регистрирай credit;
+      // 2) pending_bid → подай бида.
+      try {
+        const credRaw = localStorage.getItem(`pending_credit_${id}`);
+        if (credRaw) {
+          const cred = JSON.parse(credRaw);
+          await api.post(`/auctions/${id}/bidding-credit`, {
+            max_amount_eur: Number(cred.max_amount_eur),
+            payment_method_id: auth.id, // canonical session id, not card data
+          });
+          localStorage.removeItem(`pending_credit_${id}`);
+          await load();
+        }
+        const bidRaw = localStorage.getItem(`pending_bid_${id}`);
+        if (bidRaw) {
+          const pb = JSON.parse(bidRaw);
+          const typed = Number(pb.amount_eur);
+          const netAmt = vatRate > 0 ? Math.round(typed / (1 + vatRate / 100)) : typed;
+          await api.post(`/auctions/${id}/bids`, { amount_eur: netAmt, payment_method_id: auth.id });
+          localStorage.removeItem(`pending_bid_${id}`);
+          await load();
+        }
+      } catch (e) {
+        setError(formatError(e));
+      }
+      // Изчистваме session_id от URL-а.
+      params.delete("stripe_session_id");
+      window.history.replaceState({}, "", `${window.location.pathname}${params.toString() ? "?" + params : ""}`);
+    })();
+    return () => { cancel = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   const postComment = async () => {
     setError("");
@@ -345,7 +418,7 @@ export default function AuctionDetailPage() {
 
   return (
     <main className="rule-b" data-testid="auction-detail-page">
-      <PreauthModal open={showPreauth} onClose={() => setShowPreauth(false)} onConfirm={confirmBid} bidAmount={bidAmount} />
+      <PreauthModal open={showPreauth} onClose={() => setShowPreauth(false)} bidAmount={bidAmount} auctionId={id} />
       {showCredit && a && (
         <BiddingCreditModal
           auctionId={id}
@@ -382,33 +455,55 @@ export default function AuctionDetailPage() {
             </div>
             {a.images?.length > 1 && (() => {
               const total = a.images.length;
-              // Mobile shows at most 5 thumbnails (1 row). The 5th gets a
-              // "+N more" dark overlay if there are extra photos hidden.
-              // Desktop shows all thumbs in the 5-col grid as usual.
+              // Mobile shows at most 5 thumbnails (1 row).  Desktop shows up to 10 (2 rows).
+              // The last visible thumb on each viewport gets a "+N more" dark
+              // overlay when there are additional hidden photos.
               const MOBILE_MAX = 5;
+              const DESKTOP_MAX = 10;
               const mobileExtra = total - MOBILE_MAX;
+              const desktopExtra = total - DESKTOP_MAX;
               return (
                 <div className="mt-3 grid grid-cols-5 gap-2">
                   {a.images.map((img, i) => {
-                    // hide thumbs >= 5 on mobile only
                     const hideOnMobile = i >= MOBILE_MAX;
+                    const hideOnDesktop = i >= DESKTOP_MAX;
                     const isMobileLastVisible = i === MOBILE_MAX - 1 && mobileExtra > 0;
+                    const isDesktopLastVisible = i === DESKTOP_MAX - 1 && desktopExtra > 0;
+                    const onThumbClick = () => {
+                      // Open lightbox only when the overlay is actually
+                      // rendered on the active viewport — otherwise it's a
+                      // regular thumbnail click that just changes main photo.
+                      const isDesktopVp = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(min-width: 768px)").matches;
+                      if (isDesktopVp ? isDesktopLastVisible : isMobileLastVisible) {
+                        setLightboxIdx(i);
+                      } else {
+                        setPhotoIdx(i);
+                      }
+                    };
                     return (
                       <button
                         key={i}
-                        onClick={() => isMobileLastVisible ? setLightboxIdx(i) : setPhotoIdx(i)}
+                        onClick={onThumbClick}
                         className={`relative aspect-[4/3] rounded-card border overflow-hidden ${
                           photoIdx === i ? "border-[hsl(var(--ink))]" : "border-[hsl(var(--line))]"
-                        } ${hideOnMobile ? "hidden md:block" : ""}`}
+                        } ${hideOnMobile && hideOnDesktop ? "hidden" : hideOnMobile ? "hidden md:block" : hideOnDesktop ? "block md:hidden" : ""}`}
                         data-testid={`thumb-${i}`}
                       >
-                        <img src={img} alt="" className="w-full h-full object-cover" />
+                        <img src={img} alt="" className="w-full h-full object-cover" loading="lazy" />
                         {isMobileLastVisible && (
                           <span
                             className="md:hidden absolute inset-0 bg-black/65 hover:bg-black/75 transition-colors flex items-center justify-center text-white font-serif text-lg cursor-zoom-in"
-                            data-testid="thumb-more-overlay"
+                            data-testid="thumb-more-overlay-mobile"
                           >
                             +{mobileExtra}
+                          </span>
+                        )}
+                        {isDesktopLastVisible && (
+                          <span
+                            className="hidden md:flex absolute inset-0 bg-black/65 hover:bg-black/75 transition-colors items-center justify-center text-white font-serif text-lg cursor-zoom-in"
+                            data-testid="thumb-more-overlay-desktop"
+                          >
+                            +{desktopExtra}
                           </span>
                         )}
                       </button>

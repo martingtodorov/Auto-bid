@@ -593,3 +593,30 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 - Backend: `/app/backend/server.py` (DEFAULTS + public settings response), `/app/backend/models.py` (SiteSettingsUpdate +15 HTML полета)
 - Frontend: `/app/frontend/src/components/HtmlBody.jsx` (нов), `/app/frontend/src/lib/settings.js` (нова `pickCmsHtml` функция), `/app/frontend/src/components/AdminSettingsTab.jsx` (CmsMultiLangField with mode toggle), `/app/frontend/src/pages/{TermsPage,FAQPage,FeesPage,HowItWorksPage,ContactsPage}.jsx`.
 
+
+### Desktop +N gallery overlay & Stripe-only card capture (29 Apr 2026)
+
+**Gallery (+N overlay)**
+- Mobile (<768px) показва 5 thumbs; ако има >5, на 5-та се показва тъмен overlay `+N`.
+- **Desktop (≥768px)** сега показва **10 thumbs** (2 реда от по 5); ако има >10, на 10-та се показва тъмен overlay `+N` → клик отваря lightbox от това място.
+- Thumbs ≥10 → `hidden` на desktop (показани само в lightbox).
+- Click handler използва `window.matchMedia("(min-width: 768px)")`, за да реши дали натискането на overlay-натия thumb отваря lightbox или просто сменя главна снимка.
+
+**Stripe-only card capture**
+- ❌ Премахнато: директно въвеждане на номер карта/CVV/exp в `PreauthModal.jsx` и `BiddingCreditModal.jsx`. UI-ите вече **никога** не пипат PAN.
+- ✅ Сега: бутон "Оторизирай {amount}" в модала вика `POST /api/stripe/authorizations/create-checkout` (вече съществуващ endpoint) и `window.location.href` пренасочва към Stripe Hosted Checkout (`capture_method=manual`).
+- 🔁 Post-redirect handler в `AuctionDetailPage.jsx` (`useEffect` на `?stripe_session_id=...`):
+  1. Polls `GET /api/stripe/authorizations/active?auction_id=…` до 6× × 2s, докато webhook-ът не маркира hold-а като `active`.
+  2. Чете `pending_credit_<auctionId>` от localStorage → регистрира credit чрез `POST /auctions/{id}/bidding-credit` с stripe `auth.id` като placeholder PM id.
+  3. Чете `pending_bid_<auctionId>` от localStorage → подава бида чрез `POST /auctions/{id}/bids`.
+  4. Изчиства query param-а от URL.
+- ⚠️ Когато потребителят кликне Cancel в Stripe, връща се с `?stripe_cancelled=1` → показва се грешка и pending данните се изтриват.
+- 🔑 За реален runtime е нужно: `STRIPE_API_KEY` (sk_live_…) и `STRIPE_WEBHOOK_SECRET` в `/app/backend/.env`. Текущо: тестов placeholder `sk_test_emergent` → endpoint връща 503 преди реалната редиректа.
+- 🌍 Преводи добавени за BG/RO/EN: `preauth.stripe_secure_*`, `preauth.redirecting`, `preauth.powered_by_stripe`, `preauth.stripe_cancelled`, `preauth.stripe_pending`, `credit.redirecting`, `credit.stripe_secure_body`. Старите `card_number/cvc/validity/test_mode/err_invalid_*` ключове са оставени за backwards-compat, но не се използват от UI-а.
+
+**Файлове:**
+- `/app/frontend/src/pages/AuctionDetailPage.jsx` — gallery dual-overlay logic + post-Stripe-redirect useEffect
+- `/app/frontend/src/components/PreauthModal.jsx` — пълен rewrite (Stripe redirect)
+- `/app/frontend/src/components/BiddingCreditModal.jsx` — премахнато card input, Stripe redirect
+- `/app/frontend/src/i18n/locales/{bg,en,ro}.json` — нови ключове
+
