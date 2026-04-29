@@ -12,6 +12,7 @@ export default function LoginPage() {
   const next = new URLSearchParams(loc.search).get("next") || "/";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(false);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
@@ -23,7 +24,7 @@ export default function LoginPage() {
     e.preventDefault();
     setErr(""); setLoading(true);
     try {
-      const res = await login(email, password);
+      const res = await login(email, password, remember);
       if (res?.requires_2fa) {
         setChallenge(res.challenge_token);
       } else {
@@ -103,6 +104,16 @@ export default function LoginPage() {
             </div>
             <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full border border-[hsl(var(--line))] h-12 px-3" data-testid="login-password" />
           </div>
+          <label className="flex items-center gap-2 text-sm text-[hsl(var(--ink-muted))] select-none cursor-pointer" data-testid="login-remember-label">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+              className="h-4 w-4 accent-[hsl(var(--accent))] cursor-pointer"
+              data-testid="login-remember"
+            />
+            <span>{t("auth.remember_me")}</span>
+          </label>
           {err && <p className="text-sm text-[hsl(var(--danger))]" data-testid="login-error">{err}</p>}
           <button type="submit" disabled={loading} className="btn btn-primary w-full" data-testid="login-submit">
             {loading ? (t("auth.signing_in") || "Влизане…") : t("nav.login")}

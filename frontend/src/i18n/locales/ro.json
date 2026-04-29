@@ -71,7 +71,8 @@
     "two_fa_code_label": "Cod",
     "two_fa_enter_code": "Introdu codul de 6 cifre din aplicația authenticator.",
     "two_fa_verify": "Verifică",
-    "two_fa_verifying": "Se verifică…"
+    "two_fa_verifying": "Se verifică…",
+    "remember_me": "Ține-mă minte (90 zile)"
   },
   "auction": {
     "current_bid": "Ofertă curentă",

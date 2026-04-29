@@ -36,8 +36,10 @@ OTP_TTL_MIN = 15
 CHALLENGE_TTL_MIN = 5
 
 # --- Cookie auth (C3): JWT в httpOnly cookie + CSRF (double-submit) ----------
-COOKIE_TTL_DAYS = 7
+COOKIE_TTL_DAYS = 7  # стандартен TTL за обикновен login
+REMEMBER_TTL_DAYS = 90  # cap за "Запомни ме" (3 месеца)
 COOKIE_TTL_SEC = COOKIE_TTL_DAYS * 24 * 60 * 60
+REMEMBER_TTL_SEC = REMEMBER_TTL_DAYS * 24 * 60 * 60
 ACCESS_COOKIE = "access_token"
 CSRF_COOKIE = "csrf_token"
 # Secure cookies на production (HTTPS).  Може да се изключи за локален dev.
@@ -50,16 +52,17 @@ COOKIE_SAMESITE = os.environ.get("COOKIE_SAMESITE", "lax")
 _DUMMY_BCRYPT_HASH = bcrypt.hashpw(b"dummy-not-a-real-password", bcrypt.gensalt()).decode("utf-8")
 
 
-def _set_auth_cookies(response: Response, token: str) -> str:
+def _set_auth_cookies(response: Response, token: str, max_age_sec: int = COOKIE_TTL_SEC) -> str:
     """Записва access_token (httpOnly) и csrf_token (readable от JS) cookies.
 
-    Връща CSRF токена, за да може да се върне и в response body, ако трябва.
+    `max_age_sec` контролира продължителността — стандарт 7 дни, 90 дни при
+    "Запомни ме".  Връща CSRF токена.
     """
     csrf = secrets.token_urlsafe(32)
     response.set_cookie(
         key=ACCESS_COOKIE,
         value=token,
-        max_age=COOKIE_TTL_SEC,
+        max_age=max_age_sec,
         httponly=True,
         secure=COOKIE_SECURE,
         samesite=COOKIE_SAMESITE,
@@ -68,7 +71,7 @@ def _set_auth_cookies(response: Response, token: str) -> str:
     response.set_cookie(
         key=CSRF_COOKIE,
         value=csrf,
-        max_age=COOKIE_TTL_SEC,
+        max_age=max_age_sec,
         httponly=False,
         secure=COOKIE_SECURE,
         samesite=COOKIE_SAMESITE,
@@ -193,6 +196,11 @@ def register_routes():
         if user.get("banned"):
             raise HTTPException(status_code=403, detail="Акаунтът е блокиран. За въпроси: contact@autoandbid.com")
 
+        # "Запомни ме" → 90 дни, иначе 7 дни.  Cap-нато на REMEMBER_TTL_DAYS.
+        remember = bool(getattr(payload, "remember", False))
+        ttl_days = REMEMBER_TTL_DAYS if remember else COOKIE_TTL_DAYS
+        ttl_sec = ttl_days * 24 * 60 * 60
+
         # 2FA challenge flow — issue a short-lived challenge token instead of JWT
         if user.get("totp_enabled"):
             challenge = secrets.token_urlsafe(32)
@@ -200,12 +208,13 @@ def register_routes():
                 "id": str(_uuid.uuid4()),
                 "challenge": _sha256(challenge),
                 "user_id": user["id"],
+                "remember": remember,
                 "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=CHALLENGE_TTL_MIN)).isoformat(),
             })
             return {"requires_2fa": True, "challenge_token": challenge}
 
-        token = _create_token(user["id"], email)
-        csrf = _set_auth_cookies(response, token)
+        token = _create_token(user["id"], email, days=ttl_days)
+        csrf = _set_auth_cookies(response, token, max_age_sec=ttl_sec)
         return {"token": token, "csrf_token": csrf, "user": _sanitize(user)}
 
     @router.post("/2fa/verify")
@@ -242,8 +251,12 @@ def register_routes():
 
         # Consume challenge
         await db.auth_challenges.delete_one({"challenge": _sha256(payload.challenge_token)})
-        token = _create_token(user["id"], user["email"])
-        csrf = _set_auth_cookies(response, token)
+        # Възстановяваме "Запомни ме" избора от challenge документа.
+        remember = bool(ch.get("remember"))
+        ttl_days = REMEMBER_TTL_DAYS if remember else COOKIE_TTL_DAYS
+        ttl_sec = ttl_days * 24 * 60 * 60
+        token = _create_token(user["id"], user["email"], days=ttl_days)
+        csrf = _set_auth_cookies(response, token, max_age_sec=ttl_sec)
         return {"token": token, "csrf_token": csrf, "user": _sanitize(user)}
 
     @router.post("/2fa/enable")

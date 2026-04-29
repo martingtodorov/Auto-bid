@@ -24,8 +24,8 @@ export function AuthProvider({ children }) {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const login = async (email, password) => {
-    const { data } = await api.post("/auth/login", { email, password });
+  const login = async (email, password, remember = false) => {
+    const { data } = await api.post("/auth/login", { email, password, remember: !!remember });
     // If 2FA is enabled, backend returns a challenge instead of a token
     if (data.requires_2fa) {
       return { requires_2fa: true, challenge_token: data.challenge_token };

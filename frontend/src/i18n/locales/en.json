@@ -71,7 +71,8 @@
     "two_fa_code_label": "Code",
     "two_fa_enter_code": "Enter the 6-digit code from your authenticator app.",
     "two_fa_verify": "Verify",
-    "two_fa_verifying": "Verifying…"
+    "two_fa_verifying": "Verifying…",
+    "remember_me": "Remember me (90 days)"
   },
   "auction": {
     "current_bid": "Current bid",

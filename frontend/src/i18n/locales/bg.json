@@ -71,7 +71,8 @@
     "two_fa_code_label": "Код",
     "two_fa_enter_code": "Въведете 6-цифрения код от authenticator приложението си.",
     "two_fa_verify": "Потвърди",
-    "two_fa_verifying": "Проверка…"
+    "two_fa_verifying": "Проверка…",
+    "remember_me": "Запомни ме (90 дни)"
   },
   "auction": {
     "current_bid": "Текуща оферта",
