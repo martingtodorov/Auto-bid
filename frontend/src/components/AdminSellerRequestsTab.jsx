@@ -23,6 +23,12 @@ export default function AdminSellerRequestsTab() {
   const [busy, setBusy] = useState(null);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
+  // Admin-only manual translations for text_change approvals: keyed by request id.
+  const [translations, setTranslations] = useState({});
+
+  const setTr = (id, lang, value) => {
+    setTranslations((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), [lang]: value } }));
+  };
 
   const load = useCallback(async () => {
     setLoading(true); setErr("");
@@ -38,11 +44,19 @@ export default function AdminSellerRequestsTab() {
 
   useEffect(() => { load(); }, [load]);
 
-  const approve = async (id) => {
+  const approve = async (id, type) => {
     if (!window.confirm("Одобряване на заявката?")) return;
     setBusy(id); setErr("");
-    try { await api.post(`/admin/seller-requests/${id}/approve`, {}); await load(); }
-    catch (e) { setErr(formatError(e)); }
+    try {
+      const body = {};
+      if (type === "text_change") {
+        const tr = translations[id] || {};
+        if (tr.ro != null) body.description_ro = tr.ro;
+        if (tr.en != null) body.description_en = tr.en;
+      }
+      await api.post(`/admin/seller-requests/${id}/approve`, body);
+      await load();
+    } catch (e) { setErr(formatError(e)); }
     finally { setBusy(null); }
   };
 
@@ -137,10 +151,37 @@ export default function AdminSellerRequestsTab() {
                   </div>
                 )}
 
+                {r.type === "text_change" && r.status === "pending" && (
+                  <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3" data-testid={`request-translations-${r.id}`}>
+                    <div>
+                      <label className="overline text-[hsl(var(--ink-muted))] mb-1 block">🇷🇴 Описание (Romanian) — само админ</label>
+                      <textarea
+                        rows={3}
+                        value={(translations[r.id] || {}).ro || ""}
+                        onChange={(e) => setTr(r.id, "ro", e.target.value)}
+                        placeholder="Опционален ръчен превод за RO сайта. Ако е празно, ще се използва автоматичен превод."
+                        className="input font-mono text-xs"
+                        data-testid={`request-translation-ro-${r.id}`}
+                      />
+                    </div>
+                    <div>
+                      <label className="overline text-[hsl(var(--ink-muted))] mb-1 block">🇬🇧 Description (English) — admin only</label>
+                      <textarea
+                        rows={3}
+                        value={(translations[r.id] || {}).en || ""}
+                        onChange={(e) => setTr(r.id, "en", e.target.value)}
+                        placeholder="Optional manual translation for the EN site. Leave empty for auto-translation."
+                        className="input font-mono text-xs"
+                        data-testid={`request-translation-en-${r.id}`}
+                      />
+                    </div>
+                  </div>
+                )}
+
                 {r.status === "pending" && (
                   <div className="mt-4 flex gap-2">
                     <button
-                      onClick={() => approve(r.id)}
+                      onClick={() => approve(r.id, r.type)}
                       disabled={busy === r.id}
                       className="btn btn-accent !py-2 !px-4 text-xs flex items-center gap-2"
                       data-testid={`request-approve-${r.id}`}

@@ -402,6 +402,8 @@
     "success_home": "Back to home",
     "err_contacts": "Please enter a contact email and phone.",
     "err_phone": "Please enter a valid phone number.",
+    "err_city_required": "Please enter the city using Latin script.",
+    "err_city_latin": "City must be entered in Latin script (e.g. \"Sofia\" instead of \"София\").",
     "form": {
       "title": "Title",
       "title_placeholder": "E.g. Audi RS6 Avant Performance — Nardo Grey",
@@ -418,6 +420,7 @@
       "colour": "Colour",
       "region": "Region",
       "city": "City",
+      "city_hint": "Latin script only (e.g. \"Sofia\").",
       "country": "Country",
       "starting_bid_eur": "Starting bid",
       "reserve_eur": "Reserve price (optional)",

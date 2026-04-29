@@ -140,6 +140,26 @@ export default function AdminEditModal({ auctionId, onClose, onSaved }) {
               <Field label="Описание" full>
                 <textarea value={form.description || ""} onChange={(e) => set("description", e.target.value)} rows={4} className="input" data-testid="edit-description" />
               </Field>
+              <Field label="🇷🇴 Описание (Romanian) — само админ" full>
+                <textarea
+                  value={form.description_ro || ""}
+                  onChange={(e) => set("description_ro", e.target.value)}
+                  rows={4}
+                  placeholder="Manual translation for the Romanian site. If empty, falls back to auto-translation."
+                  className="input font-mono text-xs"
+                  data-testid="edit-description-ro"
+                />
+              </Field>
+              <Field label="🇬🇧 Description (English) — admin only" full>
+                <textarea
+                  value={form.description_en || ""}
+                  onChange={(e) => set("description_en", e.target.value)}
+                  rows={4}
+                  placeholder="Manual translation for the English site. If empty, falls back to auto-translation."
+                  className="input font-mono text-xs"
+                  data-testid="edit-description-en"
+                />
+              </Field>
             </Section>
 
             <Section title="Автомобил">

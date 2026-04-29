@@ -233,6 +233,13 @@ def register_routes():
                 # Invalidate cached translations when source description changes
                 update["description_ro"] = ""
                 update["description_en"] = ""
+            # Допуска admin да приложи манУални преводи едновременно с
+            # одобрението (override на любой auto-translate).  ModerationDecision
+            # вече има `description_ro` / `description_en` опционални полета.
+            if payload and payload.description_ro is not None:
+                update["description_ro"] = (payload.description_ro or "").strip()
+            if payload and payload.description_en is not None:
+                update["description_en"] = (payload.description_en or "").strip()
             if update:
                 await db.auctions.update_one({"id": auction_id}, {"$set": update})
             applied = update

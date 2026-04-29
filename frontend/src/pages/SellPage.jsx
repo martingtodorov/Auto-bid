@@ -69,7 +69,7 @@ const emptyForm = (user) => ({
   title: "", make: "", model: "", year: 2020, mileage_km: 0,
   fuel: "Бензин", transmission: "Автоматична", body_type: "Седан",
   power_hp: 150, engine_cc: 2000, color: "",
-  city: "София", country: "Bulgaria", description: "",
+  city: "Sofia", country: "Bulgaria", description: "",
   vin: "",
   contact_email: user?.email || "",
   contact_phone: "",
@@ -158,6 +158,19 @@ export default function SellPage() {
       const phoneDigits = (form.contact_phone || "").replace(/[^\d]/g, "");
       if (phoneDigits.length < 7) {
         setErr(t("sell.err_phone"));
+        setLoading(false);
+        return;
+      }
+      // Градът трябва да е на латиница (Hetzner/международна аудитория).
+      // Кирилица, гръцки и арабски символи не се приемат.
+      const cityVal = (form.city || "").trim();
+      if (!cityVal) {
+        setErr(t("sell.err_city_required", "Моля, въведете град на латиница."));
+        setLoading(false);
+        return;
+      }
+      if (!/^[A-Za-z\u00C0-\u024F\s'.,-]+$/.test(cityVal)) {
+        setErr(t("sell.err_city_latin", "Градът трябва да е на латиница (например „Sofia“ вместо „София“)."));
         setLoading(false);
         return;
       }
@@ -346,7 +359,16 @@ export default function SellPage() {
               <input value={form.color} onChange={(e) => set("color", e.target.value)} className={inputCls} />
             </Field>
             <Field label={t("sell.form.city")}>
-              <input value={form.city} onChange={(e) => set("city", e.target.value)} className={inputCls} data-testid="sell-city" />
+              <input
+                value={form.city}
+                onChange={(e) => set("city", e.target.value)}
+                className={inputCls}
+                placeholder="Sofia, Bucharest, Plovdiv…"
+                pattern="[A-Za-z\u00C0-\u024F\s'.,-]+"
+                title={t("sell.err_city_latin", "Градът трябва да е на латиница.")}
+                data-testid="sell-city"
+              />
+              <p className="mt-1 text-xs text-[hsl(var(--ink-muted))]">{t("sell.form.city_hint", "Само латиница (напр. „Sofia“).")}</p>
             </Field>
             <Field label={t("sell.form.country")}>
               <select value={form.country} onChange={(e) => set("country", e.target.value)} className={inputCls} data-testid="sell-country">

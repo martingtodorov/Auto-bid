@@ -146,6 +146,10 @@ class AdminAuctionUpdate(BaseModel):
     seller_name: Optional[str] = None
     contact_email: Optional[str] = None
     contact_phone: Optional[str] = None
+    # Manual translations of `description` for RO/EN sites — set by admin only.
+    # When non-empty, these override the auto-translation in `/auctions/{id}/description?lang=ro|en`.
+    description_ro: Optional[str] = None
+    description_en: Optional[str] = None
 
 
 # ---------- Admin actions ----------
@@ -346,4 +350,8 @@ class ReorderImagesRequest(BaseModel):
 
 class ModerationDecision(BaseModel):
     reason: Optional[str] = Field(default=None, max_length=600)
+    # При одобряване на text_change заявка админът може да зададе и
+    # ръчни преводи на описанието за RO/EN сайтовете.
+    description_ro: Optional[str] = None
+    description_en: Optional[str] = None
 

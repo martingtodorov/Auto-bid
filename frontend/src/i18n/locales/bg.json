@@ -402,6 +402,8 @@
     "success_home": "Към началото",
     "err_contacts": "Моля, попълнете имейл и телефон за контакт.",
     "err_phone": "Моля, въведете валиден телефонен номер.",
+    "err_city_required": "Моля, въведете град на латиница.",
+    "err_city_latin": "Градът трябва да е на латиница (например „Sofia“ вместо „София“).",
     "form": {
       "title": "Заглавие",
       "title_placeholder": "Напр. Audi RS6 Avant Performance — Nardo Grey",
@@ -418,6 +420,7 @@
       "colour": "Цвят",
       "region": "Регион",
       "city": "Град",
+      "city_hint": "Само латиница (напр. „Sofia“).",
       "country": "Държава",
       "starting_bid_eur": "Начална цена",
       "reserve_eur": "Резервна цена (незадължителна)",
