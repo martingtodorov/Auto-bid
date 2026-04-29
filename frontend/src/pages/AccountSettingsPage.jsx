@@ -7,6 +7,7 @@ import { api } from "../lib/apiClient";
 import TwoFactorSection from "../components/TwoFactorSection";
 import PushSettings from "../components/PushSettings";
 import SessionsSection from "../components/SessionsSection";
+import SavedCardSection from "../components/SavedCardSection";
 
 export default function AccountSettingsPage() {
   const { t } = useTranslation();
@@ -130,6 +131,8 @@ export default function AccountSettingsPage() {
         </section>
 
         <TwoFactorSection />
+
+        <SavedCardSection />
 
         <SessionsSection />
 

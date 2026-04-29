@@ -418,7 +418,26 @@ export default function AuctionDetailPage() {
 
   return (
     <main className="rule-b" data-testid="auction-detail-page">
-      <PreauthModal open={showPreauth} onClose={() => setShowPreauth(false)} bidAmount={bidAmount} auctionId={id} />
+      <PreauthModal
+        open={showPreauth}
+        onClose={() => setShowPreauth(false)}
+        bidAmount={bidAmount}
+        auctionId={id}
+        onPaidWithSavedCard={async (authId) => {
+          setShowPreauth(false);
+          setPlacing(true);
+          try {
+            const typed = Number(bidAmount);
+            const netAmt = vatRate > 0 ? Math.round(typed / (1 + vatRate / 100)) : typed;
+            await api.post(`/auctions/${id}/bids`, { amount_eur: netAmt, payment_method_id: authId });
+            await load();
+          } catch (e) {
+            setError(formatError(e));
+          } finally {
+            setPlacing(false);
+          }
+        }}
+      />
       {showCredit && a && (
         <BiddingCreditModal
           auctionId={id}

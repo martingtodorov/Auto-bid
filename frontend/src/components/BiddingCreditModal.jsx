@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useTranslation, Trans } from "react-i18next";
-import { X, Shield, Zap, ShieldCheck, ExternalLink, TrendingUp } from "lucide-react";
+import { X, Shield, Zap, ShieldCheck, ExternalLink, TrendingUp, CreditCard } from "lucide-react";
 import { api, formatEUR } from "../lib/apiClient";
 import { formatError } from "../lib/auth";
 import { useSiteSettings, computeBuyerFee } from "../lib/settings";
@@ -11,10 +11,14 @@ export default function BiddingCreditModal({ auctionId, currentBid, currentCredi
 
   // Fetch the server-computed next minimum bid (respects variable step schedule)
   const [nextMin, setNextMin] = useState(null);
+  const [savedCard, setSavedCard] = useState(null);
   useEffect(() => {
     let cancelled = false;
     api.get(`/auctions/${auctionId}/next-bid`)
       .then((r) => { if (!cancelled) setNextMin(Number(r.data?.min_next_eur || 0)); })
+      .catch(() => {});
+    api.get(`/stripe/cards/saved`)
+      .then((r) => { if (!cancelled) setSavedCard(r.data?.card || null); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [auctionId]);
@@ -47,11 +51,11 @@ export default function BiddingCreditModal({ auctionId, currentBid, currentCredi
   const feeMax = Number(settings?.buyer_fee_max_eur ?? 4000);
 
   /**
-   * Stripe-first flow: новият или увеличеният кредит се потвърждава през
-   * хоствана Stripe Checkout страница (manual capture).  Никакви картови
-   * данни не се въвеждат тук.
+   * Stripe-first flow: новият или увеличеният кредит се потвърждава или
+   * през хоствана Stripe Checkout страница (manual capture), или off-session
+   * чрез запазена карта.
    */
-  const submit = async () => {
+  const submit = async ({ useSaved = false } = {}) => {
     setErr(""); setBusy(true);
     try {
       if (Number(amount) < minAllowed) {
@@ -71,7 +75,24 @@ export default function BiddingCreditModal({ auctionId, currentBid, currentCredi
         auction_id: auctionId,
         bidding_limit_eur: Number(amount),
         origin: window.location.origin,
+        use_saved_card: !!useSaved,
       });
+      if (data?.redirect === false && data?.id) {
+        // Off-session success: hold-ът е активен → регистрираме credit веднага.
+        try {
+          const { data: credResp } = await api.post(`/auctions/${auctionId}/bidding-credit`, {
+            max_amount_eur: Number(amount),
+            payment_method_id: data.id,
+          });
+          try { localStorage.removeItem(`pending_credit_${auctionId}`); } catch (_e) { /* ignore */ }
+          onSaved && onSaved(credResp.credit);
+          onClose();
+        } catch (e) {
+          setErr(formatError(e));
+          setBusy(false);
+        }
+        return;
+      }
       if (data?.url) {
         window.location.href = data.url;
       } else {
@@ -172,7 +193,27 @@ export default function BiddingCreditModal({ auctionId, currentBid, currentCredi
             </p>
           </div>
 
-          {!currentCredit && (
+          {!currentCredit && savedCard && (
+            <div className="rounded-card border border-[hsl(var(--accent))]/30 bg-[hsl(var(--accent-soft))] p-4 flex items-center justify-between gap-3" data-testid="credit-saved-card">
+              <div className="flex items-center gap-3">
+                <CreditCard size={18} className="text-[hsl(var(--accent))]" />
+                <div className="text-sm">
+                  <div className="font-semibold">{savedCard.brand?.toUpperCase()} •••• {savedCard.last4}</div>
+                  <div className="text-xs text-[hsl(var(--ink-muted))]">{t("credit.saved_card_hint", "Запазена карта · без redirect")}</div>
+                </div>
+              </div>
+              <button
+                onClick={() => submit({ useSaved: true })}
+                disabled={busy || releasing}
+                className="btn btn-accent !py-2 !px-3 text-xs inline-flex items-center gap-1.5"
+                data-testid="credit-submit-saved"
+              >
+                <Zap size={12} /> {t("credit.use_saved_cta", "Активирай")}
+              </button>
+            </div>
+          )}
+
+          {!currentCredit && !savedCard && (
             <div className="rounded-card border border-[hsl(var(--accent))]/20 bg-[hsl(var(--accent-soft))] p-3 flex items-start gap-2.5" data-testid="credit-stripe-notice">
               <ShieldCheck size={15} className="text-[hsl(var(--accent))] shrink-0 mt-0.5" />
               <div className="text-xs leading-relaxed text-[hsl(var(--ink))]/80">
@@ -191,7 +232,7 @@ export default function BiddingCreditModal({ auctionId, currentBid, currentCredi
             )}
             <div className="flex-1" />
             <button onClick={onClose} disabled={busy || releasing} className="btn btn-secondary">{t("credit.cancel")}</button>
-            <button onClick={submit} disabled={busy || releasing} className="btn btn-accent flex items-center gap-2" data-testid="credit-submit">
+            <button onClick={() => submit({ useSaved: false })} disabled={busy || releasing} className="btn btn-accent flex items-center gap-2" data-testid="credit-submit">
               {busy ? (
                 <>{t("credit.redirecting", "Пренасочване…")}</>
               ) : currentCredit ? (

@@ -182,6 +182,10 @@
     "redirecting": "Пренасочване към Stripe…",
     "powered_by_stripe": "Защитено плащане от Stripe",
     "authorize_cta": "Оторизирай {{amount}} и наддай",
+    "authorize_other_cta": "Плати с друга карта · {{amount}}",
+    "saved_card_hint": "Запазена карта · без redirect",
+    "pay_saved_cta": "Наддай",
+    "processing": "Обработка…",
     "stripe_cancelled": "Плащането през Stripe бе отказано.",
     "stripe_pending": "Плащането през Stripe все още се обработва. Моля, опитайте отново след минута."
   },
@@ -208,6 +212,8 @@
     "processing": "Обработка…",
     "redirecting": "Пренасочване…",
     "stripe_secure_body": "Картовите данни се въвеждат на защитената страница на Stripe. Никога не виждаме и не съхраняваме номера на картата.",
+    "saved_card_hint": "Запазена карта · без redirect",
+    "use_saved_cta": "Активирай",
     "increase_cta": "Увеличи",
     "block_cta": "Блокирай {{amount}}"
   },

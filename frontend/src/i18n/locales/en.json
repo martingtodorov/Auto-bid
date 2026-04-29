@@ -182,6 +182,10 @@
     "redirecting": "Redirecting to Stripe…",
     "powered_by_stripe": "Secure payment by Stripe",
     "authorize_cta": "Authorize {{amount}} and bid",
+    "authorize_other_cta": "Pay with another card · {{amount}}",
+    "saved_card_hint": "Saved card · no redirect",
+    "pay_saved_cta": "Bid",
+    "processing": "Processing…",
     "stripe_cancelled": "Stripe payment was cancelled.",
     "stripe_pending": "Stripe payment is still being processed. Please try again in a minute."
   },
@@ -208,6 +212,8 @@
     "processing": "Processing…",
     "redirecting": "Redirecting…",
     "stripe_secure_body": "Card details are entered on Stripe's secure page. We never see or store your card number.",
+    "saved_card_hint": "Saved card · no redirect",
+    "use_saved_cta": "Activate",
     "increase_cta": "Increase",
     "block_cta": "Block {{amount}}"
   },

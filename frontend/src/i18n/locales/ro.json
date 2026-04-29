@@ -208,6 +208,8 @@
     "processing": "Se procesează…",
     "redirecting": "Redirecționare…",
     "stripe_secure_body": "Datele cardului sunt introduse pe pagina securizată a Stripe. Nu vedem și nu stocăm numărul cardului.",
+    "saved_card_hint": "Card salvat · fără redirect",
+    "use_saved_cta": "Activează",
     "increase_cta": "Mărește",
     "block_cta": "Blochează {{amount}}"
   },

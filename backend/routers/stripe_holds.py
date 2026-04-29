@@ -71,6 +71,52 @@ class CreateAuthBody(BaseModel):
     auction_id: str
     bidding_limit_eur: float
     origin: Optional[str] = None  # frontend's window.location.origin
+    use_saved_card: Optional[bool] = False  # ако True и user има saved PM, ползвай него
+
+
+class SetupCardBody(BaseModel):
+    origin: Optional[str] = None  # frontend's window.location.origin
+
+
+async def _get_or_create_stripe_customer(db, user: dict) -> str:
+    """Връща `stripe_customer_id` за този потребител; създава, ако липсва."""
+    cid = user.get("stripe_customer_id")
+    if cid:
+        return cid
+    try:
+        customer = stripe.Customer.create(
+            email=user.get("email"),
+            name=user.get("name") or user.get("email"),
+            metadata={"user_id": user["id"]},
+        )
+    except stripe.error.AuthenticationError as e:
+        logger.error("[stripe] customer.create auth failed (placeholder API key?): %s", e)
+        raise HTTPException(status_code=503, detail="Stripe API ключът не е валиден. Свържете се с администратор.")
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=502, detail=f"Stripe грешка: {getattr(e, 'user_message', str(e))}")
+    cid = customer["id"]
+    await db.users.update_one({"id": user["id"]}, {"$set": {"stripe_customer_id": cid}})
+    return cid
+
+
+async def _saved_card_brief(db, user: dict) -> Optional[dict]:
+    """Чете запазената карта (ако има) и връща {brand, last4, exp_month, exp_year, pm_id}."""
+    pm_id = user.get("stripe_default_payment_method_id")
+    if not pm_id:
+        return None
+    try:
+        pm = stripe.PaymentMethod.retrieve(pm_id)
+        card = pm.get("card") or {}
+        return {
+            "pm_id": pm_id,
+            "brand": card.get("brand"),
+            "last4": card.get("last4"),
+            "exp_month": card.get("exp_month"),
+            "exp_year": card.get("exp_year"),
+        }
+    except stripe.error.StripeError as e:
+        logger.warning("[stripe] saved PM retrieve failed: %s", e)
+        return None
 
 
 def build_stripe_router(db, get_current_user):
@@ -99,6 +145,10 @@ def build_stripe_router(db, get_current_user):
         Frontend calls this with `auction_id` and a `bidding_limit_eur`.
         Backend computes the hold amount, creates the Session, and returns
         the URL — the browser then `location.href = url` to redirect.
+
+        Ако `use_saved_card=True` и user има запазена карта, се прави директен
+        off-session PaymentIntent.create(capture_method=manual) и не се
+        изисква redirect — функцията връща `{redirect: false, status: ...}`.
         """
         if not api_key:
             raise HTTPException(status_code=503, detail="Stripe не е конфигуриран. Свържете се с администратор.")
@@ -114,6 +164,60 @@ def build_stripe_router(db, get_current_user):
         # ---- Compute amount server-side (NEVER trust frontend) ----
         amount_eur = _hold_amount_eur(body.bidding_limit_eur)
         amount_cents = int(round(amount_eur * 100))
+
+        # ---- Saved-card fast path: off-session PaymentIntent ----
+        if body.use_saved_card and user.get("stripe_default_payment_method_id"):
+            try:
+                customer_id = await _get_or_create_stripe_customer(db, user)
+                pi = stripe.PaymentIntent.create(
+                    amount=amount_cents,
+                    currency="eur",
+                    customer=customer_id,
+                    payment_method=user["stripe_default_payment_method_id"],
+                    off_session=True,
+                    confirm=True,
+                    capture_method="manual",
+                    description=f"Hold за търг: {a.get('title','')[:90]}",
+                    metadata={
+                        "user_id": user["id"],
+                        "auction_id": body.auction_id,
+                        "bidding_limit_eur": str(round(float(body.bidding_limit_eur), 2)),
+                        "authorization_type": "auction_bid_hold",
+                        "use_saved_card": "1",
+                    },
+                )
+            except stripe.error.CardError as e:
+                # Картата изисква 3D Secure / друга верификация → fall back to redirect.
+                logger.info("[stripe] off-session PI failed (CardError): %s — falling back to Checkout", e)
+            except stripe.error.StripeError as e:
+                logger.warning("[stripe] off-session PI error: %s — falling back to Checkout", e)
+            else:
+                now = datetime.now(timezone.utc)
+                doc = {
+                    "id": pi["id"],  # използваме PI id като canonical id за този flow
+                    "stripe_checkout_session_id": None,
+                    "stripe_payment_intent_id": pi["id"],
+                    "user_id": user["id"],
+                    "auction_id": body.auction_id,
+                    "bidding_limit_eur": float(body.bidding_limit_eur),
+                    "amount_authorized_eur": amount_eur,
+                    "amount_captured_eur": 0.0,
+                    "currency": "eur",
+                    "authorization_status": "active" if pi["status"] == "requires_capture" else "pending",
+                    "authorization_expires_at": (now + timedelta(days=AUTHORIZATION_TTL_DAYS)).isoformat(),
+                    "created_at": now.isoformat(),
+                    "updated_at": now.isoformat(),
+                    "via_saved_card": True,
+                }
+                await db.bid_authorizations.insert_one(doc)
+                logger.info("[stripe] off-session PI %s for user=%s auction=%s amount=%s EUR status=%s",
+                            pi["id"], user["id"], body.auction_id, amount_eur, pi["status"])
+                return {
+                    "redirect": False,
+                    "id": pi["id"],
+                    "status": doc["authorization_status"],
+                    "amount_eur": amount_eur,
+                }
 
         # ---- Build URLs ----
         origin = (body.origin or "").rstrip("/") or str(request.base_url).rstrip("/")
@@ -141,6 +245,7 @@ def build_stripe_router(db, get_current_user):
                 # Cancel happens when the bidder loses (cancel endpoint).
                 payment_intent_data={
                     "capture_method": "manual",
+                    "setup_future_usage": "off_session",  # позволи запазване след success
                     "metadata": {
                         "user_id": user["id"],
                         "auction_id": body.auction_id,
@@ -180,7 +285,100 @@ def build_stripe_router(db, get_current_user):
         await db.bid_authorizations.insert_one(doc)
         logger.info("[stripe] checkout.session.created %s for user=%s auction=%s amount=%s EUR",
                     session["id"], user["id"], body.auction_id, amount_eur)
-        return {"id": session["id"], "url": session["url"], "amount_eur": amount_eur}
+        return {"redirect": True, "id": session["id"], "url": session["url"], "amount_eur": amount_eur}
+
+    # ---- Saved cards (Stripe SetupIntent flow) ----
+
+    @router.post("/cards/setup-checkout")
+    async def setup_card_checkout(body: SetupCardBody, request: Request, user: dict = Depends(get_current_user)):
+        """Създава Stripe Checkout Session в `mode=setup`, която записва
+        картата на потребителя без да я таксува.  След redirect frontend-ът
+        вика `/cards/finalize` с върнатия `session_id`.
+        """
+        if not api_key:
+            raise HTTPException(status_code=503, detail="Stripe не е конфигуриран.")
+        customer_id = await _get_or_create_stripe_customer(db, user)
+        origin = (body.origin or "").rstrip("/") or str(request.base_url).rstrip("/")
+        success_url = f"{origin}/settings?stripe_setup_session_id={{CHECKOUT_SESSION_ID}}"
+        cancel_url = f"{origin}/settings?stripe_setup_cancelled=1"
+        try:
+            session = stripe.checkout.Session.create(
+                mode="setup",
+                customer=customer_id,
+                payment_method_types=["card"],
+                success_url=success_url,
+                cancel_url=cancel_url,
+                metadata={"user_id": user["id"], "purpose": "save_card"},
+            )
+        except stripe.error.StripeError as e:
+            logger.exception("stripe setup checkout failed")
+            raise HTTPException(status_code=502, detail=f"Stripe error: {getattr(e, 'user_message', str(e))}")
+        return {"id": session["id"], "url": session["url"]}
+
+    @router.post("/cards/finalize")
+    async def finalize_saved_card(body: dict, user: dict = Depends(get_current_user)):
+        """След redirect от Stripe — взема SetupIntent от session, attach-ва
+        PaymentMethod към customer-а и записва default PM в user документа."""
+        if not api_key:
+            raise HTTPException(status_code=503, detail="Stripe не е конфигуриран.")
+        sid = (body or {}).get("session_id") or ""
+        if not sid:
+            raise HTTPException(status_code=400, detail="session_id липсва")
+        try:
+            session = stripe.checkout.Session.retrieve(sid, expand=["setup_intent"])
+        except stripe.error.StripeError as e:
+            raise HTTPException(status_code=502, detail=f"Stripe retrieve: {e}")
+        # Сигурност: session трябва да е на този потребител.
+        if (session.get("metadata") or {}).get("user_id") != user["id"]:
+            raise HTTPException(status_code=403, detail="Сесията не принадлежи на този потребител.")
+        si = session.get("setup_intent") or {}
+        pm_id = si.get("payment_method") if isinstance(si, dict) else None
+        if not pm_id:
+            raise HTTPException(status_code=400, detail="SetupIntent не е завършен — карта не е записана.")
+        customer_id = await _get_or_create_stripe_customer(db, user)
+        try:
+            stripe.PaymentMethod.attach(pm_id, customer=customer_id)
+            stripe.Customer.modify(customer_id, invoice_settings={"default_payment_method": pm_id})
+        except stripe.error.InvalidRequestError as e:
+            # Може вече да е attach-нат — игнорирай това състояние
+            if "already been attached" not in str(e):
+                raise HTTPException(status_code=502, detail=f"Attach failed: {e}")
+        except stripe.error.StripeError as e:
+            raise HTTPException(status_code=502, detail=f"Stripe error: {e}")
+        await db.users.update_one(
+            {"id": user["id"]},
+            {"$set": {
+                "stripe_default_payment_method_id": pm_id,
+                "stripe_customer_id": customer_id,
+                "stripe_card_saved_at": datetime.now(timezone.utc).isoformat(),
+            }},
+        )
+        # Зарежда card brief за return
+        fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+        brief = await _saved_card_brief(db, fresh)
+        return {"ok": True, "card": brief}
+
+    @router.get("/cards/saved")
+    async def get_saved_card(user: dict = Depends(get_current_user)):
+        """Връща brief на запазената карта (brand, last4, exp) или null."""
+        if not api_key:
+            return {"card": None}
+        return {"card": await _saved_card_brief(db, user)}
+
+    @router.delete("/cards/saved")
+    async def delete_saved_card(user: dict = Depends(get_current_user)):
+        """Detach-ва картата от Stripe customer-а и изчиства user.default_pm."""
+        pm_id = user.get("stripe_default_payment_method_id")
+        if pm_id and api_key:
+            try:
+                stripe.PaymentMethod.detach(pm_id)
+            except stripe.error.StripeError as e:
+                logger.warning("[stripe] detach failed: %s — clearing user doc anyway", e)
+        await db.users.update_one(
+            {"id": user["id"]},
+            {"$unset": {"stripe_default_payment_method_id": ""}},
+        )
+        return {"ok": True}
 
     @router.get("/authorizations/active")
     async def my_active_authorization(auction_id: str, user: dict = Depends(get_current_user)):
