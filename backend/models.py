@@ -247,6 +247,22 @@ class SiteSettingsUpdate(BaseModel):
     how_it_works_content_bg: Optional[str] = None
     how_it_works_content_ro: Optional[str] = None
     how_it_works_content_en: Optional[str] = None
+    # Direct-HTML CMS варианти — имат приоритет над Markdown при render
+    faq_html_bg: Optional[str] = None
+    faq_html_ro: Optional[str] = None
+    faq_html_en: Optional[str] = None
+    terms_html_bg: Optional[str] = None
+    terms_html_ro: Optional[str] = None
+    terms_html_en: Optional[str] = None
+    contacts_html_bg: Optional[str] = None
+    contacts_html_ro: Optional[str] = None
+    contacts_html_en: Optional[str] = None
+    fees_html_bg: Optional[str] = None
+    fees_html_ro: Optional[str] = None
+    fees_html_en: Optional[str] = None
+    how_it_works_html_bg: Optional[str] = None
+    how_it_works_html_ro: Optional[str] = None
+    how_it_works_html_en: Optional[str] = None
     # Phase 6 — Multi-language hero text (CMS-editable)
     hero_headline_bg: Optional[str] = None
     hero_subtitle_bg: Optional[str] = None

@@ -580,3 +580,16 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 - `/auth/logout` сега и изтрива текущия session запис (не само cookies).
 - Curl-проверено end-to-end: revoke от една сесия инвалидира токена на другото устройство в реално време (401).
 
+
+### CMS — bug fix + Direct HTML (29 Apr 2026)
+- 🐛 **Критичен бъг**: `SETTINGS_DEFAULTS` в `server.py` НЕ включваше multi-lang CMS полетата (`terms_content_bg`, `faq_content_bg` и т.н.) → Mongo пазеше стойностите, но `_load_settings_cache()` ги филтрираше при reload (защото merge само на ключове, които са в DEFAULTS).  Добавени всичките 15 markdown полета + 15 HTML полета в DEFAULTS.
+- 🆕 **Direct HTML режим** за всяка от 5-те страници (Общи условия, Как работи, FAQ, Такси и комисионни, Контакти) на 3 езика → 15 нови полета `<base>_html_<lang>`.  Запис в Mongo, render през `DOMPurify` (frontend-side sanitization).
+- 📐 **Render priority**: HTML > Markdown > Default React component.  Никое съществуващо съдържание не е променено — администраторите получават контрол без да губят defaults.
+- 🎨 **AdminSettingsTab**: всеки CMS блок има Markdown/HTML toggle pill, badge "⚠ Активен HTML режим" когато HTML версия е попълнена за текущия език.
+- 🛡️ Сигурност: `HtmlBody.jsx` използва `DOMPurify` с whitelist (h1-h6, p, a, img, table, ul/ol, blockquote, code и др.) — премахва `<script>`, on* event handlers, `javascript:` URLs, iframe, form, link, meta, style.
+- ✅ Curl-проверено: PUT → GET връща стойностите; XSS опит се санитизира на render.
+
+**Файлове**:
+- Backend: `/app/backend/server.py` (DEFAULTS + public settings response), `/app/backend/models.py` (SiteSettingsUpdate +15 HTML полета)
+- Frontend: `/app/frontend/src/components/HtmlBody.jsx` (нов), `/app/frontend/src/lib/settings.js` (нова `pickCmsHtml` функция), `/app/frontend/src/components/AdminSettingsTab.jsx` (CmsMultiLangField with mode toggle), `/app/frontend/src/pages/{TermsPage,FAQPage,FeesPage,HowItWorksPage,ContactsPage}.jsx`.
+

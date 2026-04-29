@@ -133,3 +133,18 @@ export function pickCmsContent(settings, base, lang) {
     ""
   );
 }
+
+/**
+ * Same fallback chain, but for the *_html_<lang> variant.  Returns the raw
+ * HTML string if the admin has provided one; empty string otherwise.
+ * `base` is one of: "faq", "terms", "fees", "contacts", "how_it_works".
+ */
+export function pickCmsHtml(settings, base, lang) {
+  if (!settings) return "";
+  const code = (lang || "bg").slice(0, 2);
+  return (
+    (settings[`${base}_html_${code}`] || "").trim() ||
+    (settings[`${base}_html_bg`] || "").trim() ||
+    ""
+  );
+}

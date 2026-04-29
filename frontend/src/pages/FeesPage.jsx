@@ -2,7 +2,8 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import InfoPage, { InfoSection } from "../components/InfoPage";
 import MarkdownBody from "../components/MarkdownBody";
-import { useSiteSettings, pickCmsContent } from "../lib/settings";
+import HtmlBody from "../components/HtmlBody";
+import { useSiteSettings, pickCmsContent, pickCmsHtml } from "../lib/settings";
 import { useInfoPageSeo } from "../lib/useInfoPageSeo";
 import { useBrandName } from "../lib/brand";
 
@@ -10,6 +11,7 @@ export default function FeesPage() {
   const { i18n } = useTranslation();
   const brand = useBrandName();
   const settings = useSiteSettings();
+  const html = pickCmsHtml(settings, "fees", i18n.language);
   const custom = pickCmsContent(settings, "fees_content", i18n.language);
   const pct = settings?.buyer_fee_pct ?? 2;
   const min = settings?.buyer_fee_min_eur ?? 150;
@@ -22,7 +24,9 @@ export default function FeesPage() {
   });
   return (
     <InfoPage overline="Помощ" title="Такси и комисионни">
-      {custom ? (
+      {html ? (
+        <HtmlBody html={html} />
+      ) : custom ? (
         <MarkdownBody>{custom}</MarkdownBody>
       ) : (
         <DefaultFees pct={pct} min={min} max={max} />

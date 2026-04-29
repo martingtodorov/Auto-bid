@@ -2,7 +2,8 @@ import React, { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import InfoPage, { InfoSection, FAQItem } from "../components/InfoPage";
 import MarkdownBody from "../components/MarkdownBody";
-import { useSiteSettings, pickCmsContent } from "../lib/settings";
+import HtmlBody from "../components/HtmlBody";
+import { useSiteSettings, pickCmsContent, pickCmsHtml } from "../lib/settings";
 import { setPageMeta, resetPageMeta, buildBreadcrumbs, buildFaqJsonLd, combineJsonLd } from "../lib/seo";
 import { useBrandName } from "../lib/brand";
 
@@ -41,6 +42,7 @@ export default function FAQPage() {
   const { i18n } = useTranslation();
   const brand = useBrandName();
   const settings = useSiteSettings();
+  const html = pickCmsHtml(settings, "faq", i18n.language);
   const custom = pickCmsContent(settings, "faq_content", i18n.language);
   const pct = settings?.buyer_fee_pct ?? 2;
 
@@ -65,7 +67,9 @@ export default function FAQPage() {
 
   return (
     <InfoPage overline="Помощ" title="Често задавани въпроси">
-      {custom ? (
+      {html ? (
+        <HtmlBody html={html} />
+      ) : custom ? (
         <MarkdownBody>{custom}</MarkdownBody>
       ) : (
         <>

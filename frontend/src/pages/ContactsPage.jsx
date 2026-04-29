@@ -3,7 +3,8 @@ import { useTranslation } from "react-i18next";
 import { Mail, Phone, MapPin, Clock } from "lucide-react";
 import InfoPage, { InfoSection } from "../components/InfoPage";
 import MarkdownBody from "../components/MarkdownBody";
-import { useSiteSettings, pickCmsContent } from "../lib/settings";
+import HtmlBody from "../components/HtmlBody";
+import { useSiteSettings, pickCmsContent, pickCmsHtml } from "../lib/settings";
 import { useInfoPageSeo } from "../lib/useInfoPageSeo";
 import { useBrandName } from "../lib/brand";
 
@@ -11,6 +12,7 @@ export default function ContactsPage() {
   const { i18n } = useTranslation();
   const brand = useBrandName();
   const settings = useSiteSettings();
+  const html = pickCmsHtml(settings, "contacts", i18n.language);
   const custom = pickCmsContent(settings, "contacts_content", i18n.language);
   useInfoPageSeo({
     title: `Контакти — ${brand}`,
@@ -20,7 +22,7 @@ export default function ContactsPage() {
   });
   return (
     <InfoPage overline="Помощ" title="Контакти">
-      {custom ? <MarkdownBody>{custom}</MarkdownBody> : <DefaultContacts />}
+      {html ? <HtmlBody html={html} /> : custom ? <MarkdownBody>{custom}</MarkdownBody> : <DefaultContacts />}
     </InfoPage>
   );
 }

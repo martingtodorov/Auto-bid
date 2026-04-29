@@ -4,7 +4,8 @@ import { useTranslation } from "react-i18next";
 import { Shield, FileCheck, Gavel, Sparkles, UserCheck, Lock, Zap, Clock, KeyRound, Handshake, Gavel as GavelIcon, CheckCircle2 } from "lucide-react";
 import InfoPage from "../components/InfoPage";
 import MarkdownBody from "../components/MarkdownBody";
-import { useSiteSettings, pickCmsContent } from "../lib/settings";
+import HtmlBody from "../components/HtmlBody";
+import { useSiteSettings, pickCmsContent, pickCmsHtml } from "../lib/settings";
 import { useInfoPageSeo } from "../lib/useInfoPageSeo";
 import { useBrandName } from "../lib/brand";
 
@@ -12,6 +13,7 @@ export default function HowItWorksPage() {
   const { t, i18n } = useTranslation();
   const brand = useBrandName();
   const settings = useSiteSettings();
+  const html = pickCmsHtml(settings, "how_it_works", i18n.language);
   const custom = pickCmsContent(settings, "how_it_works_content", i18n.language);
   useInfoPageSeo({
     title: `${t("nav.how_it_works", "Как работи")} — ${brand}`,
@@ -19,6 +21,13 @@ export default function HowItWorksPage() {
     path: "/how-it-works",
     crumb: t("nav.how_it_works", "Как работи"),
   });
+  if (html) {
+    return (
+      <InfoPage overline={t("how_it_works.overline")} title={t("nav.how_it_works", "Как работи")}>
+        <HtmlBody html={html} />
+      </InfoPage>
+    );
+  }
   if (custom) {
     return (
       <InfoPage overline={t("how_it_works.overline")} title={t("nav.how_it_works", "Как работи")}>

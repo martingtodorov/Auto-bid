@@ -2,7 +2,8 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import InfoPage, { InfoSection } from "../components/InfoPage";
 import MarkdownBody from "../components/MarkdownBody";
-import { useSiteSettings, pickCmsContent } from "../lib/settings";
+import HtmlBody from "../components/HtmlBody";
+import { useSiteSettings, pickCmsContent, pickCmsHtml } from "../lib/settings";
 import { useInfoPageSeo } from "../lib/useInfoPageSeo";
 import { useBrandName } from "../lib/brand";
 
@@ -10,6 +11,7 @@ export default function TermsPage() {
   const { i18n } = useTranslation();
   const brand = useBrandName();
   const settings = useSiteSettings();
+  const html = pickCmsHtml(settings, "terms", i18n.language);
   const custom = pickCmsContent(settings, "terms_content", i18n.language);
   useInfoPageSeo({
     title: `Общи условия — ${brand}`,
@@ -19,7 +21,9 @@ export default function TermsPage() {
   });
   return (
     <InfoPage overline="Правна информация" title="Общи условия">
-      {custom ? (
+      {html ? (
+        <HtmlBody html={html} />
+      ) : custom ? (
         <MarkdownBody>{custom}</MarkdownBody>
       ) : (
         <DefaultTerms pct={settings?.buyer_fee_pct ?? 2} brand={brand} />
