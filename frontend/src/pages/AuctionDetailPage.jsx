@@ -748,8 +748,8 @@ export default function AuctionDetailPage() {
                       </button>
                     </div>
                     {vatRate > 0 && Number(bidAmount) > 0 && (
-                      <div className="mt-2 flex items-baseline justify-between gap-2 px-1" data-testid="bid-net-preview">
-                        <span className="text-xs text-[hsl(var(--ink-muted))]">{t("auction.without_vat_label", "Без ДДС")}</span>
+                      <div className="mt-2 flex items-baseline gap-2 px-1" data-testid="bid-net-preview">
+                        <span className="text-xs text-[hsl(var(--ink-muted))]">{t("auction.without_vat_label", "Без ДДС")}:</span>
                         <span className="font-mono text-sm text-[hsl(var(--ink))]">{formatEUR(Math.round(Number(bidAmount) / (1 + vatRate / 100)))}</span>
                       </div>
                     )}
