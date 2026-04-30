@@ -43,7 +43,6 @@ export default function LiveTicker() {
                 className="flex items-center gap-3 text-xs font-mono text-white/80 hover:text-white transition shrink-0 pr-10"
                 data-testid={`ticker-item-${i}`}
               >
-                <span className="text-white/50">{a.make}</span>
                 <span className="truncate max-w-[220px]">{a.title}</span>
                 <span className="font-semibold" style={{ color: "#6DE0B1" }}>{formatEUR(a.current_bid_eur)}</span>
                 <span className="text-white/30">·</span>

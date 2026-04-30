@@ -401,17 +401,43 @@ async def list_auctions(
 @api.get("/auctions/featured")
 async def featured(request: Request):
     viewer = await get_optional_user(request)
-    # Fetch more than needed then filter in Python for computed "live" status.
-    # Exclude archived listings up-front so they never appear in featured rails.
-    raw = await db.auctions.find(
+    # Up to 10 items total:
+    #   1) all live+featured (may be fewer than 10)
+    #   2) top up with live+non-featured (newest first) until 10 or exhausted
+    target = 10
+    featured_raw = await db.auctions.find(
         {"featured": True, "is_archived": {"$ne": True}, "status": {"$ne": "archived"}},
         {"_id": 0},
     ).limit(30).to_list(30)
-    items = [_public_auction(a, viewer) for a in raw]
-    live = [a for a in items if a["status"] == "live" and not a.get("is_archived")]
-    live = live[:6]
-    await _enrich_dealer_status(live)
-    return live
+    featured_items = [_public_auction(a, viewer) for a in featured_raw]
+    featured_live = [a for a in featured_items if a["status"] == "live" and not a.get("is_archived")]
+
+    combined = featured_live[:target]
+    if len(combined) < target:
+        needed = target - len(combined)
+        have_ids = {a["id"] for a in combined}
+        # Pull extra live, non-featured auctions (sorted by ends_at ascending = soonest first)
+        extra_raw = await db.auctions.find(
+            {
+                "featured": {"$ne": True},
+                "is_archived": {"$ne": True},
+                "status": "live",
+            },
+            {"_id": 0},
+        ).sort("ends_at", 1).limit(needed * 3).to_list(needed * 3)
+        extra_items = [_public_auction(a, viewer) for a in extra_raw]
+        for a in extra_items:
+            if a["id"] in have_ids:
+                continue
+            if a["status"] != "live" or a.get("is_archived"):
+                continue
+            combined.append(a)
+            have_ids.add(a["id"])
+            if len(combined) >= target:
+                break
+
+    await _enrich_dealer_status(combined)
+    return combined
 
 @api.get("/auctions/sold")
 async def sold(
