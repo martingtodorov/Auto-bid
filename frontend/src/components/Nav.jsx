@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Menu, X, User, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -12,8 +12,23 @@ export default function Nav() {
   const { t, i18n } = useTranslation();
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
   const [q, setQ] = useState("");
   const navigate = useNavigate();
+
+  const closeMobile = useCallback(() => {
+    if (!open || closing) return;
+    setClosing(true);
+    window.setTimeout(() => {
+      setOpen(false);
+      setClosing(false);
+    }, 240);
+  }, [open, closing]);
+
+  const toggleMobile = useCallback(() => {
+    if (open) closeMobile();
+    else setOpen(true);
+  }, [open, closeMobile]);
   const brandTld = brandTldForLang(i18n.resolvedLanguage || i18n.language);
 
   const links = [
@@ -120,20 +135,26 @@ export default function Nav() {
             {user && <NotificationBell />}
             <button
               className="-m-2 p-2 flex items-center justify-center"
-              onClick={() => setOpen(!open)}
+              onClick={toggleMobile}
               data-testid="mobile-menu-toggle"
               aria-label="Menu"
             >
-              {open ? <X size={22} /> : <Menu size={22} />}
+              {open && !closing ? <X size={22} /> : <Menu size={22} />}
             </button>
           </div>
         </div>
       </div>
 
       {open && (
-        <div className="md:hidden rule-t">
+        <div
+          className={`md:hidden rule-t overflow-hidden ${
+            closing
+              ? "animate-[mobileMenuClose_240ms_cubic-bezier(0.4,0,1,1)_both]"
+              : "animate-[mobileMenuOpen_280ms_cubic-bezier(0.22,1,0.36,1)_both]"
+          }`}
+        >
           <div className="max-w-[1440px] mx-auto px-4 py-4 space-y-3">
-            <form onSubmit={(e) => { doSearch(e); setOpen(false); }} className="relative" data-testid="mobile-search-form">
+            <form onSubmit={(e) => { doSearch(e); closeMobile(); }} className="relative" data-testid="mobile-search-form">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[hsl(var(--accent))]" />
               <input
                 type="text"
@@ -154,7 +175,7 @@ export default function Nav() {
             </div>
 
             {links.map((l) => (
-              <Link key={l.to} to={l.to} onClick={() => setOpen(false)} className="block py-2 text-sm" data-testid={`mobile-nav-${l.to.slice(1)}`}>
+              <Link key={l.to} to={l.to} onClick={closeMobile} className="block py-2 text-sm" data-testid={`mobile-nav-${l.to.slice(1)}`}>
                 {l.label}
               </Link>
             ))}
@@ -162,27 +183,27 @@ export default function Nav() {
             {user && (
               <div className="rule-t pt-3 space-y-2" data-testid="mobile-account-links">
                 {(user.role === "admin" || user.role === "moderator") && (
-                  <Link to="/admin" onClick={() => setOpen(false)} className="block py-2 text-sm text-[hsl(var(--accent))] font-semibold" data-testid="mobile-nav-admin">
+                  <Link to="/admin" onClick={closeMobile} className="block py-2 text-sm text-[hsl(var(--accent))] font-semibold" data-testid="mobile-nav-admin">
                     {t("nav.admin")}
                   </Link>
                 )}
-                <Link to="/dashboard" onClick={() => setOpen(false)} className="block py-2 text-sm" data-testid="mobile-nav-dashboard">
+                <Link to="/dashboard" onClick={closeMobile} className="block py-2 text-sm" data-testid="mobile-nav-dashboard">
                   {user.name}
                 </Link>
-                <Link to="/my-listings" onClick={() => setOpen(false)} className="block py-2 text-sm" data-testid="mobile-nav-my-listings">{t("nav.my_listings")}</Link>
-                <Link to="/watchlist" onClick={() => setOpen(false)} className="block py-2 text-sm" data-testid="mobile-nav-watchlist">{t("nav.watchlist")}</Link>
-                <Link to="/inbox" onClick={() => setOpen(false)} className="block py-2 text-sm" data-testid="mobile-nav-inbox">{t("nav.notifications", t("inbox.title", "Известия"))}</Link>
-                <Link to="/settings" onClick={() => setOpen(false)} className="block py-2 text-sm" data-testid="mobile-nav-settings">{t("nav.settings")}</Link>
+                <Link to="/my-listings" onClick={closeMobile} className="block py-2 text-sm" data-testid="mobile-nav-my-listings">{t("nav.my_listings")}</Link>
+                <Link to="/watchlist" onClick={closeMobile} className="block py-2 text-sm" data-testid="mobile-nav-watchlist">{t("nav.watchlist")}</Link>
+                <Link to="/inbox" onClick={closeMobile} className="block py-2 text-sm" data-testid="mobile-nav-inbox">{t("nav.notifications", t("inbox.title", "Известия"))}</Link>
+                <Link to="/settings" onClick={closeMobile} className="block py-2 text-sm" data-testid="mobile-nav-settings">{t("nav.settings")}</Link>
               </div>
             )}
 
             <div className="rule-t pt-3 flex gap-3">
               {user ? (
-                <button onClick={() => { logout(); setOpen(false); navigate("/"); }} className="btn btn-secondary flex-1" data-testid="mobile-logout">{t("nav.logout")}</button>
+                <button onClick={() => { logout(); closeMobile(); navigate("/"); }} className="btn btn-secondary flex-1" data-testid="mobile-logout">{t("nav.logout")}</button>
               ) : (
                 <>
-                  <Link to="/login" onClick={() => setOpen(false)} className="btn btn-secondary flex-1" data-testid="mobile-login">{t("nav.login")}</Link>
-                  <Link to="/register" onClick={() => setOpen(false)} className="btn btn-primary flex-1" data-testid="mobile-register">{t("nav.register")}</Link>
+                  <Link to="/login" onClick={closeMobile} className="btn btn-secondary flex-1" data-testid="mobile-login">{t("nav.login")}</Link>
+                  <Link to="/register" onClick={closeMobile} className="btn btn-primary flex-1" data-testid="mobile-register">{t("nav.register")}</Link>
                 </>
               )}
             </div>

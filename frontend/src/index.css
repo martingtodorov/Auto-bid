@@ -471,13 +471,47 @@ input:focus, select:focus, textarea:focus {
     0%   { transform: translateX(100%); }
     100% { transform: translateX(0); }
 }
+@keyframes slideOutRight {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(100%); }
+}
 @keyframes fadeIn {
     0%   { opacity: 0; }
     100% { opacity: 1; }
 }
+@keyframes fadeOut {
+    0%   { opacity: 1; }
+    100% { opacity: 0; }
+}
+/* Mobile drawer (hamburger menu) — slides open/closed via max-height */
+@keyframes mobileMenuOpen {
+    0%   { max-height: 0; opacity: 0; }
+    100% { max-height: 720px; opacity: 1; }
+}
+@keyframes mobileMenuClose {
+    0%   { max-height: 720px; opacity: 1; }
+    100% { max-height: 0; opacity: 0; }
+}
+
+/* Dropdown panels (notifications, etc.) — subtle scale + fade */
+@keyframes dropdownIn {
+    0%   { opacity: 0; transform: translateY(-6px) scale(0.96); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes dropdownOut {
+    0%   { opacity: 1; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(-6px) scale(0.96); }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .animate-\[slideInRight_260ms_cubic-bezier\(0\.22\,1\,0\.36\,1\)_both\],
-    .animate-\[fadeIn_180ms_ease-out_both\] { animation: none !important; }
+    .animate-\[slideOutRight_240ms_cubic-bezier\(0\.4\,0\,1\,1\)_both\],
+    .animate-\[fadeIn_180ms_ease-out_both\],
+    .animate-\[fadeOut_220ms_ease-in_both\],
+    .animate-\[mobileMenuOpen_280ms_cubic-bezier\(0\.22\,1\,0\.36\,1\)_both\],
+    .animate-\[mobileMenuClose_240ms_cubic-bezier\(0\.4\,0\,1\,1\)_both\],
+    .animate-\[dropdownIn_180ms_cubic-bezier\(0\.22\,1\,0\.36\,1\)_both\],
+    .animate-\[dropdownOut_160ms_ease-in_both\] { animation: none !important; }
 }
 
 

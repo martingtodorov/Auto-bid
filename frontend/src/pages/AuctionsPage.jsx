@@ -28,6 +28,18 @@ export default function AuctionsPage() {
     q: "",
   });
   const [open, setOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
+
+  const closeFilters = () => {
+    setClosing((prev) => {
+      if (prev) return prev;
+      window.setTimeout(() => {
+        setOpen(false);
+        setClosing(false);
+      }, 240);
+      return true;
+    });
+  };
 
   useEffect(() => {
     api.get("/auctions/facets").then((r) => setFacets(r.data));
@@ -223,14 +235,24 @@ export default function AuctionsPage() {
       {open && (
         <div
           className="fixed inset-0 z-50 lg:hidden"
-          onClick={() => setOpen(false)}
+          onClick={closeFilters}
           data-testid="filters-drawer"
         >
-          {/* Backdrop fade-in */}
-          <div className="absolute inset-0 bg-black/40 animate-[fadeIn_180ms_ease-out_both]" />
-          {/* Panel slides in from right */}
+          {/* Backdrop fade */}
           <div
-            className="absolute inset-y-0 right-0 w-[88vw] max-w-sm bg-white overflow-auto shadow-2xl animate-[slideInRight_260ms_cubic-bezier(0.22,1,0.36,1)_both]"
+            className={`absolute inset-0 bg-black/40 ${
+              closing
+                ? "animate-[fadeOut_220ms_ease-in_both]"
+                : "animate-[fadeIn_180ms_ease-out_both]"
+            }`}
+          />
+          {/* Panel slides in/out from right */}
+          <div
+            className={`absolute inset-y-0 right-0 w-[88vw] max-w-sm bg-white overflow-auto shadow-2xl ${
+              closing
+                ? "animate-[slideOutRight_240ms_cubic-bezier(0.4,0,1,1)_both]"
+                : "animate-[slideInRight_260ms_cubic-bezier(0.22,1,0.36,1)_both]"
+            }`}
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
@@ -239,7 +261,7 @@ export default function AuctionsPage() {
             <div className="p-4 flex items-center justify-between rule-b sticky top-0 bg-white z-10">
               <span className="font-serif text-xl">{t("auctions_page.filters")}</span>
               <button
-                onClick={() => setOpen(false)}
+                onClick={closeFilters}
                 className="p-2 -mr-2 rounded-full hover:bg-[hsl(var(--surface))] transition-colors"
                 aria-label="Затвори"
                 data-testid="close-filters"

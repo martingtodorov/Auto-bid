@@ -620,3 +620,27 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 - `/app/frontend/src/components/BiddingCreditModal.jsx` — премахнато card input, Stripe redirect
 - `/app/frontend/src/i18n/locales/{bg,en,ro}.json` — нови ключове
 
+
+
+### UI Polish Animations & Copy Update (30 Apr 2026)
+
+**Анимации (Framer-like с pure CSS keyframes):**
+- 🎛️ **Мобилен филтър панел** (`/app/frontend/src/pages/AuctionsPage.jsx`):
+  - Slide-in (`slideInRight` 260ms cubic-bezier(0.22,1,0.36,1)) при отваряне
+  - Slide-out (`slideOutRight` 240ms cubic-bezier(0.4,0,1,1)) при затваряне
+  - Backdrop `fadeIn`/`fadeOut` синхронизирано
+  - `closing` state + 240ms setTimeout преди unmount
+- 📱 **Мобилно hamburger меню** (`/app/frontend/src/components/Nav.jsx`):
+  - `mobileMenuOpen` 280ms при отваряне (max-height + opacity)
+  - `mobileMenuClose` 240ms при затваряне
+  - Само на mobile (`md:hidden`)
+- 🔔 **Notification panel** (`/app/frontend/src/components/NotificationBell.jsx`):
+  - `dropdownIn` 180ms (opacity + translateY + scale) от `origin-top-right`
+  - `dropdownOut` 160ms
+  - Работи и на desktop и mobile
+- Всички keyframes в `/app/frontend/src/index.css`
+- `prefers-reduced-motion: reduce` спира всички
+
+**Copy update:**
+- `bg.brand_tagline` промяна: „Първата редакционна платформа за автомобилни търгове в България..." → „Редакционна платформа за автомобилни търгове. Подбрани екземпляри, прозрачни продажби."
+

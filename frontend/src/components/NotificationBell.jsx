@@ -13,10 +13,25 @@ export default function NotificationBell() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
   const [unread, setUnread] = useState(0);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const ref = useRef(null);
+
+  const closePanel = useCallback(() => {
+    if (!open || closing) return;
+    setClosing(true);
+    window.setTimeout(() => {
+      setOpen(false);
+      setClosing(false);
+    }, 160);
+  }, [open, closing]);
+
+  const togglePanel = useCallback(() => {
+    if (open) closePanel();
+    else setOpen(true);
+  }, [open, closePanel]);
 
   const refreshCount = useCallback(async () => {
     if (!user) return;
@@ -48,17 +63,17 @@ export default function NotificationBell() {
     if (!open) return;
     loadItems();
     const onClick = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target)) closePanel();
     };
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
-  }, [open, loadItems]);
+  }, [open, loadItems, closePanel]);
 
   const onItemClick = async (n) => {
     if (!n.read) {
       try { await api.post("/inbox/mark-read", { ids: [n.id] }); } catch (e) {}
     }
-    setOpen(false);
+    closePanel();
     if (n.link) navigate(n.link);
     else if (n.auction_id) navigate(`/auctions/${n.auction_id}`);
     refreshCount();
@@ -75,7 +90,7 @@ export default function NotificationBell() {
   return (
     <div className="relative" ref={ref}>
       <button
-        onClick={() => setOpen((o) => !o)}
+        onClick={togglePanel}
         className="relative w-9 h-9 rounded-full border border-[hsl(var(--line))] hover:bg-[hsl(var(--surface))] transition-colors flex items-center justify-center"
         aria-label="Notifications"
         data-testid="notification-bell"
@@ -93,7 +108,11 @@ export default function NotificationBell() {
 
       {open && (
         <div
-          className="absolute right-0 top-[calc(100%+8px)] w-[360px] max-w-[92vw] max-h-[480px] bg-[hsl(var(--bg))] border border-[hsl(var(--line))] rounded-lg shadow-2xl overflow-hidden flex flex-col z-50"
+          className={`absolute right-0 top-[calc(100%+8px)] w-[360px] max-w-[92vw] max-h-[480px] bg-[hsl(var(--bg))] border border-[hsl(var(--line))] rounded-lg shadow-2xl overflow-hidden flex flex-col z-50 origin-top-right ${
+            closing
+              ? "animate-[dropdownOut_160ms_ease-in_both]"
+              : "animate-[dropdownIn_180ms_cubic-bezier(0.22,1,0.36,1)_both]"
+          }`}
           data-testid="notification-panel"
         >
           <div className="flex items-center justify-between px-4 py-3 border-b border-[hsl(var(--line))]">
@@ -143,7 +162,7 @@ export default function NotificationBell() {
           <div className="border-t border-[hsl(var(--line))] px-4 py-2.5 text-center">
             <Link
               to="/inbox"
-              onClick={() => setOpen(false)}
+              onClick={closePanel}
               className="text-xs text-[hsl(var(--accent))] hover:underline"
               data-testid="inbox-view-all"
             >
