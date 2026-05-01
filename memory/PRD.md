@@ -869,3 +869,23 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 - /etc/hosts на двете машини: ab-front1 10.0.0.2, ab-back1 10.0.0.3, ab-db1 10.0.0.3, ab-deploy 10.0.0.2 — кодът ползва имена, не IP.
 - UFW: front1 публично 22/80/443; back1 само от 10.0.0.0/16 за 22/8001/27017/5432.
 
+
+
+---
+
+## Verified: Preauth Notification Bell + Bid Constraint Check (1 May 2026)
+
+**Preauth Notification UI** (последна задача от предишната сесия) — ✅ VERIFIED.
+- `GET /api/me/preauths` връща правилния shape: `[{auction_id, auction_title, max_amount_eur, used_eur, available_eur, auction_status}]`.
+- `NotificationBell.jsx` рендерира секция `data-testid="preauth-section"` най-горе в dropdown-а с:
+  - Заглавие: "ACTIVE PRE-AUTHORIZATIONS" (i18n key `inbox.preauth_title`)
+  - `available_eur / max_amount_eur` форматирани като EUR
+  - Прогрес бар (зелен) + процент налично
+- Тествано чрез синтетичен preauth + login на `sectest_user@test.bg` → screenshot потвърждава визуализацията.
+- Cleanup: synthetic preauth изтрит след теста.
+
+**`triggered_extension` NOT NULL constraint** — ✅ NOT A REAL APP BUG.
+- Schema: `bids.triggered_extension` е `BOOLEAN NOT NULL` без `server_default`.
+- Application path (`services/bidding.place_bid()`) винаги задава `triggered_extension=triggered_extension` при ORM INSERT — потвърдено с реален end-to-end тест (bid placed OK, `triggered_extension=False`).
+- Грешката от предишната сесия е причинена от ръчен raw SQL `INSERT` в bash, който е пропуснал колоната — не е production регресия.
+
