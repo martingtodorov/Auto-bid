@@ -728,3 +728,21 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 - ✅ Refetch /auth/me връща правилните prefs.
 - ✅ Playwright UI рендер: 5 push toggles + 5 email toggles, hint "Enable push first" видим, iOS install tip визуализиран на всеки.
 
+
+
+### Reset Timer + Unsold Tab (30 Apr 2026)
+
+**Backend:**
+- **`POST /api/admin/auctions/{id}/reset-timer`** — приема `hours` (0.5–720) или `days` (1–60). Работи само за `live`/`paused`. Изтрива `ending_soon_notified` flag за да се изпрати нов 1h reminder. Връща `{ok:true, ends_at:...}`.
+- **`GET /api/admin/unsold`** — връща финализирани обяви с статус ∈ {`ended`, `reserve_not_met`, `cancelled`, `withdrawn`} и `is_archived ≠ true`. Enrich-ва high bidder email за reserve_not_met cases.
+
+**Frontend:**
+- Нов tab **„Непродадени"** (между Sold и Архивирани).
+- Нов `AdminUnsoldTab.jsx`: status pill filters с counts, per-row actions (Поднови / Преглед / Редактирай / Бидове / Архив), mailto link към high bidder.
+- Нов **„Reset таймер"** бутон в All Listings tab за live/paused — prompt за часове или `d:N` за дни.
+
+**E2E тествано:**
+- ✅ `POST /reset-timer?hours=24` → ends_at обновен, BMW M240i показа „23H 58M" в публичните listings.
+- ✅ `GET /unsold` → 200, правилен list.
+- ✅ Двата endpoint защитени с `require_admin`.
+

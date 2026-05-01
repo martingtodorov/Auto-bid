@@ -16,6 +16,7 @@ import AdminNotificationsTab from "../components/AdminNotificationsTab";
 import AdminEmailTemplatesTab from "../components/AdminEmailTemplatesTab";
 import AdminSellerRequestsTab from "../components/AdminSellerRequestsTab";
 import AdminArchiveTab from "../components/AdminArchiveTab";
+import AdminUnsoldTab from "../components/AdminUnsoldTab";
 import AdminChatPanel from "../components/AdminChatPanel";
 import AdminHealthTab from "../components/AdminHealthTab";
 
@@ -188,6 +189,37 @@ export default function AdminPage() {
     finally { setBusy(null); }
   };
 
+  const resetTimer = async (id, title) => {
+    const choice = window.prompt(
+      `Reset на таймера за „${title || id}".\n\nВъведете часове (напр. 24 за +24 часа, 0.5 за +30 мин).\nИли въведете например „d:7" за 7 дни.`,
+      "24"
+    );
+    if (!choice) return;
+    let params;
+    if (choice.startsWith("d:")) {
+      const days = parseInt(choice.slice(2), 10);
+      if (!Number.isInteger(days) || days < 1 || days > 60) {
+        alert("Невалиден брой дни (1–60).");
+        return;
+      }
+      params = { days };
+    } else {
+      const hours = Number(choice);
+      if (!Number.isFinite(hours) || hours < 0.5 || hours > 720) {
+        alert("Невалиден брой часове (0.5–720).");
+        return;
+      }
+      params = { hours };
+    }
+    setErr(""); setBusy(id);
+    try {
+      const { data } = await api.post(`/admin/auctions/${id}/reset-timer`, null, { params });
+      alert(`Таймерът е reset-нат. Нов край: ${new Date(data.ends_at).toLocaleString("bg-BG")}`);
+      await loadAll();
+    } catch (e) { setErr(formatError(e)); }
+    finally { setBusy(null); }
+  };
+
   // ---- Phase 2 lifecycle actions ----
   const toggleFeatured = async (id) => {
     setBusy(id);
@@ -247,6 +279,7 @@ export default function AdminPage() {
     { k: "requests", label: t("admin.tabs.requests"), icon: Inbox },
     { k: "users", label: t("admin.tabs.users"), icon: Users },
     { k: "sold", label: `${t("admin.tabs.sold")} (${sold.length})`, icon: Archive },
+    { k: "unsold", label: "Непродадени", icon: XCircle },
     { k: "archive", label: t("admin.tabs.archive"), icon: Archive, adminOnly: true },
     { k: "makes", label: t("admin.tabs.makes"), icon: Tag, adminOnly: true },
     { k: "stripe", label: t("admin.tabs.stripe"), icon: CreditCard, adminOnly: true },
@@ -421,6 +454,11 @@ export default function AdminPage() {
                           <Check size={12} /> Одобри
                         </button>
                       )}
+                      {(a.status === "live" || a.status === "paused") && (
+                        <button onClick={() => resetTimer(a.id, a.title)} disabled={busy === a.id} className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1 !border-[hsl(var(--accent))] !text-[hsl(var(--accent))]" data-testid={`reset-timer-${a.id}`} title="Reset на таймера">
+                          <Clock size={12} /> Reset таймер
+                        </button>
+                      )}
                       {(a.status === "ended" || a.status === "reserve_not_met" || a.status === "withdrawn") && (
                         <button onClick={() => extendListing(a.id, a.title)} disabled={busy === a.id} className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1 !border-[hsl(var(--accent))] !text-[hsl(var(--accent))]" data-testid={`extend-${a.id}`} title="Поднови търга за нов период">
                           <RefreshCw size={12} /> Поднови
@@ -528,6 +566,7 @@ export default function AdminPage() {
         {tab === "templates" && <AdminEmailTemplatesTab />}
         {tab === "requests" && <AdminSellerRequestsTab />}
         {tab === "archive" && <AdminArchiveTab />}
+        {tab === "unsold" && <AdminUnsoldTab />}
 
         {tab === "sold" && (
           <div className="mt-10">

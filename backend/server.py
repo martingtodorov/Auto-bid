@@ -2845,6 +2845,83 @@ async def admin_extend_auction(
     return {"ok": True, "status": "live", "ends_at": new_ends.isoformat()}
 
 
+@api.post("/admin/auctions/{auction_id}/reset-timer")
+async def admin_reset_timer(
+    auction_id: str,
+    hours: float = Query(default=None, ge=0.5, le=720),
+    days: int = Query(default=None, ge=1, le=60),
+    _admin: dict = Depends(require_admin),
+):
+    """Reset the timer of an active (or paused) auction to now + (days|hours).
+
+    Use cases:
+      * Snipe disputes — extend a heated auction by a few hours
+      * Operational — give bidders more time after a brief downtime
+    Either `hours` or `days` must be provided. Anti-snipe `ending_soon`
+    notification flag is reset so users get a fresh 1h-before reminder.
+    """
+    if (hours is None) and (days is None):
+        raise HTTPException(status_code=400, detail="Подайте `hours` или `days`")
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Обявата не е намерена")
+    if a.get("status") not in ("live", "paused"):
+        raise HTTPException(
+            status_code=400,
+            detail="Reset на таймера е достъпен само за активни (live) или паузирани обяви",
+        )
+    now = datetime.now(timezone.utc)
+    delta = timedelta(hours=hours) if hours is not None else timedelta(days=int(days))
+    new_ends = now + delta
+    set_doc = {
+        "ends_at": new_ends.isoformat(),
+        "timer_reset_at": now.isoformat(),
+    }
+    # Reset the "ending soon" flag so watchers/bidders get a fresh 1h reminder.
+    await db.auctions.update_one(
+        {"id": auction_id},
+        {"$set": set_doc, "$unset": {"ending_soon_notified": "", "ending_soon_notified_at": ""}},
+    )
+    return {"ok": True, "ends_at": new_ends.isoformat()}
+
+
+@api.get("/admin/unsold")
+async def admin_unsold(
+    _admin: dict = Depends(require_admin),
+    limit: int = Query(default=200, ge=1, le=1000),
+):
+    """Return finalized auctions that did NOT result in a sale.
+
+    Statuses considered "unsold":
+      * `ended` — finished without bids or hit reserve threshold
+      * `reserve_not_met` — had bids but reserve wasn't reached
+      * `cancelled` — admin-cancelled
+      * `withdrawn` — seller withdrew
+
+    Excludes archived listings (so the tab stays focused on actionable items).
+    """
+    items = await db.auctions.find(
+        {
+            "status": {"$in": ["ended", "reserve_not_met", "cancelled", "withdrawn"]},
+            "is_archived": {"$ne": True},
+        },
+        {"_id": 0},
+    ).sort("finalized_at", -1).limit(limit).to_list(limit)
+    # Enrich with high bidder details for the few unsold-with-bids cases —
+    # admin may want to follow up directly with the top bidder.
+    out = []
+    for a in items:
+        a_copy = {**a}
+        hb_id = a.get("high_bidder_id")
+        if hb_id:
+            u = await db.users.find_one({"id": hb_id}, {"_id": 0, "email": 1, "name": 1})
+            if u:
+                a_copy["high_bidder_email"] = u.get("email")
+                a_copy["high_bidder_name"] = u.get("name") or a.get("high_bidder_name")
+        out.append(a_copy)
+    return out
+
+
 # moved → routers/admin.py (admin_ban_user, admin_unban_user, admin_delete_user)
 
 
