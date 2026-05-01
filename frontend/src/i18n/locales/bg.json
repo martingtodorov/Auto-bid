@@ -660,6 +660,8 @@
   "inbox": {
     "overline": "Известия",
     "title": "Известия",
+    "preauth_title": "Активни преавторизации",
+    "preauth_available": "Налично",
     "empty": "Нямате известия",
     "mark_all_read": "Маркирай всички",
     "view_all": "Всички известия →",

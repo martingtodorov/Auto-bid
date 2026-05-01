@@ -660,6 +660,8 @@
   "inbox": {
     "overline": "Inbox",
     "title": "Notifications",
+    "preauth_title": "Active pre-authorizations",
+    "preauth_available": "Available",
     "empty": "No notifications",
     "mark_all_read": "Mark all read",
     "view_all": "View all →",

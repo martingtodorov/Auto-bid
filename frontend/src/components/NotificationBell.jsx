@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Bell, Check, CheckCheck } from "lucide-react";
+import { Bell, Check, CheckCheck, Shield } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { api } from "../lib/apiClient";
+import { api, formatEUR } from "../lib/apiClient";
 import { resolveNotification } from "../lib/notifications";
 import { useAuth } from "../lib/auth";
 
@@ -16,6 +16,7 @@ export default function NotificationBell() {
   const [closing, setClosing] = useState(false);
   const [unread, setUnread] = useState(0);
   const [items, setItems] = useState([]);
+  const [preauths, setPreauths] = useState([]);
   const [loading, setLoading] = useState(false);
   const ref = useRef(null);
 
@@ -45,9 +46,14 @@ export default function NotificationBell() {
     if (!user) return;
     setLoading(true);
     try {
-      const { data } = await api.get("/inbox?limit=20");
-      setItems(Array.isArray(data?.items) ? data.items : []);
-      setUnread(Number(data?.unread || 0));
+      // Run inbox + preauths in parallel — both feed the panel content.
+      const [inboxResp, preauthsResp] = await Promise.all([
+        api.get("/inbox?limit=20"),
+        api.get("/me/preauths").catch(() => ({ data: [] })),
+      ]);
+      setItems(Array.isArray(inboxResp.data?.items) ? inboxResp.data.items : []);
+      setUnread(Number(inboxResp.data?.unread || 0));
+      setPreauths(Array.isArray(preauthsResp.data) ? preauthsResp.data : []);
     } catch (e) {}
     finally { setLoading(false); }
   }, [user]);
@@ -128,8 +134,56 @@ export default function NotificationBell() {
             )}
           </div>
           <div className="flex-1 overflow-y-auto">
+            {/* Active pre-authorizations always pinned at the very top.
+                User asked: "available preauth 12/20" semantics. */}
+            {preauths.length > 0 && (
+              <div
+                className="border-b border-[hsl(var(--line))] bg-emerald-50/60"
+                data-testid="preauth-section"
+              >
+                <div className="px-4 pt-3 pb-1 flex items-center gap-1.5 overline text-emerald-800">
+                  <Shield size={12} />
+                  <span>{t("inbox.preauth_title", "Активни преавторизации")}</span>
+                </div>
+                {preauths.map((p) => {
+                  const pct = p.max_amount_eur > 0
+                    ? Math.max(0, Math.min(100, Math.round((p.available_eur / p.max_amount_eur) * 100)))
+                    : 0;
+                  return (
+                    <Link
+                      key={p.auction_id}
+                      to={`/auctions/${p.auction_id}`}
+                      onClick={closePanel}
+                      className="block px-4 py-3 hover:bg-emerald-100/70 transition-colors"
+                      data-testid={`preauth-row-${p.auction_id}`}
+                    >
+                      <div className="flex items-baseline justify-between gap-2 mb-1">
+                        <span className="text-sm font-semibold text-emerald-900 truncate">
+                          {p.auction_title}
+                        </span>
+                        <span
+                          className="font-mono text-sm shrink-0 tabular-nums text-emerald-900"
+                          data-testid={`preauth-amount-${p.auction_id}`}
+                        >
+                          {formatEUR(p.available_eur)} / {formatEUR(p.max_amount_eur)}
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-emerald-200/70 overflow-hidden">
+                        <div
+                          className="h-full bg-emerald-600 transition-all"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <div className="text-[11px] text-emerald-800/80 mt-1">
+                        {t("inbox.preauth_available", "Налично")}: {pct}%
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
             {loading && <div className="p-6 text-center text-sm text-[hsl(var(--ink-muted))]">…</div>}
-            {!loading && items.length === 0 && (
+            {!loading && items.length === 0 && preauths.length === 0 && (
               <div className="p-8 text-center text-sm text-[hsl(var(--ink-muted))]" data-testid="inbox-empty">
                 {t("inbox.empty", "Нямате известия")}
               </div>

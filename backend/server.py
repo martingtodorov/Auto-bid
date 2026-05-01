@@ -1343,6 +1343,52 @@ async def import_from_mobile_bg(request: Request, payload: MobileBgImport):
 
 
 # ---- Bids ----
+@api.get("/me/preauths")
+async def my_preauths(user: dict = Depends(get_current_user)):
+    """Return all of the user's currently active pre-authorizations with
+    headroom info, used by the notification panel to surface live status:
+        [{auction_id, auction_title, max_amount_eur, used_eur, available_eur}]
+    Sorted by largest available amount first.
+    """
+    creds = await db.bidding_credits.find(
+        {"user_id": user["id"], "status": "authorized"},
+        {"_id": 0},
+    ).to_list(50)
+    if not creds:
+        return []
+    auction_ids = [c["auction_id"] for c in creds]
+    auctions = await db.auctions.find(
+        {"id": {"$in": auction_ids}},
+        {"_id": 0, "id": 1, "title": 1, "status": 1, "is_archived": 1},
+    ).to_list(len(auction_ids))
+    a_map = {a["id"]: a for a in auctions}
+    from services import bidding as _bidding
+    out = []
+    for c in creds:
+        a = a_map.get(c["auction_id"]) or {}
+        # Skip archived/finalized auctions — preauth is no longer relevant there.
+        if a.get("is_archived") or a.get("status") in ("archived", "cancelled"):
+            continue
+        max_amt = float(c.get("max_amount_eur") or 0)
+        if max_amt <= 0:
+            continue
+        try:
+            used = await _bidding.get_user_highest_bid_amount(c["auction_id"], user["id"])
+        except Exception:
+            used = 0.0
+        used = max(0.0, min(used, max_amt))
+        out.append({
+            "auction_id": c["auction_id"],
+            "auction_title": a.get("title") or c.get("auction_title") or "—",
+            "auction_status": a.get("status"),
+            "max_amount_eur": max_amt,
+            "used_eur": used,
+            "available_eur": max(0.0, max_amt - used),
+        })
+    out.sort(key=lambda x: x["available_eur"], reverse=True)
+    return out
+
+
 @api.get("/auctions/{auction_id}/bids")
 async def list_bids(auction_id: str, request: Request):
     # Hide bid history for archived listings — only admins/moderators can see.

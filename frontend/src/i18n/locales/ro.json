@@ -656,6 +656,8 @@
   "inbox": {
     "overline": "Notificări",
     "title": "Notificări",
+    "preauth_title": "Pre-autorizări active",
+    "preauth_available": "Disponibil",
     "empty": "Nu aveți notificări",
     "mark_all_read": "Marchează toate",
     "view_all": "Toate notificările →",

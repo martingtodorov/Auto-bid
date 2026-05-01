@@ -91,6 +91,23 @@ async def has_user_bid(auction_id: str, user_id: str) -> bool:
         return row is not None
 
 
+async def get_user_highest_bid_amount(auction_id: str, user_id: str) -> float:
+    """Return the highest bid amount this user has placed on the auction
+    (0.0 if they haven't bid yet). Used to compute remaining pre-auth headroom."""
+    async with pg_session() as s:
+        row = (await s.execute(
+            select(func.max(Bid.amount_eur)).where(
+                Bid.auction_id == auction_id, Bid.user_id == user_id,
+            )
+        )).first()
+        if not row or row[0] is None:
+            return 0.0
+        try:
+            return float(row[0])
+        except (TypeError, ValueError):
+            return 0.0
+
+
 async def collect_bidder_ids(auction_id: str, exclude_user_id: Optional[str] = None, limit: int = 500) -> list[str]:
     async with pg_session() as s:
         q = select(Bid.user_id).where(Bid.auction_id == auction_id).distinct().limit(limit)
