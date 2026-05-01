@@ -286,6 +286,31 @@ def _mask_vin(vin: str) -> str:
     return v[:-7] + ("*" * 7)
 
 
+# Threshold above which an active pre-authorization (bidding credit) on ANY
+# live auction unlocks full VIN visibility for the user across all listings.
+# Set high enough that casual users won't trigger it; low enough that any
+# serious cross-shopper qualifies.
+HIGH_VALUE_PREAUTH_EUR = 10000
+
+
+async def _has_high_value_preauth(user_id: Optional[str]) -> bool:
+    """True iff the user has at least one active bidding credit / pre-auth
+    above HIGH_VALUE_PREAUTH_EUR. Cheap single-document lookup with index
+    on (user_id, status, max_amount_eur).
+    """
+    if not user_id:
+        return False
+    doc = await db.bidding_credits.find_one(
+        {
+            "user_id": user_id,
+            "status": "authorized",
+            "max_amount_eur": {"$gt": HIGH_VALUE_PREAUTH_EUR},
+        },
+        {"_id": 0, "id": 1},
+    )
+    return doc is not None
+
+
 async def _enrich_dealer_status(items: list) -> list:
     """Bulk-fetches sellers and adds seller_is_verified_dealer to each auction dict."""
     if not items:
@@ -304,7 +329,7 @@ async def _enrich_dealer_status(items: list) -> list:
     return items
 
 
-def _public_auction(a: dict, viewer: Optional[dict] = None) -> dict:
+def _public_auction(a: dict, viewer: Optional[dict] = None, *, unmask_vin: bool = False) -> dict:
     a = {k: v for k, v in a.items() if k != "_id"}
     a["status"] = _auction_status(a)
     reserve = a.get("reserve_eur")
@@ -331,8 +356,15 @@ def _public_auction(a: dict, viewer: Optional[dict] = None) -> dict:
         a["reserve_met"] = None
         a.pop("reserve_eur", None)
     if a.get("vin"):
-        a["vin_masked"] = True
-        a["vin"] = _mask_vin(a["vin"])
+        # Reveal VIN to admins, the seller, and any caller-flagged privileged
+        # viewer (e.g. user with a high-value pre-authorization). Otherwise
+        # mask everything but the last 7 characters.
+        if is_owner_or_admin or unmask_vin:
+            a["vin"] = a["vin"].strip().upper()
+            a["vin_masked"] = False
+        else:
+            a["vin_masked"] = True
+            a["vin"] = _mask_vin(a["vin"])
     return a
 
 
@@ -389,7 +421,10 @@ async def list_auctions(
     fetch_cap = 200
     cursor = db.auctions.find(query, {"_id": 0}).limit(fetch_cap)
     items = await cursor.to_list(fetch_cap)
-    items = [_public_auction(a, viewer) for a in items]
+    # Compute high-value pre-auth status ONCE per request so VIN unmasking
+    # doesn't trigger an extra DB query per row.
+    unmask_for_viewer = await _has_high_value_preauth(viewer["id"]) if viewer else False
+    items = [_public_auction(a, viewer, unmask_vin=unmask_for_viewer) for a in items]
 
     # Hide non-public statuses from public listings (pending/rejected/withdrawn/removed/cancelled/paused)
     if not viewer_is_admin:
@@ -650,13 +685,17 @@ async def get_auction(auction_id: str, request: Request):
     else:
         seller = await db.users.find_one({"id": seller_id}, {"_id": 0, "is_verified_dealer": 1}) if seller_id else None
         public["seller_is_verified_dealer"] = bool(seller and seller.get("is_verified_dealer"))
-    # Reveal full VIN to: seller, admin (always), or bidders (only while auction is live).
-    # On ended/sold/cancelled auctions the VIN stays masked for bidders — privacy of the sold vehicle.
+    # Reveal full VIN to: seller, admin (always), bidders on live auctions,
+    # or any user with a high-value pre-authorization (≥ €10,000) anywhere
+    # on the platform. On ended/sold/cancelled auctions the VIN stays masked
+    # for plain bidders — but high-value pre-authorized users still see it.
     if a.get("vin") and viewer:
         is_privileged = viewer.get("role") == "admin" or viewer.get("id") == a.get("seller_id")
         if not is_privileged and _auction_status(a) == "live":
             from services import bidding as bidding_svc
             is_privileged = await bidding_svc.has_user_bid(auction_id, viewer["id"])
+        if not is_privileged:
+            is_privileged = await _has_high_value_preauth(viewer["id"])
         if is_privileged:
             public["vin"] = a["vin"].strip().upper()
             public["vin_masked"] = False

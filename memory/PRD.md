@@ -819,6 +819,26 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 
 **Network setup (по спецификацията на хостинга):**
 
+### High-Value Preauth Unlocks Full VIN Access (30 Apr 2026)
+
+**Backend (`/app/backend/server.py`):**
+- Нова константа `HIGH_VALUE_PREAUTH_EUR = 10000`
+- Нов helper `_has_high_value_preauth(user_id)` — single MongoDB lookup на `bidding_credits` с `status: "authorized"` + `max_amount_eur: $gt 10000`
+- `_public_auction()` приема нов kw-only параметър `unmask_vin: bool = False` — bypass-ва маскирането на VIN
+- В `list_auctions` се прави **една** проверка per-request → подава се на всички items (no N+1)
+- В `get_auction` (detail) добавена като 4-ти privilege check (admin → seller → bidder-on-this-auction → high-value-preauth)
+
+**E2E тествано:**
+- ✅ Преди инжектиране на preauth: `WBS2J71040******* masked: True`
+- ✅ След инжектиране на €25k authorized: `WBS2J71040VA53204 masked: False` (както в list, така и в detail)
+- ✅ След cleanup: автоматично се връща masked status
+
+**Бизнес логика:**
+- Praktically: всеки сериозен купувач който е поставил >€10k preauth на каквато и да е обява получава пълен VIN достъп до **всички** активни листинги — спестява обикалянето между обявите за инспектиране
+- Threshold е strict `>` 10000 (по описанието на потребителя „anything over 10000 eur")
+
+
+
 ### Multi-Domain Setup (autoandbid.com / .bg / .ro) — 30 Apr 2026
 
 **Frontend (вече беше готов в `/app/frontend/src/i18n/index.js`):**
