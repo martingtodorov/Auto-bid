@@ -36,6 +36,21 @@ Three brand domains, one React build, two machines:
 
 > 📘 **First time deploying?** Read `INITIAL_DEPLOY.md` end-to-end before running anything. The condensed reference below assumes you know what you're doing.
 
+> ⚙️ **What changed since first deploy** — see the
+> "Production Quirks & Permanent Fixes" section at the bottom of
+> `INITIAL_DEPLOY.md`. Highlights:
+> - Backend uses system `python3` (not deadsnakes 3.11)
+> - MongoDB apt repo pinned to `jammy` on Noble
+> - `POSTGRES_URL` requires `+asyncpg` driver prefix
+> - `emergentintegrations` removed → direct Gemini SDK for translations
+> - uvicorn binds `0.0.0.0:8001` (private LAN only)
+> - `yarn build` runs with `CI=false`
+> - SSH hardening only after deploy key install (lockout-proof)
+> - `backend.env` and `.env.production` are **never** clobbered on rerun
+> - `REACT_APP_BACKEND_URL` is **EMPTY** in production — same-origin /api/*
+
+
+
 ### Layout
 
 ```

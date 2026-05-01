@@ -889,3 +889,79 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 - Application path (`services/bidding.place_bid()`) винаги задава `triggered_extension=triggered_extension` при ORM INSERT — потвърдено с реален end-to-end тест (bid placed OK, `triggered_extension=False`).
 - Грешката от предишната сесия е причинена от ръчен raw SQL `INSERT` в bash, който е пропуснал колоната — не е production регресия.
 
+
+
+---
+
+## Hetzner Production Deploy Hardening (1 May 2026)
+
+Permanent integration of all manual fixes that were applied during the
+first live deploy onto Hetzner. **Repo now produces a clean deploy on a
+fresh Ubuntu 24.04 box** without any manual touch-ups.
+
+### Backend code
+- `backend/translate.py` migrated from Emergent Universal Key →
+  direct **Google Gemini SDK** (`google-generativeai==0.8.6`, already in
+  requirements). Uses `GEMINI_API_KEY` env var. Free tier:
+  https://aistudio.google.com/apikey. Falls back to `None` when key is
+  missing (caller keeps original Bulgarian text).
+- `emergentintegrations==0.1.0` removed from `requirements.txt`.
+- `seed_admin()` now sets `email_verified=true` + `verification_required=false`
+  on first install AND auto-heals existing admins on every boot — admins
+  can never be locked out of `/admin` by a stale verification flag.
+- `require_verified_email` early-returns for `role in ('admin','moderator')`.
+- `apiClient.js` falls back to relative `/api/*` when `REACT_APP_BACKEND_URL`
+  is empty → fixes cross-origin cookie loss when user navigates between
+  `.com` / `.bg` / `.ro` (was THE root cause of admin "Не сте автентикирани"
+  in production).
+
+### Ansible
+- `roles/common/tasks/main.yml`: SSH hardening reordered — deploy
+  `authorized_keys` is installed FIRST, with an `assert` that fails the
+  play when no key is configured. No more KVM-console rescue trips.
+- `roles/backend/tasks/main.yml`:
+  - Removed deadsnakes PPA (system `python3` works on Noble 24.04).
+  - MongoDB 7.0 apt repo pinned to `jammy` (no `noble` channel yet).
+  - venv created with `python3 -m venv` (was `python3.11`).
+  - Pre-creates `{{ app_dir }}/scripts` before writing rollback.sh.
+  - `backend.env` copy is **idempotent** — `force: no` + `stat` pre-check.
+- `roles/frontend/tasks/main.yml`:
+  - `yarn build` runs with `CI=false` (CRA lint warnings non-fatal).
+  - `.env.production` copy is **idempotent** — `force: no` + `stat` pre-check.
+- `group_vars/all.yml :: python_version` updated to `"3.12"` (informational).
+
+### Systemd
+- `autobids-backend.service`: uvicorn binds `0.0.0.0:8001` (was 127.0.0.1).
+  Required because nginx on ab-front1 reaches the backend over private
+  LAN (`ab-back1:8001` → 10.0.0.3:8001). UFW keeps 8001 closed to the
+  public internet — only `10.0.0.0/16` allowed.
+
+### Env templates
+- `backend.env.example`: `POSTGRES_URL=postgresql+asyncpg://...` (driver
+  prefix is mandatory for the async SQLAlchemy engine).
+- `frontend.env.production.example`: `REACT_APP_BACKEND_URL=` empty by
+  default with a long comment explaining why.
+
+### Documentation
+- `INITIAL_DEPLOY.md`: new "Production Quirks & Permanent Fixes" section
+  documenting every quirk that was hit + how the repo handles it now.
+- `README.md`: top-level changelog of post-deploy permanent fixes.
+
+### Verified
+- Backend healthy after restart (`curl /api/auctions/featured` → 200).
+- Admin login (`admin@autoandbid.com` / `Nero08787`) → token + role=admin
+  + email_verified=true → `/admin` panel renders without "Не сте
+  автентикирани" (screenshot taken).
+- `translate_text` import works without `emergentintegrations`; gracefully
+  returns `None` when `GEMINI_API_KEY` is missing.
+
+### Pending (next session — needs user input)
+- Set `GEMINI_API_KEY` on production for translations to actually run.
+- Set real `STRIPE_API_KEY` (`sk_live_...`) on production.
+- Generate VAPID keypair on production: `npx web-push generate-vapid-keys`.
+- Verify Resend SPF/DKIM for each TLD zone in Cloudflare DNS.
+
+### Future / Backlog
+- P3: Cloudflare Turnstile CAPTCHA на регистрация.
+- P4: WebAuthn / Passkeys.
+- Refactor: split `server.py` (4 200+ LOC) into `routers/`.

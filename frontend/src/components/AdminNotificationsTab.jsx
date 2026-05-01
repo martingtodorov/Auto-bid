@@ -108,7 +108,7 @@ export default function AdminNotificationsTab() {
           Сваля всички продадени обяви като CSV — включва цена, такса на купувача, продавач и купувач.
         </p>
         <a
-          href={`${process.env.REACT_APP_BACKEND_URL}/api/admin/transactions/export.csv`}
+          href={`${process.env.REACT_APP_BACKEND_URL || ""}/api/admin/transactions/export.csv`}
           download
           className="btn btn-primary !py-2 !px-5 inline-flex items-center gap-2 mt-4"
           data-testid="transactions-export-btn"

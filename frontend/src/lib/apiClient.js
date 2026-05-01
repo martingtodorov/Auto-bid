@@ -1,6 +1,10 @@
 import axios from "axios";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
+// Empty BACKEND_URL → use relative `/api/*`. Critical for production where
+// each brand domain (autoandbid.com / .bg / .ro) terminates its own TLS at
+// nginx and proxies /api to the same backend. Same-origin requests = cookies
+// (httpOnly auth + CSRF) work without cross-domain SameSite gymnastics.
 export const API_BASE = `${BACKEND_URL}/api`;
 
 // --- C3 cookie auth helpers ---

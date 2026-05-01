@@ -12,7 +12,11 @@ log_dir:            "/var/log/autobids"
 backup_dir:         "/var/backups/autobids"
 
 # ─── Versions ────────────────────────────────────────────────────────────────
-python_version:   "3.11"
+# We intentionally use the OS default Python now (`python3`) rather than
+# pinning a specific minor. Ubuntu 24.04 Noble ships Python 3.12 which is
+# fully compatible with our requirements. `python_version` is kept around
+# only for informational messages — the venv is created with `python3`.
+python_version:   "3.12"
 node_major:       "20"
 mongo_major:      "7.0"
 postgres_major:   "16"

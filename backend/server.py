@@ -140,7 +140,12 @@ async def require_verified_email(user: dict = Depends(get_current_user)) -> dict
     Existing accounts created before email-verification was rolled out keep
     their access (they have neither `email_verified=true` nor a `verification_required`
     flag — see `register_with_verification`). Only new accounts are gated.
+
+    Admins and moderators always bypass — the role grant implies trust and
+    the admin account itself cannot be gated out of its own control panel.
     """
+    if user.get("role") in ("admin", "moderator"):
+        return user
     if user.get("verification_required") and not user.get("email_verified"):
         raise HTTPException(
             status_code=403,
@@ -3451,9 +3456,23 @@ async def seed_admin():
             "name": "Администратор",
             "role": "admin",
             "created_at": datetime.now(timezone.utc).isoformat(),
+            # Admin is implicitly trusted — never gate it behind email
+            # verification (would otherwise lock first-deploy admins out
+            # of their own /admin panel before SMTP is wired up).
+            "email_verified": True,
+            "verification_required": False,
         })
-    elif not verify_password(password, existing["password_hash"]):
-        await db.users.update_one({"email": email}, {"$set": {"password_hash": hash_password(password)}})
+    else:
+        # Ensure existing admins are never gated out by a stale verification flag.
+        patch = {}
+        if not existing.get("email_verified"):
+            patch["email_verified"] = True
+        if existing.get("verification_required"):
+            patch["verification_required"] = False
+        if not verify_password(password, existing["password_hash"]):
+            patch["password_hash"] = hash_password(password)
+        if patch:
+            await db.users.update_one({"email": email}, {"$set": patch})
 
 @app.on_event("startup")
 async def on_startup():

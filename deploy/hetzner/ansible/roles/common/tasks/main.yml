@@ -1,6 +1,10 @@
 ---
 # Common base — applied to every host.
 # Idempotent. Re-runs are safe.
+#
+# IMPORTANT (SSH safety): the deploy user's public key is installed
+# BEFORE we disable root SSH. Otherwise a failed key push would lock us
+# out of the box and force a trip to the Hetzner KVM console.
 
 - name: Update apt cache
   ansible.builtin.apt:
@@ -42,6 +46,40 @@
     validate: "visudo -cf %s"
   become: yes
 
+# ── Provision deploy SSH key BEFORE disabling root login ─────────────────────
+# `deploy_ssh_public_keys` can be overridden in group_vars/host_vars.
+# Default: drop whichever public keys live next to the role in
+# `files/deploy_authorized_keys` (one per line).
+- name: Check for bundled deploy authorized_keys file
+  ansible.builtin.stat:
+    path: "{{ role_path }}/files/deploy_authorized_keys"
+  register: _deploy_keys_file
+
+- name: Load bundled deploy keys (if the file is present)
+  ansible.builtin.set_fact:
+    _deploy_key_lines: "{{ lookup('ansible.builtin.file', role_path ~ '/files/deploy_authorized_keys').splitlines() }}"
+  when: _deploy_keys_file.stat.exists
+
+- name: Install deploy user authorized_keys (from group_vars override or bundled file)
+  ansible.posix.authorized_key:
+    user: deploy
+    state: present
+    key: "{{ item }}"
+  loop: "{{ deploy_ssh_public_keys | default(_deploy_key_lines | default([])) }}"
+  when: (deploy_ssh_public_keys | default(_deploy_key_lines | default([]))) | length > 0
+  become: yes
+
+- name: Abort if no SSH key is configured for deploy user (lockout protection)
+  ansible.builtin.assert:
+    that:
+      - (deploy_ssh_public_keys | default(_deploy_key_lines | default([]))) | length > 0
+    fail_msg: >-
+      Refusing to harden SSH — no public key is configured for the `deploy`
+      user. Set `deploy_ssh_public_keys` in group_vars/host_vars OR drop one
+      or more keys into `roles/common/files/deploy_authorized_keys`. Disabling
+      root SSH without a working deploy key would lock us out.
+
+# Only NOW is it safe to harden sshd.
 - name: Disable root SSH login
   ansible.builtin.lineinfile:
     path: /etc/ssh/sshd_config
@@ -88,11 +126,13 @@
     - { dir: outgoing, policy: allow }
   become: yes
 
-- name: UFW — allow SSH from anywhere
+- name: UFW — allow SSH (optionally restricted to operator_ssh_sources)
   community.general.ufw:
     rule: allow
     port: '22'
     proto: tcp
+    src: "{{ item }}"
+  loop: "{{ operator_ssh_sources | default(['any']) }}"
   become: yes
 
 - name: UFW — allow all traffic from the private LAN

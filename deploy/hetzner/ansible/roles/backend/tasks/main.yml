@@ -1,7 +1,19 @@
 ---
 # Backend role — runs on ab-back1.
-# Sets up Python 3.11, MongoDB, PostgreSQL, code checkout, venv,
-# secrets file, systemd unit, backup cron.
+# Sets up Python 3 (default system), MongoDB, PostgreSQL, code checkout,
+# venv, secrets file, systemd unit, backup cron.
+#
+# History / notes for future deploys (all validated in production):
+#   • We use the system default `python3` on Ubuntu 24.04 Noble (≥3.12).
+#     The deadsnakes PPA for Python 3.11 was removed — it timed out during
+#     deploy and is unnecessary for this code base.
+#   • MongoDB 7.0 apt pool does not yet publish a `noble` channel; we pin
+#     to `jammy` which runs fine on Noble.
+#   • `POSTGRES_URL` must use the async driver prefix (`postgresql+asyncpg://…`).
+#   • The uvicorn unit listens on 0.0.0.0:8001 because nginx on ab-front1
+#     proxies via the private LAN (10.0.0.0/16) — see systemd unit.
+#   • backend.env is provisioned with `force: no` so a running production
+#     cannot be clobbered by a rerun of this role.
 
 - name: Open backend & DB ports on the private LAN only
   community.general.ufw:
@@ -12,20 +24,14 @@
   loop: ['8001', '27017', '5432']
   become: yes
 
-# ─── Python 3.11 ──────────────────────────────────────────────────────────────
-- name: Add deadsnakes PPA (Ubuntu — for Python 3.11)
-  ansible.builtin.apt_repository:
-    repo: ppa:deadsnakes/ppa
-    state: present
-  become: yes
-  when: ansible_distribution == "Ubuntu"
-
-- name: Install Python {{ python_version }} + build deps
+# ─── Python (system default — 3.12 on Noble, 3.11 on Jammy) ──────────────────
+- name: Install Python 3 + build deps
   ansible.builtin.apt:
     name:
-      - "python{{ python_version }}"
-      - "python{{ python_version }}-venv"
-      - "python{{ python_version }}-dev"
+      - python3
+      - python3-venv
+      - python3-dev
+      - python3-pip
       - build-essential
       - libpq-dev
       - libssl-dev
@@ -37,15 +43,19 @@
   become: yes
 
 # ─── MongoDB 7 ────────────────────────────────────────────────────────────────
+# Note: the Mongo 7.0 repo does not publish a `noble` channel yet. We pin to
+# `jammy` — it works out of the box on Ubuntu 24.04. Once Mongo publishes a
+# Noble channel, switch this back to `{{ ansible_distribution_release }}`.
 - name: Add MongoDB GPG key
-  ansible.builtin.apt_key:
+  ansible.builtin.get_url:
     url: "https://pgp.mongodb.com/server-{{ mongo_major }}.asc"
-    state: present
+    dest: /usr/share/keyrings/mongodb-server-{{ mongo_major }}.asc
+    mode: "0644"
   become: yes
 
-- name: Add MongoDB apt repo
+- name: Add MongoDB apt repo (pinned to jammy — see note above)
   ansible.builtin.apt_repository:
-    repo: "deb [arch=amd64,arm64] https://repo.mongodb.org/apt/ubuntu {{ ansible_distribution_release }}/mongodb-org/{{ mongo_major }} multiverse"
+    repo: "deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-{{ mongo_major }}.asc] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/{{ mongo_major }} multiverse"
     state: present
     filename: "mongodb-org-{{ mongo_major }}"
   become: yes
@@ -70,7 +80,7 @@
     name:
       - "postgresql-{{ postgres_major }}"
       - "postgresql-client-{{ postgres_major }}"
-      - python3-psycopg2
+      - python3-psycopg2   # for the Ansible postgresql_* modules, NOT runtime
     state: present
   become: yes
 
@@ -91,6 +101,7 @@
     mode: "0755"
   loop:
     - "{{ app_dir }}"
+    - "{{ app_dir }}/scripts"   # rollback helper lives here — must exist first
     - "{{ log_dir }}"
     - "{{ backup_dir }}"
   become: yes
@@ -123,8 +134,8 @@
     rsync_opts: ["--exclude=__pycache__", "--exclude=*.pyc", "--exclude=.venv"]
   delegate_to: "{{ inventory_hostname }}"
 
-- name: Create venv
-  ansible.builtin.command: "python{{ python_version }} -m venv {{ venv_dir }}"
+- name: Create venv (system python3 — 3.12 on Noble, 3.11 on Jammy)
+  ansible.builtin.command: "python3 -m venv {{ venv_dir }}"
   args:
     creates: "{{ venv_dir }}/bin/python"
   become_user: deploy
@@ -139,6 +150,9 @@
   become: yes
 
 - name: pip install requirements
+  # requirements.txt ships with `asyncpg` already (required by the async
+  # SQLAlchemy engine). `emergentintegrations` was removed — cannot install
+  # outside the Emergent platform.
   ansible.builtin.pip:
     requirements: "{{ backend_dir }}/requirements.txt"
     virtualenv: "{{ venv_dir }}"
@@ -146,15 +160,28 @@
   become: yes
 
 # ─── Secrets ──────────────────────────────────────────────────────────────────
-- name: Deploy backend.env (production secrets)
+- name: Check whether backend.env already exists (first-run detection)
+  ansible.builtin.stat:
+    path: "{{ secrets_dir }}/backend.env"
+  register: _backend_env_stat
+  become: yes
+
+- name: Deploy backend.env (ONLY if missing — production secrets are never clobbered)
   ansible.builtin.copy:
     src: backend.env
     dest: "{{ secrets_dir }}/backend.env"
     owner: root
     group: "{{ service_group }}"
     mode: "0640"
+    force: no   # idempotent — existing file wins
   become: yes
+  when: not _backend_env_stat.stat.exists
   notify: restart backend
+
+- name: Report that backend.env is already in place (no overwrite)
+  ansible.builtin.debug:
+    msg: "{{ secrets_dir }}/backend.env already exists — leaving production secrets untouched."
+  when: _backend_env_stat.stat.exists
 
 # ─── systemd ──────────────────────────────────────────────────────────────────
 - name: Install autobids-backend systemd unit

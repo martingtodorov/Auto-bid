@@ -23,9 +23,13 @@ Group=www-data
 WorkingDirectory=/opt/autobids/backend
 EnvironmentFile=/etc/autobids/backend.env
 
-# Use the dedicated venv created by the deploy role.
+# Listen on 0.0.0.0 so nginx on ab-front1 can reach this process over the
+# private LAN (10.0.0.3:8001). The Hetzner firewall keeps port 8001 closed
+# to the public internet — only 10.0.0.0/16 is allowed by UFW (see the
+# backend role). Do NOT change this to 127.0.0.1 unless the frontend is
+# co-located on the same host.
 ExecStart=/opt/autobids/venv/bin/uvicorn server:app \
-    --host 127.0.0.1 \
+    --host 0.0.0.0 \
     --port 8001 \
     --workers ${WORKERS} \
     --proxy-headers \

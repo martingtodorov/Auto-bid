@@ -255,3 +255,125 @@ Once everything works:
 | Wrong language on `.bg` | DNS not yet propagated, or `REACT_APP_DOMAIN_BG` mismatch | `dig autoandbid.bg` + verify `frontend.env.production` baked correct values |
 
 For everything else: tail `journalctl -fu autobids-backend` while reproducing the issue. The app logs structured errors with stack traces.
+
+
+---
+
+## Production Quirks & Permanent Fixes (applied May 2026)
+
+These are quirks we hit during the first production deploy onto Ubuntu 24.04
+(Noble) Hetzner boxes. **All of them are already baked into the Ansible
+playbooks / env templates / systemd units in this repo** — the section is
+here so future operators know *why* the code looks the way it does and what
+to expect on a fresh box.
+
+### Python / venv
+- The backend role uses the **system default `python3`** (3.12 on Noble,
+  3.11 on Jammy). The `deadsnakes` PPA step was removed — it timed out on
+  Hetzner and is unnecessary for this codebase.
+- `group_vars/all.yml :: python_version` is now `"3.12"` — informational only.
+
+### PostgreSQL async driver
+- `POSTGRES_URL` **must** begin with `postgresql+asyncpg://` (not plain
+  `postgresql://`). `backend.env.example` and all docs now reflect this.
+- `asyncpg==0.31.0` is pinned in `backend/requirements.txt`. `psycopg2-binary`
+  is **not** required at runtime — only the Ansible `postgresql_*` modules
+  need `python3-psycopg2`, which is installed via apt, not pip.
+
+### MongoDB 7 on Noble
+- MongoDB 7.0 has no `noble/mongodb-org/7.0` apt channel yet. The backend
+  role pins to `jammy` — works fine on Noble. Revisit this once MongoDB
+  publishes a Noble build.
+
+### Emergent-only dependency removed
+- `emergentintegrations==0.1.0` has been deleted from `requirements.txt` —
+  it only installs from Emergent's private index.
+- `backend/translate.py` now uses the **direct Google Gemini SDK**
+  (`google-generativeai`, already in requirements). Set `GEMINI_API_KEY`
+  in `/etc/autobids/backend.env`. Free tier: https://aistudio.google.com/apikey.
+  If the key is empty, translations silently return `None` and the frontend
+  falls back to the original Bulgarian text.
+
+### uvicorn listens on 0.0.0.0
+- The systemd unit binds uvicorn to `0.0.0.0:8001` (not 127.0.0.1). Nginx on
+  ab-front1 reaches the backend over the private LAN (`10.0.0.3:8001`). UFW
+  keeps 8001 open only to `10.0.0.0/16` — the port is NOT exposed to the
+  public internet.
+
+### Frontend build — CI=false
+- `yarn build` runs with `CI=false`. CRA treats every ESLint warning as a
+  fatal error under CI=true, which used to break prod over cosmetic lint
+  issues. Errors are still caught by the bundler; only warnings are demoted.
+
+### SSH safety
+- The `common` role now installs the deploy user's public key **before**
+  running `PermitRootLogin no`. An `assert` guards against running the
+  hardening step with no deploy key configured, so a misconfig can never
+  lock us out again.
+- Configure one of:
+  - `group_vars/all.yml :: deploy_ssh_public_keys: ["ssh-ed25519 ..."]`, or
+  - drop one key per line into `roles/common/files/deploy_authorized_keys`.
+- Optional: `operator_ssh_sources: ["1.2.3.4/32", ...]` restricts UFW port
+  22 to your operator IPs (default: `any`).
+
+### Secrets are never clobbered
+- `backend.env` and `frontend.env.production` are copied with `force: no`
+  and a pre-check `stat` task. **A rerun of the full playbook will never
+  overwrite a live production env file.** To rotate a secret, edit the
+  file directly on the server and restart the service.
+- Same contract for `/etc/ssl/autoandbid/{cert,key}.pem`. The frontend role
+  creates the directory but never writes certs — drop your Cloudflare
+  Origin cert in place manually (see Phase 4).
+
+### App directory layout
+- The backend role explicitly pre-creates `{{ app_dir }}/scripts` before
+  writing `rollback.sh` — this used to fail on a fresh box where the
+  directory had not been touched yet.
+
+### Admin & email verification
+- The seed admin (`ADMIN_EMAIL` / `ADMIN_PASSWORD`) is created on first boot
+  with `role=admin`, `email_verified=true`. Admin / moderator roles are
+  **always** exempt from the `require_verified_email` gate in the backend
+  — they cannot be locked out of their own control panel by a verification
+  bug.
+- If you ever need to manually unlock an admin:
+  ```js
+  // mongosh
+  use autobids
+  db.users.updateOne(
+    { email: "admin@autoandbid.com" },
+    { $set: { email_verified: true, verification_required: false },
+      $unset: { totp_enabled: "", totp_secret: "", totp_backup_codes: "",
+                totp_confirmed_at: "", failed_login_attempts: "",
+                locked_until: "" } }
+  )
+  ```
+
+### Cloudflare + cookies
+- The backend sets `COOKIE_SECURE=1`, `COOKIE_SAMESITE=lax` in production.
+- `CORS_ORIGINS` / `ALLOWED_ORIGINS` in `backend.env` must list all six
+  origin variants (apex + www × 3 TLDs) — already wired in the template.
+- nginx uses `CF-Connecting-IP` for real client IPs; the Cloudflare IP
+  range block in `nginx/autoandbid.conf` is authoritative.
+
+### Hetzner firewall
+- Public :80 / :443 should be restricted to Cloudflare IP ranges at the
+  **Hetzner Cloud Firewall** layer (not just nginx/UFW). This is managed
+  in the Hetzner Cloud panel — not in Ansible.
+- SSH :22 should be restricted to your operator IPs using the same
+  Hetzner firewall, or via `operator_ssh_sources` in group_vars.
+
+### Push notifications — zero Emergent dependency
+- Web Push uses `pywebpush` (VAPID keys) directly. Generate once:
+  ```bash
+  npx web-push generate-vapid-keys
+  ```
+  and store the pair in `backend.env` as `VAPID_PUBLIC_KEY` /
+  `VAPID_PRIVATE_KEY`. No third-party account required.
+
+### Transactional email — Resend
+- `RESEND_API_KEY` is enough on its own. `SENDER_EMAIL` must be a verified
+  sender on the Resend dashboard (usually `noreply@autoandbid.com` — add
+  the suggested SPF/DKIM records in Cloudflare DNS for each zone).
+- If the API key is empty, `send_email()` silently mocks and logs to
+  `notification_log`. Users won't receive mail but the app keeps running.
