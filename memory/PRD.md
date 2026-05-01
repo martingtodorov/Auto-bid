@@ -818,6 +818,32 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 - 4 playbooks (всички минават `--syntax-check`): `bootstrap.yml`, `site.yml`, `deploy_backend.yml` (с rollback snapshot + health check), `deploy_frontend.yml` (atomic swap).
 
 **Network setup (по спецификацията на хостинга):**
+
+### Multi-Domain Setup (autoandbid.com / .bg / .ro) — 30 Apr 2026
+
+**Frontend (вече беше готов в `/app/frontend/src/i18n/index.js`):**
+- `LANG_DOMAINS = { bg: 'autoandbid.bg', ro: 'autoandbid.ro', en: 'autoandbid.com' }`
+- `DomainDetector` чете `window.location.hostname` и автоматично избира език при всяко зареждане
+- Detection order: `localStorage > domain > navigator > fallback(bg)`
+- `LanguageSwitcher` пише в localStorage — manual override запазен per-origin
+
+**Deployment files обновени:**
+- `nginx/autoandbid.conf`:
+  - Един `server` блок за всички 3 домейна (`server_name autoandbid.com autoandbid.bg autoandbid.ro;`)
+  - Три отделни `www.* → apex` 301 redirects
+  - HTTP→HTTPS redirect на трите едновременно
+  - Origin Cert трябва да е multi-SAN или 3 отделни конкатенирани
+- `env-templates/backend.env.example`: `ALLOWED_ORIGINS` и `CORS_ORIGINS` обхващат всички 6 origins (apex + www × 3 TLD)
+- `env-templates/frontend.env.production.example`: добавени `REACT_APP_DOMAIN_BG/RO/EN`
+- `group_vars/all.yml`: `domains` list разширен до 6
+
+**Документация:**
+- `INITIAL_DEPLOY.md` — пълен step-by-step (Phases 0–9): pre-flight, env fill, inventory, bootstrap, Postgres password setup, full site.yml, Cloudflare DNS+TLS (per zone), smoke tests, Stripe webhook config, lock-down, troubleshooting table.
+- README обновено с трите домейна в архитектурната диаграма + ясно правило „кой домейн → кой език"
+
+**nginx синтаксис проверен** ✅ (`nginx -t` минава с stub upstream)
+
+
 - ab-front1 → public 178.105.37.1, private 10.0.0.2
 - ab-back1 / ab-db1 → private 10.0.0.3 (no public IP)
 - /etc/hosts на двете машини: ab-front1 10.0.0.2, ab-back1 10.0.0.3, ab-db1 10.0.0.3, ab-deploy 10.0.0.2 — кодът ползва имена, не IP.

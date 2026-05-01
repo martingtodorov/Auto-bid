@@ -31,8 +31,13 @@ hosts_entries:
 
 private_network_cidr: "10.0.0.0/16"
 
-# ─── Domain ──────────────────────────────────────────────────────────────────
-primary_domain:   "autoandbid.com"
+# ─── Domains ─────────────────────────────────────────────────────────────────
+# Three brand domains, single React build, language auto-detected by hostname.
+primary_domain:   "autoandbid.com"   # international / English
 domains:
   - "autoandbid.com"
   - "www.autoandbid.com"
+  - "autoandbid.bg"
+  - "www.autoandbid.bg"
+  - "autoandbid.ro"
+  - "www.autoandbid.ro"

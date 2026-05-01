@@ -1,21 +1,22 @@
-## Hetzner Deployment — autoandbid.com
+## Hetzner Deployment — autoandbid
 
-Two-machine architecture:
+Three brand domains, one React build, two machines:
 
 ```
-                Internet
-                   │
-                   ▼
-            ┌──────────────┐
-            │  Cloudflare  │  (DNS + DDoS shield)
-            └──────┬───────┘
-                   │  proxied → 178.105.37.1
-                   ▼
+                  Internet
+        ┌────────────┴────────────┐
+        ▼            ▼            ▼
+  autoandbid.com  .bg   .ro     ← Cloudflare zones (one per TLD)
+        └────────────┬────────────┘
+                proxied → 178.105.37.1
+                     │
+                     ▼
    ┌───────────────────────────────────┐
    │  ab-front1   public  178.105.37.1 │
    │              private 10.0.0.2     │
    │  • nginx (80/443)                 │
    │  • React build /var/www/autobids  │
+   │  • language auto-detected by host │
    │  • proxy /api → ab-back1:8001     │
    └───────────────┬───────────────────┘
                    │  private network
@@ -27,6 +28,13 @@ Two-machine architecture:
    │  • PostgreSQL localhost:5432      │
    └───────────────────────────────────┘
 ```
+
+**Language by domain (single bundle, runtime decision):**
+- `autoandbid.com` → English (international default)
+- `autoandbid.bg`  → Bulgarian
+- `autoandbid.ro`  → Romanian
+
+> 📘 **First time deploying?** Read `INITIAL_DEPLOY.md` end-to-end before running anything. The condensed reference below assumes you know what you're doing.
 
 ### Layout
 
@@ -138,15 +146,52 @@ Both are **idempotent** — they pull the latest commit from the configured git 
 
 ---
 
-## 5. Cloudflare configuration
+## 5. Cloudflare configuration — three brand domains
 
-1. **DNS**:
-   - `A   autoandbid.com   178.105.37.1`   (Proxied = 🟠)
-   - `A   www              178.105.37.1`   (Proxied = 🟠)
-2. **SSL/TLS mode**: Full (Strict) — generate an Origin Certificate in Cloudflare → SSL/TLS → Origin Server, copy to `/etc/ssl/autoandbid/cert.pem` + `key.pem` on `ab-front1`.
-3. **Always Use HTTPS**: ON
-4. **Automatic HTTPS Rewrites**: ON
-5. **HSTS**: enable after you're confident the certs are stable (max-age 31536000, include subdomains)
+**One Cloudflare zone per TLD** (you'll need to add `autoandbid.com`, `autoandbid.bg`, and `autoandbid.ro` separately as zones).
+
+For **each** of the three zones, configure the same way:
+
+### a. DNS records
+| Type | Name | Content | Proxy | Notes |
+|---|---|---|---|---|
+| A | `@`   | `178.105.37.1` | 🟠 Proxied | Apex domain |
+| A | `www` | `178.105.37.1` | 🟠 Proxied | Optional — nginx redirects to apex |
+
+So for `autoandbid.bg`:
+- `A   autoandbid.bg       → 178.105.37.1   Proxied`
+- `A   www.autoandbid.bg   → 178.105.37.1   Proxied`
+
+…and identical entries for `.com` and `.ro`.
+
+### b. SSL/TLS
+- **Mode**: Full (Strict) on all three zones.
+- **Origin Certificate**: generate ONE cert covering all three apex+wildcard SANs:
+  ```
+  autoandbid.com  *.autoandbid.com
+  autoandbid.bg   *.autoandbid.bg
+  autoandbid.ro   *.autoandbid.ro
+  ```
+  Save to `ab-front1` as:
+  - `/etc/ssl/autoandbid/cert.pem` (chain: cert + Cloudflare CA)
+  - `/etc/ssl/autoandbid/key.pem`  (mode 600)
+
+  > Cloudflare's Origin CA does not let you mix multiple bare TLDs in one cert — generate **one cert per zone** if needed (`cert.com.pem`, `cert.bg.pem`, `cert.ro.pem`) and split each into its own nginx server block. The supplied `nginx/autoandbid.conf` works with a single combined cert if your CA supports multi-domain (you can use Let's Encrypt + DNS-01 for that).
+
+### c. Per-zone settings (apply on all three)
+- **Always Use HTTPS**: ON
+- **Automatic HTTPS Rewrites**: ON
+- **Brotli**: ON
+- **HSTS**: enable after you're confident (max-age 31536000, include subdomains)
+- **Bot Fight Mode**: ON (free tier is fine to start)
+
+### d. How language auto-detection works
+- The frontend bundle reads `window.location.hostname` on every page load
+- `autoandbid.com` → English (`en`) — international default
+- `autoandbid.bg`  → Bulgarian (`bg`)
+- `autoandbid.ro`  → Romanian (`ro`)
+- Users can still switch language manually via the header; their choice persists in `localStorage` for that origin only.
+- The mapping is configurable via `REACT_APP_DOMAIN_BG/RO/EN` in `frontend.env.production` (already set in the template).
 
 ---
 
