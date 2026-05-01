@@ -288,11 +288,21 @@ to expect on a fresh box.
 ### Emergent-only dependency removed
 - `emergentintegrations==0.1.0` has been deleted from `requirements.txt` —
   it only installs from Emergent's private index.
-- `backend/translate.py` now uses the **direct Google Gemini SDK**
-  (`google-generativeai`, already in requirements). Set `GEMINI_API_KEY`
-  in `/etc/autobids/backend.env`. Free tier: https://aistudio.google.com/apikey.
-  If the key is empty, translations silently return `None` and the frontend
-  falls back to the original Bulgarian text.
+- `backend/translate.py` is **provider-hybrid** so the same code works in
+  both environments:
+  - **Production (Hetzner)** → set `GEMINI_API_KEY` in
+    `/etc/autobids/backend.env`. Uses the direct `google-generativeai`
+    SDK (already in requirements). Free tier:
+    https://aistudio.google.com/apikey.
+  - **Emergent preview** → falls back to `EMERGENT_LLM_KEY` +
+    `emergentintegrations` (only installable inside the Emergent pod).
+  - If neither is set, `translate_text()` returns `None` and the
+    frontend shows the Bulgarian original with a small
+    "AI translation temporarily unavailable" notice — app keeps working.
+- **Migration on Hetzner**: if you forgot to set `GEMINI_API_KEY`, users
+  will see the Bulgarian text on `.com` / `.ro`. Set the key, restart
+  `autobids-backend`, done — translations repopulate lazily on first view
+  and cache per auction document.
 
 ### uvicorn listens on 0.0.0.0
 - The systemd unit binds uvicorn to `0.0.0.0:8001` (not 127.0.0.1). Nginx on
