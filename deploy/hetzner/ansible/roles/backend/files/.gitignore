@@ -1,0 +1,4 @@
+# Role-local secrets — NEVER committed to git.
+*
+!.gitignore
+!README.md

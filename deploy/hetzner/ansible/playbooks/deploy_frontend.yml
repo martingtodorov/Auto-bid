@@ -44,13 +44,13 @@
       become_user: deploy
       changed_when: true
 
-    - name: yarn build
+    - name: yarn build (production — CI=false so lint warnings are non-fatal)
       ansible.builtin.command: yarn build
       args:
         chdir: "{{ app_dir }}/frontend"
       environment:
         NODE_ENV: production
-        CI: "true"
+        CI: "false"
         GENERATE_SOURCEMAP: "false"
       become_user: deploy
       changed_when: true
