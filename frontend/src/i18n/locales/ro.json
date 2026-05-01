@@ -1,4 +1,8 @@
 {
+  "twofa_prompt": {
+    "body": "Protejează-ți contul cu autentificare în doi factori.",
+    "cta": "Activează 2FA"
+  },
   "notif_prefs": {
     "section": "Ce să primești",
     "save_err": "Eroare la salvare",
@@ -95,6 +99,9 @@
   },
   "auth": {
     "welcome_back": "Bine ai revenit",
+    "pw_rule_len": "Cel puțin 8 caractere",
+    "pw_rule_upper": "Cel puțin o literă mare",
+    "pw_rule_digit": "Cel puțin o cifră sau simbol",
     "login_subtitle": "Autentifică-te pentru a licita, comenta și urmări licitațiile.",
     "account": "Cont",
     "signing_in": "Se autentifică…",

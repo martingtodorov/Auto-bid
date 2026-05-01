@@ -33,6 +33,7 @@ import ContactsPage from "./pages/ContactsPage";
 import TermsPage from "./pages/TermsPage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
 import VerifyEmailBanner from "./components/VerifyEmailBanner";
+import TwoFactorPromptBanner from "./components/TwoFactorPromptBanner";
 
 function App() {
   return (
@@ -42,6 +43,7 @@ function App() {
         <div className="min-h-screen flex flex-col bg-white">
           <MaintenanceBanner />
           <VerifyEmailBanner />
+          <TwoFactorPromptBanner />
           <LiveTicker />
           <Nav />
           <OnboardingCta />

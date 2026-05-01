@@ -1,4 +1,8 @@
 {
+  "twofa_prompt": {
+    "body": "Secure your account with two-factor authentication.",
+    "cta": "Enable 2FA"
+  },
   "notif_prefs": {
     "section": "What to receive",
     "save_err": "Could not save",
@@ -95,6 +99,9 @@
   },
   "auth": {
     "welcome_back": "Welcome back",
+    "pw_rule_len": "At least 8 characters",
+    "pw_rule_upper": "At least one uppercase letter",
+    "pw_rule_digit": "At least one digit or symbol",
     "login_subtitle": "Log in to bid, comment and follow auctions.",
     "account": "Account",
     "signing_in": "Signing in…",

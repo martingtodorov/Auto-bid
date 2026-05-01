@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth, formatError } from "../lib/auth";
+import PasswordStrengthHint from "../components/PasswordStrengthHint";
 
 export default function RegisterPage() {
   const { t } = useTranslation();
@@ -49,9 +50,19 @@ export default function RegisterPage() {
           </div>
           <div>
             <label className="overline text-[hsl(var(--ink-muted))] block mb-2">
-              {t("forms.password")} ({t("auth.min_6_chars") || "мин. 6 символа"})
+              {t("forms.password")}
             </label>
-            <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full border border-[hsl(var(--line))] h-12 px-3" data-testid="register-password" />
+            <input
+              type="password"
+              required
+              minLength={8}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full border border-[hsl(var(--line))] h-12 px-3"
+              data-testid="register-password"
+              autoComplete="new-password"
+            />
+            <PasswordStrengthHint password={password} />
           </div>
 
           {/* Terms & Conditions consent — records IP/UA/timestamp on the server */}

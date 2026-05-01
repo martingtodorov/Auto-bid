@@ -283,6 +283,23 @@ def register_routes():
     async def register(request: Request, response: Response, payload: UserRegister):
         if not payload.terms_accepted:
             raise HTTPException(status_code=400, detail="Моля, приемете Общите условия.")
+        # Password complexity (8+, uppercase, digit/symbol)
+        from services.password_security import validate_complexity, is_password_pwned
+        err = validate_complexity(payload.password)
+        if err:
+            raise HTTPException(status_code=400, detail=err)
+        # HaveIBeenPwned check (k-anonymity, no PII transmitted). Network failures
+        # never block registration — `is_password_pwned` returns False on error.
+        try:
+            if await is_password_pwned(payload.password):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Тази парола е била открита в публични пробиви на сигурността. Моля, изберете друга.",
+                )
+        except HTTPException:
+            raise
+        except Exception:
+            pass
         existing = await db.users.find_one({"email": payload.email.lower()})
         if existing:
             raise HTTPException(status_code=409, detail="Имейлът вече е регистриран")
@@ -357,13 +374,57 @@ def register_routes():
         email = payload.email.lower()
         user = await db.users.find_one({"email": email})
         # Константно-време проверка (M1): дори при липсващ потребител изпълняваме
-        # bcrypt спрямо dummy hash, за да не може атакуващ да отгатне валидни
+        # bcrypt срещу dummy hash, за да не може атакуващ да отгатне валидни
         # имейли по разликата във времето на отговора.
         if not user:
             _verify_password(payload.password, _DUMMY_BCRYPT_HASH)
             raise HTTPException(status_code=401, detail="Грешен имейл или парола")
+
+        # Per-account lockout: 10 неуспешни → 15 мин пауза.
+        # Защитава срещу distributed brute-force от ботнет (rate limit-ът е per-IP).
+        from datetime import datetime as _dt
+        locked_until_iso = user.get("login_locked_until")
+        if locked_until_iso:
+            try:
+                lu = _dt.fromisoformat(locked_until_iso.replace("Z", "+00:00"))
+                if lu.tzinfo is None:
+                    lu = lu.replace(tzinfo=timezone.utc)
+                if lu > datetime.now(timezone.utc):
+                    mins = max(1, int((lu - datetime.now(timezone.utc)).total_seconds() // 60))
+                    raise HTTPException(
+                        status_code=429,
+                        detail=f"Твърде много неуспешни опити. Опитайте отново след {mins} минути.",
+                    )
+            except HTTPException:
+                raise
+            except Exception:
+                pass
+
         if not _verify_password(payload.password, user["password_hash"]):
+            # Increment failed-attempts counter; lock out after 10 in a row.
+            now = datetime.now(timezone.utc)
+            attempts = int(user.get("failed_login_attempts", 0)) + 1
+            update: dict = {"$set": {"failed_login_attempts": attempts, "last_failed_login_at": now.isoformat()}}
+            if attempts >= 10:
+                update["$set"]["login_locked_until"] = (now + timedelta(minutes=15)).isoformat()
+                update["$set"]["failed_login_attempts"] = 0  # reset counter when locking
+            await db.users.update_one({"id": user["id"]}, update)
             raise HTTPException(status_code=401, detail="Грешен имейл или парола")
+
+        # Successful auth: reset counters, opportunistically rehash to Argon2id
+        # if the stored hash is still bcrypt or below the current parameter set.
+        clear_doc: dict = {"failed_login_attempts": 0}
+        unset_doc: dict = {"login_locked_until": "", "last_failed_login_at": ""}
+        try:
+            from services.password_security import needs_rehash as _needs_rehash
+            if _needs_rehash(user["password_hash"]):
+                clear_doc["password_hash"] = _hash_password(payload.password)
+        except Exception:
+            pass
+        await db.users.update_one(
+            {"id": user["id"]},
+            {"$set": clear_doc, "$unset": unset_doc},
+        )
         if user.get("banned"):
             raise HTTPException(status_code=403, detail="Акаунтът е блокиран. За въпроси: contact@autoandbid.com")
 
@@ -533,7 +594,29 @@ def register_routes():
         if not user:
             raise HTTPException(status_code=400, detail="Акаунтът не е намерен")
 
-        await db.users.update_one({"id": user["id"]}, {"$set": {"password_hash": _hash_password(payload.new_password)}})
+        # Apply same complexity + HIBP rules as on registration
+        from services.password_security import validate_complexity, is_password_pwned
+        cerr = validate_complexity(payload.new_password)
+        if cerr:
+            raise HTTPException(status_code=400, detail=cerr)
+        try:
+            if await is_password_pwned(payload.new_password):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Тази парола е била открита в публични пробиви на сигурността. Моля, изберете друга.",
+                )
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+
+        await db.users.update_one(
+            {"id": user["id"]},
+            {
+                "$set": {"password_hash": _hash_password(payload.new_password), "failed_login_attempts": 0},
+                "$unset": {"login_locked_until": ""},
+            },
+        )
         await db.password_resets.update_one({"id": rec["id"]}, {"$set": {"used": True, "used_at": datetime.now(timezone.utc).isoformat()}})
         return {"ok": True, "message": "Паролата е сменена. Можете да влезете с новата парола."}
 

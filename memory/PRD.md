@@ -746,3 +746,54 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 - ✅ `GET /unsold` → 200, правилен list.
 - ✅ Двата endpoint защитени с `require_admin`.
 
+### Password Security Hardening (30 Apr 2026)
+
+**Backend (`/app/backend/services/password_security.py`):**
+- **Argon2id** като primary hashing (BSD-3, безплатен, OWASP recommendation):
+  - `hash_password()` ползва `argon2-cffi` defaults (memory=46_336 KiB, time=1, parallelism=1).
+  - `verify_password()` поддържа и Argon2id (`$argon2…`) и legacy bcrypt (`$2b$…`).
+  - `needs_rehash()` връща `True` за всички bcrypt hashes → opportunistic migration на следващ login.
+- **Complexity validation** (`validate_complexity`):
+  - Минимум 8 символа (max 128).
+  - Поне 1 главна буква.
+  - Поне 1 цифра ИЛИ специален символ.
+- **HaveIBeenPwned check** (`is_password_pwned`):
+  - K-anonymity: само първите 5 chars от SHA-1 се изпращат до `api.pwnedpasswords.com/range/{prefix}`.
+  - Privacy-preserving (никаква PII не пътува).
+  - Безплатен, без API key.
+  - Network failure → returns False (не блокира registration).
+- **Per-account lockout** (`routers/auth.py`):
+  - 10 неуспешни attempts → 15 мин lock на акаунта.
+  - Counter `failed_login_attempts` се resetва при успешен login.
+  - При login: проверка на `login_locked_until`; ако lock е активен → HTTP 429 с „Опитайте след N минути".
+  - На успешен login: opportunistic rehash на bcrypt → Argon2id, изтриване на lock fields.
+- Password reset endpoint също прилага complexity + HIBP проверките.
+- `UserRegister.password` Field min_length вдигнат от 6 → 8.
+
+**Frontend:**
+- Нов компонент `PasswordStrengthHint.jsx` — live визуализация на 3 правила (✓/✗) под password field.
+- `RegisterPage.jsx` ползва hint-а; `minLength={6}` → `minLength={8}`.
+- Нов `TwoFactorPromptBanner.jsx` — показва се на email-verified users без 2FA. localStorage dismissal `abm:2fa-prompt-dismissed`. CTA → `/settings`.
+- Поставен в `App.js` веднага след `VerifyEmailBanner`.
+- Преводи `auth.pw_rule_*` и `twofa_prompt.*` за bg/en/ro.
+
+**E2E тествано:**
+- ✅ Парола < 8 символа → 422 (Pydantic validation)
+- ✅ Без uppercase → 400 „поне една главна буква"
+- ✅ Без digit/symbol → 400 „поне една цифра или специален символ"
+- ✅ HIBP pwned (`Password123`) → 400 „Тази парола е била открита в публични пробиви"
+- ✅ Силна парола → регистрация успешна, hash е Argon2id
+- ✅ 10 неуспешни → акаунтът locked
+- ✅ 11-ти опит (с правилна парола) → HTTP 429 „Опитайте след 13 минути"
+- ✅ Frontend hint показва ✓/✗ live при typing
+
+**Passkeys (WebAuthn) statused:**
+- НЕ е имплементиран в тази сесия. Препоръчвам отделна сесия (4–6 часа) за пълен flow: device registration, attestation, fallback при загубен device, multi-device sync.
+
+**Файлове:**
+- Нови: `services/password_security.py`, `components/PasswordStrengthHint.jsx`, `components/TwoFactorPromptBanner.jsx`
+- Променени: `server.py` (delegate hash/verify към password_security), `routers/auth.py` (register/login/reset с complexity+HIBP+lockout), `models.py` (min_length 6→8), `App.js`, `RegisterPage.jsx`, всички i18n.
+- Dependency: `argon2-cffi==25.1.0` в requirements.txt.
+
+
+

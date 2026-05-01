@@ -58,14 +58,22 @@ JWT_ALGORITHM = "HS256"
 JWT_SECRET = os.environ['JWT_SECRET']
 
 # ---- Helpers ----
+# Password helpers delegate to services.password_security so that the same
+# hashing strategy (Argon2id with bcrypt backwards compat) is used wherever
+# password material crosses module boundaries.
+from services.password_security import (
+    hash_password as _ps_hash,
+    verify_password as _ps_verify,
+    needs_rehash as _ps_needs_rehash,
+)
+
+
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    return _ps_hash(password)
+
 
 def verify_password(plain: str, hashed: str) -> bool:
-    try:
-        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
-    except Exception:
-        return False
+    return _ps_verify(plain, hashed)
 
 def create_token(user_id: str, email: str, days: int = 7, sid: str | None = None) -> str:
     payload = {
