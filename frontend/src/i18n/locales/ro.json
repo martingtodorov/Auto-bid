@@ -1,4 +1,20 @@
 {
+  "verify_email": {
+    "checking": "Se verifică…",
+    "title_ok": "Email confirmat",
+    "title_error": "Link invalid",
+    "success": "Adresa de email a fost confirmată. Poți licita, comenta și vinde.",
+    "invalid": "Link invalid sau expirat.",
+    "no_token": "Lipsește token-ul din link.",
+    "go_dashboard": "Mergi la cont"
+  },
+  "verify_banner": {
+    "body": "Confirmă-ți emailul ca să poți licita, comenta și vinde.",
+    "resend": "Retrimite",
+    "sending": "Se trimite…",
+    "sent": "Am trimis un link nou pe email.",
+    "err": "Trimiterea a eșuat. Reîncearcă mai târziu."
+  },
   "avatar": {
     "title": "Poză de profil",
     "subtitle": "Această poză apare lângă numele tău pe anunțuri și comentarii. Format pătrat recomandat, min. 256×256 px.",

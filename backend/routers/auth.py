@@ -197,6 +197,85 @@ def _sanitize(user: dict) -> dict:
     return {k: v for k, v in user.items() if k not in ("_id", "password_hash", "totp_secret", "totp_backup_codes")}
 
 
+# ─── Email verification (48h TTL, HMAC-hashed tokens) ────────────────────────
+EMAIL_VERIFY_TTL_HOURS = 48
+EMAIL_VERIFY_TTL_SEC = EMAIL_VERIFY_TTL_HOURS * 3600
+EMAIL_VERIFY_RESEND_COOLDOWN_SEC = 60   # min seconds between manual resends per email
+
+
+def _hmac_token(token: str) -> str:
+    """HMAC-SHA256 hash with the JWT secret. Only the hash is stored in DB."""
+    import hmac
+    secret = (os.environ.get("JWT_SECRET", "") or "dev-secret").encode("utf-8")
+    return hmac.new(secret, token.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+async def _ensure_email_verifications_index():
+    """Idempotent TTL index — created on first call."""
+    try:
+        await db.email_verifications.create_index(
+            "created_at", expireAfterSeconds=EMAIL_VERIFY_TTL_SEC
+        )
+    except Exception as e:
+        logger.warning("email_verifications TTL index creation failed: %s", e)
+
+
+async def _issue_verification_email(user: dict, ip_addr: str = "", ua: str = "") -> None:
+    """Generate a fresh token, persist its hash, and send the email via Resend.
+
+    Old un-consumed tokens for the same user are invalidated (replaced by the
+    new one) so reissuing doesn't pile up entries in the collection.
+    """
+    await _ensure_email_verifications_index()
+    token = secrets.token_urlsafe(32)  # 256 bits of entropy
+    token_hash = _hmac_token(token)
+    now = datetime.now(timezone.utc)
+    # Invalidate previous active tokens for this user
+    await db.email_verifications.delete_many(
+        {"user_id": user["id"], "consumed": {"$ne": True}}
+    )
+    await db.email_verifications.insert_one({
+        "id": str(_uuid.uuid4()),
+        "user_id": user["id"],
+        "email": user["email"],
+        "token_hash": token_hash,
+        "ip": ip_addr,
+        "user_agent": ua,
+        "created_at": now,                     # BSON datetime — TTL index expects this
+        "created_at_iso": now.isoformat(),     # human-readable copy
+        "consumed": False,
+    })
+    # Build the link → frontend page consumes the token via POST /api/auth/verify-email
+    from emails import APP_URL
+    link = f"{APP_URL.rstrip('/')}/verify-email?token={token}"
+    lang = (user.get("lang") or "bg").lower()
+    if lang.startswith("ro"):
+        subject = "Confirmă-ți adresa de email"
+        body = f"""
+          <p>Bună, {user.get('name','')},</p>
+          <p>Mulțumim că te-ai înregistrat pe autoandbid.com. Te rugăm să-ți confirmi adresa de email apăsând butonul de mai jos:</p>
+          <p><a href="{link}" style="background:#1B4D3E;color:#ffffff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600;display:inline-block;">Confirmă email</a></p>
+          <p style="color:#6b7280;font-size:13px;">Linkul este valabil 48 de ore. Dacă nu ai inițiat această cerere, poți ignora acest mesaj.</p>
+        """
+    elif lang.startswith("en"):
+        subject = "Verify your email address"
+        body = f"""
+          <p>Hi {user.get('name','')},</p>
+          <p>Thanks for signing up on autoandbid.com. Please confirm your email address by clicking the button below:</p>
+          <p><a href="{link}" style="background:#1B4D3E;color:#ffffff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600;display:inline-block;">Verify email</a></p>
+          <p style="color:#6b7280;font-size:13px;">This link is valid for 48 hours. If you did not request this, you can safely ignore this email.</p>
+        """
+    else:
+        subject = "Потвърдете имейл адреса си"
+        body = f"""
+          <p>Здравейте, {user.get('name','')},</p>
+          <p>Благодарим, че се регистрирахте в autoandbid.com. Моля, потвърдете имейл адреса си, като натиснете бутона по-долу:</p>
+          <p><a href="{link}" style="background:#1B4D3E;color:#ffffff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600;display:inline-block;">Потвърди имейл</a></p>
+          <p style="color:#6b7280;font-size:13px;">Линкът е валиден 48 часа. Ако не сте инициирали това действие, можете да игнорирате имейла.</p>
+        """
+    await send_email(user["email"], subject, _shell(subject, body))
+
+
 def register_routes():
 
     @router.post("/register")
@@ -229,6 +308,11 @@ def register_routes():
             "role": "user",
             "lang": initial_lang,
             "created_at": now_iso,
+            # Email verification (rolled out 30 Apr 2026). New accounts must
+            # verify before bidding/commenting/selling. Older accounts have
+            # neither flag set → they pass `require_verified_email`.
+            "email_verified": False,
+            "verification_required": True,
             # T&C audit trail (required for GDPR / ZZLD proof of consent)
             "terms_accepted": True,
             "terms_accepted_at": now_iso,
@@ -238,6 +322,12 @@ def register_routes():
             "terms_version": (payload.terms_version or "v1")[:20],
         }
         await db.users.insert_one(doc)
+        # Issue verification token + email (best-effort; even if email fails,
+        # the user can request a resend).
+        try:
+            await _issue_verification_email(doc, ip_addr, ua)
+        except Exception as e:
+            logger.error("verification email failed: %s", e)
         # Also log into audit_log as a separate consent record (immutable)
         try:
             await db.audit_log.insert_one({
@@ -453,6 +543,79 @@ def register_routes():
         u["totp_enabled"] = bool(user.get("totp_enabled"))
         u["lang"] = (user.get("lang") or "bg")
         return u
+
+    # ─── Email verification endpoints ────────────────────────────────────────
+    from pydantic import BaseModel as _BM
+
+    class _VerifyTokenPayload(_BM):
+        token: str
+
+    @router.post("/verify-email")
+    @_limiter.limit("20/hour")
+    async def verify_email(request: Request, payload: _VerifyTokenPayload):
+        """Consume a verification token and mark the user's email as verified.
+        Atomic via findOneAndDelete → token cannot be replayed."""
+        if not payload.token or len(payload.token) < 20:
+            raise HTTPException(status_code=400, detail="Невалиден или изтекъл линк за потвърждение")
+        token_hash = _hmac_token(payload.token)
+        rec = await db.email_verifications.find_one_and_delete(
+            {"token_hash": token_hash, "consumed": {"$ne": True}}
+        )
+        if not rec:
+            raise HTTPException(status_code=400, detail="Невалиден или изтекъл линк за потвърждение")
+        # TTL freshness check (defensive — TTL index may have ~1 min lag)
+        created = rec.get("created_at")
+        if isinstance(created, str):
+            try:
+                created = datetime.fromisoformat(created)
+            except Exception:
+                created = None
+        if isinstance(created, datetime) and created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        if created and (datetime.now(timezone.utc) - created).total_seconds() > EMAIL_VERIFY_TTL_SEC:
+            raise HTTPException(status_code=400, detail="Невалиден или изтекъл линк за потвърждение")
+        await db.users.update_one(
+            {"id": rec["user_id"]},
+            {"$set": {
+                "email_verified": True,
+                "verified_at": datetime.now(timezone.utc).isoformat(),
+            }},
+        )
+        return {"ok": True, "message": "Имейлът е потвърден успешно."}
+
+    @router.post("/resend-verification")
+    @_limiter.limit("3/hour")
+    async def resend_verification(request: Request, user: dict = Depends(_get_current_user)):
+        """Re-issue a verification email for the currently authenticated user."""
+        if user.get("email_verified"):
+            return {"ok": True, "already_verified": True}
+        # Per-user 60s cooldown beyond the @_limiter IP-level cap
+        latest = await db.email_verifications.find_one(
+            {"user_id": user["id"], "consumed": {"$ne": True}},
+            sort=[("created_at", -1)],
+        )
+        if latest:
+            created = latest.get("created_at")
+            if isinstance(created, str):
+                try:
+                    created = datetime.fromisoformat(created)
+                except Exception:
+                    created = None
+            if isinstance(created, datetime) and created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+            if created and (datetime.now(timezone.utc) - created).total_seconds() < EMAIL_VERIFY_RESEND_COOLDOWN_SEC:
+                raise HTTPException(
+                    status_code=429,
+                    detail="Моля, изчакайте малко преди да поискате нов линк.",
+                )
+        ip_addr = (request.client.host if request.client else "") or ""
+        ua = (request.headers.get("user-agent") or "")[:500]
+        try:
+            await _issue_verification_email(user, ip_addr, ua)
+        except Exception as e:
+            logger.error("resend verification failed: %s", e)
+            raise HTTPException(status_code=500, detail="Грешка при изпращане. Опитайте по-късно.")
+        return {"ok": True}
 
     @router.post("/logout")
     async def logout(request: Request, response: Response):

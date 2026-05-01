@@ -1,4 +1,20 @@
 {
+  "verify_email": {
+    "checking": "Verifying…",
+    "title_ok": "Email verified",
+    "title_error": "Invalid link",
+    "success": "Your email has been verified. You can now bid, comment and sell.",
+    "invalid": "Invalid or expired verification link.",
+    "no_token": "No token in the link.",
+    "go_dashboard": "Go to dashboard"
+  },
+  "verify_banner": {
+    "body": "Verify your email to bid, comment and sell.",
+    "resend": "Resend",
+    "sending": "Sending…",
+    "sent": "We sent a new link to your email.",
+    "err": "Could not send. Please try again later."
+  },
   "avatar": {
     "title": "Profile picture",
     "subtitle": "This picture is shown next to your name on listings and comments. Square format recommended, min. 256×256 px.",

@@ -126,6 +126,21 @@ async def get_optional_user(request: Request):
         return None
 
 
+async def require_verified_email(user: dict = Depends(get_current_user)) -> dict:
+    """Dependency: blocks the request unless the user's email is verified.
+
+    Existing accounts created before email-verification was rolled out keep
+    their access (they have neither `email_verified=true` nor a `verification_required`
+    flag — see `register_with_verification`). Only new accounts are gated.
+    """
+    if user.get("verification_required") and not user.get("email_verified"):
+        raise HTTPException(
+            status_code=403,
+            detail="Моля, потвърдете имейл адреса си, преди да извършите това действие.",
+        )
+    return user
+
+
 # ---- Models (imported from models.py) ----
 from models import (
     UserRegister, UserLogin, UserOut,
@@ -692,7 +707,7 @@ async def translate_auction_description(
 
 @api.post("/auctions")
 @limiter.limit("10/minute")
-async def create_auction(request: Request, payload: AuctionCreate, user: dict = Depends(get_current_user)):
+async def create_auction(request: Request, payload: AuctionCreate, user: dict = Depends(require_verified_email)):
     # --- Image validation, optimization & thumbnail generation ---
     # Per-image hard cap: 10 MB raw (post-decode). Total per listing: 120 MB.
     # Server-side Pillow re-encodes everything to JPEG @ ≤1920px / q=85 and
@@ -1309,7 +1324,7 @@ async def get_my_credit(auction_id: str, user: dict = Depends(get_current_user))
 
 
 @api.post("/auctions/{auction_id}/bidding-credit")
-async def create_or_increase_credit(auction_id: str, payload: BiddingCreditCreate, user: dict = Depends(get_current_user)):
+async def create_or_increase_credit(auction_id: str, payload: BiddingCreditCreate, user: dict = Depends(require_verified_email)):
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     if not a:
         raise HTTPException(status_code=404, detail="Търгът не е намерен")
@@ -1384,7 +1399,7 @@ async def release_my_credit(auction_id: str, user: dict = Depends(get_current_us
 
 @api.post("/auctions/{auction_id}/bids")
 @limiter.limit("30/minute")
-async def place_bid(request: Request, auction_id: str, payload: BidCreate, user: dict = Depends(get_current_user)):
+async def place_bid(request: Request, auction_id: str, payload: BidCreate, user: dict = Depends(require_verified_email)):
     """
     Direct bidding (BaT-style) — ACID-correct via PostgreSQL.
 
@@ -1599,7 +1614,7 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
 
 @api.post("/auctions/{auction_id}/buy-now")
 @limiter.limit("10/minute")
-async def buy_now(auction_id: str, request: Request, user: dict = Depends(get_current_user)):
+async def buy_now(auction_id: str, request: Request, user: dict = Depends(require_verified_email)):
     """Instantly purchase an auction at its 'Купи сега' price. Ends the auction
     and assigns the buyer as the winner. Buyer's premium is computed on the
     gross (incl. VAT) price and pre-authorised on the user's saved card.
@@ -1739,7 +1754,7 @@ async def list_comments(auction_id: str, request: Request):
     return [_public_comment(c, a) for c in items]
 
 @api.post("/auctions/{auction_id}/comments")
-async def add_comment(auction_id: str, payload: CommentCreate, user: dict = Depends(get_current_user)):
+async def add_comment(auction_id: str, payload: CommentCreate, user: dict = Depends(require_verified_email)):
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     if not a:
         raise HTTPException(status_code=404, detail="Търгът не е намерен")

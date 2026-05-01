@@ -31,6 +31,8 @@ import FAQPage from "./pages/FAQPage";
 // FeesPage merged into HowItWorksPage — redirect kept in routes.
 import ContactsPage from "./pages/ContactsPage";
 import TermsPage from "./pages/TermsPage";
+import VerifyEmailPage from "./pages/VerifyEmailPage";
+import VerifyEmailBanner from "./components/VerifyEmailBanner";
 
 function App() {
   return (
@@ -39,6 +41,7 @@ function App() {
         <ScrollToTop />
         <div className="min-h-screen flex flex-col bg-white">
           <MaintenanceBanner />
+          <VerifyEmailBanner />
           <LiveTicker />
           <Nav />
           <OnboardingCta />
@@ -64,6 +67,7 @@ function App() {
               <Route path="/fees" element={<Navigate to="/how-it-works#fees" replace />} />
               <Route path="/contacts" element={<ContactsPage />} />
               <Route path="/terms" element={<TermsPage />} />
+              <Route path="/verify-email" element={<VerifyEmailPage />} />
               <Route path="*" element={<LandingPage />} />
             </Routes>
           </div>

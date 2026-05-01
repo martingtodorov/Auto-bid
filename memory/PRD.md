@@ -668,3 +668,31 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 **Copy update:**
 - `bg.brand_tagline` промяна: „Първата редакционна платформа за автомобилни търгове в България..." → „Редакционна платформа за автомобилни търгове. Подбрани екземпляри, прозрачни продажби."
 
+
+### Email Verification at Registration (30 Apr 2026)
+
+**Backend (`/app/backend/routers/auth.py`):**
+- `POST /api/auth/register` сега маркира новите акаунти с `email_verified: False` + `verification_required: True` и автоматично издава verification email.
+- Нова `email_verifications` колекция с TTL index (`expireAfterSeconds=172800` = 48h на `created_at`).
+- HMAC-SHA256 хеш на token с `JWT_SECRET` като ключ — само хешът се пише в DB, raw token-ът е само в email-а. Token: `secrets.token_urlsafe(32)` → 256 bits ентропия.
+- `POST /api/auth/verify-email {token}` — атомарно консумира токен с `find_one_and_delete`. TTL freshness check (datetime aware/naive normalization).
+- `POST /api/auth/resend-verification` — auth-required, 60s cooldown per user + 3/hour rate limit per IP. Изтрива стари не-консумирани токени преди да издаде нов.
+- Нова dependency `require_verified_email()` (`server.py`): пропуска ако `not user.verification_required` (legacy акаунти преди 30 Apr 2026 минават) или ако `user.email_verified=True`. Иначе HTTP 403.
+- Приложена на: `POST /api/auctions` (sell), `POST /api/auctions/{id}/bidding-credit`, `POST /api/auctions/{id}/bids`, `POST /api/auctions/{id}/buy-now`, `POST /api/auctions/{id}/comments`.
+- Email body локализиран по `user.lang` (bg/en/ro), използва съществуваща Resend инфраструктура през `emails.send_email` + `emails._shell()` template.
+
+**Frontend:**
+- Нова страница `/verify-email?token=...` (`pages/VerifyEmailPage.jsx`) — POST към API, показва loading/success/error и refresh-ва auth state на success.
+- Нов компонент `VerifyEmailBanner.jsx` (вграден в App.js след `MaintenanceBanner`) — показва се само ако `user.verification_required && !user.email_verified`. Бутон "Изпрати отново" вика `/api/auth/resend-verification`.
+- Нови преводи: `verify_email.*` и `verify_banner.*` в bg/en/ro.
+
+**Existing accounts:** не са променени (по решение на потребителя — почти всички са негови). Те нямат `verification_required` flag → require_verified_email ги пропуска.
+
+**Тествани сценарии (30 Apr 2026, через curl + Playwright):**
+- ✅ Регистрация → `email_verified=False, verification_required=True`
+- ✅ POST `/auctions/.../bids` без verification → 403 „Моля, потвърдете имейл адреса си..."
+- ✅ Email mock log показва правилен subject + HTML
+- ✅ POST `/auth/verify-email` с валиден HMAC token → 200 + user.email_verified=True
+- ✅ Frontend `/verify-email` без token → показва "Invalid link" / "No token in the link"
+
+
