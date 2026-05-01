@@ -1,0 +1,53 @@
+###############################################################################
+# autobids-backend.service — FastAPI + uvicorn under systemd on ab-back1
+#
+# Install:
+#   sudo cp autobids-backend.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now autobids-backend
+#
+# View logs:    journalctl -fu autobids-backend
+# Reload code:  sudo systemctl restart autobids-backend
+###############################################################################
+[Unit]
+Description=Auto&Bid backend (FastAPI / uvicorn)
+After=network-online.target mongod.service postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+
+# Code lives at /opt/autobids/backend (deployed by ansible).
+WorkingDirectory=/opt/autobids/backend
+EnvironmentFile=/etc/autobids/backend.env
+
+# Use the dedicated venv created by the deploy role.
+ExecStart=/opt/autobids/venv/bin/uvicorn server:app \
+    --host 127.0.0.1 \
+    --port 8001 \
+    --workers ${WORKERS} \
+    --proxy-headers \
+    --forwarded-allow-ips=10.0.0.0/16,127.0.0.1 \
+    --log-level ${LOG_LEVEL} \
+    --no-access-log
+
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=20s
+
+# Security hardening (defense in depth)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/autobids /var/lib/autobids /var/backups/autobids /opt/autobids
+
+# Resource limits
+LimitNOFILE=65536
+MemoryHigh=2G
+MemoryMax=3G
+
+[Install]
+WantedBy=multi-user.target

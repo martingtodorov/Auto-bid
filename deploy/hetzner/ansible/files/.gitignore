@@ -1,0 +1,8 @@
+# Ansible files dir — production secrets (never commit filled-in copies).
+# Populate by running:
+#   cp ../../env-templates/backend.env.example          backend.env
+#   cp ../../env-templates/frontend.env.production.example frontend.env.production
+#   chmod 600 backend.env frontend.env.production
+*
+!.gitignore
+!README.md

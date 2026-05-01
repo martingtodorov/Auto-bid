@@ -1,0 +1,16 @@
+---
+# Full setup — run once on a fresh pair of machines, then use the
+# deploy_*.yml playbooks for code-only redeploys.
+- name: Bootstrap & deploy backend (ab-back1)
+  hosts: backend
+  become: yes
+  roles:
+    - common
+    - backend
+
+- name: Bootstrap & deploy frontend (ab-front1)
+  hosts: frontend
+  become: yes
+  roles:
+    - common
+    - frontend

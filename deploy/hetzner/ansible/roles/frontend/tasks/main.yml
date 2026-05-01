@@ -1,0 +1,170 @@
+---
+# Frontend role — runs on ab-front1.
+# Builds React via Node 20, deploys static bundle to /var/www, configures nginx.
+
+- name: Open HTTP/HTTPS publicly
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop: ['80', '443']
+  become: yes
+
+# ─── Node 20 ──────────────────────────────────────────────────────────────────
+- name: Install NodeSource keyring
+  ansible.builtin.shell: |
+    set -e
+    curl -fsSL https://deb.nodesource.com/setup_{{ node_major }}.x | bash -
+  args:
+    creates: /etc/apt/sources.list.d/nodesource.list
+  become: yes
+
+- name: Install Node.js
+  ansible.builtin.apt:
+    name: nodejs
+    state: present
+    update_cache: yes
+  become: yes
+
+- name: Install yarn globally (matches dev workflow)
+  ansible.builtin.npm:
+    name: yarn
+    global: yes
+    state: present
+  become: yes
+
+# ─── Code ─────────────────────────────────────────────────────────────────────
+- name: Ensure app dir exists
+  ansible.builtin.file:
+    path: "{{ app_dir }}"
+    state: directory
+    owner: deploy
+    group: deploy
+    mode: "0755"
+  become: yes
+
+- name: Clone or update repo
+  ansible.builtin.git:
+    repo: "{{ repo_url }}"
+    dest: "{{ app_dir }}/repo"
+    version: "{{ repo_branch }}"
+    force: yes
+    update: yes
+  become_user: deploy
+  become: yes
+
+- name: Sync frontend/ into runtime location
+  ansible.posix.synchronize:
+    src: "{{ app_dir }}/repo/frontend/"
+    dest: "{{ app_dir }}/frontend/"
+    delete: yes
+    rsync_opts: ["--exclude=node_modules", "--exclude=build"]
+  delegate_to: "{{ inventory_hostname }}"
+
+- name: Drop production env
+  ansible.builtin.copy:
+    src: frontend.env.production
+    dest: "{{ app_dir }}/frontend/.env.production"
+    owner: deploy
+    group: deploy
+    mode: "0640"
+  become: yes
+
+- name: yarn install
+  ansible.builtin.command: yarn install --frozen-lockfile
+  args:
+    chdir: "{{ app_dir }}/frontend"
+  become_user: deploy
+  become: yes
+  changed_when: true
+
+- name: yarn build (production)
+  ansible.builtin.command: yarn build
+  args:
+    chdir: "{{ app_dir }}/frontend"
+  environment:
+    NODE_ENV: production
+    CI: "true"
+    GENERATE_SOURCEMAP: "false"
+  become_user: deploy
+  become: yes
+  changed_when: true
+
+- name: Ensure web root exists
+  ansible.builtin.file:
+    path: "{{ web_root }}"
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: "0755"
+  become: yes
+
+- name: Atomically swap build into web root
+  ansible.posix.synchronize:
+    src: "{{ app_dir }}/frontend/build/"
+    dest: "{{ web_root }}/"
+    delete: yes
+    owner: no
+    group: no
+  delegate_to: "{{ inventory_hostname }}"
+
+- name: Fix ownership on web root
+  ansible.builtin.file:
+    path: "{{ web_root }}"
+    owner: www-data
+    group: www-data
+    recurse: yes
+  become: yes
+
+# ─── nginx ────────────────────────────────────────────────────────────────────
+- name: Install nginx
+  ansible.builtin.apt:
+    name: nginx
+    state: present
+  become: yes
+
+- name: Ensure SSL cert directory exists
+  ansible.builtin.file:
+    path: /etc/ssl/autoandbid
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  become: yes
+
+- name: Deploy site config
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../nginx/autoandbid.conf"
+    dest: /etc/nginx/sites-available/autoandbid
+    owner: root
+    group: root
+    mode: "0644"
+  become: yes
+  notify: reload nginx
+
+- name: Enable site
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/autoandbid
+    dest: /etc/nginx/sites-enabled/autoandbid
+    state: link
+  become: yes
+  notify: reload nginx
+
+- name: Disable default site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  become: yes
+  notify: reload nginx
+
+- name: Validate nginx config
+  ansible.builtin.command: nginx -t
+  changed_when: false
+  become: yes
+
+- name: Ensure nginx running
+  ansible.builtin.service:
+    name: nginx
+    state: started
+    enabled: yes
+  become: yes

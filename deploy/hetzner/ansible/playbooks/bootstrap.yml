@@ -1,0 +1,8 @@
+---
+# Bootstrap-only — provision OS hardening, deploy user, base packages.
+# Useful when running for the first time on machines that only have
+# root SSH access (use `-u root --ask-pass`).
+- hosts: all
+  become: yes
+  roles:
+    - common

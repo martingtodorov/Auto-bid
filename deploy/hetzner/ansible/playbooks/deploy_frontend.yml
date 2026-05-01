@@ -1,0 +1,68 @@
+---
+# Code-only frontend redeploy: pull, build, swap into /var/www, reload nginx.
+- hosts: frontend
+  become: yes
+  vars_prompt:
+    - name: ref
+      prompt: "Git ref to deploy (e.g. main, v1.2.3) — leave empty for default"
+      default: ""
+      private: no
+  pre_tasks:
+    - name: Resolve deploy ref
+      ansible.builtin.set_fact:
+        deploy_ref: "{{ ref if ref else repo_branch }}"
+  tasks:
+    - name: Update repo
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ app_dir }}/repo"
+        version: "{{ deploy_ref }}"
+        force: yes
+        update: yes
+      become_user: deploy
+
+    - name: Sync code
+      ansible.posix.synchronize:
+        src: "{{ app_dir }}/repo/frontend/"
+        dest: "{{ app_dir }}/frontend/"
+        delete: yes
+        rsync_opts: ["--exclude=node_modules", "--exclude=build"]
+      delegate_to: "{{ inventory_hostname }}"
+
+    - name: Refresh production env
+      ansible.builtin.copy:
+        src: frontend.env.production
+        dest: "{{ app_dir }}/frontend/.env.production"
+        owner: deploy
+        group: deploy
+        mode: "0640"
+
+    - name: yarn install
+      ansible.builtin.command: yarn install --frozen-lockfile
+      args:
+        chdir: "{{ app_dir }}/frontend"
+      become_user: deploy
+      changed_when: true
+
+    - name: yarn build
+      ansible.builtin.command: yarn build
+      args:
+        chdir: "{{ app_dir }}/frontend"
+      environment:
+        NODE_ENV: production
+        CI: "true"
+        GENERATE_SOURCEMAP: "false"
+      become_user: deploy
+      changed_when: true
+
+    - name: Atomically swap build into web root
+      ansible.posix.synchronize:
+        src: "{{ app_dir }}/frontend/build/"
+        dest: "{{ web_root }}/"
+        delete: yes
+      delegate_to: "{{ inventory_hostname }}"
+
+    - name: Reload nginx
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded

@@ -1,0 +1,38 @@
+---
+# ─── Repo & paths ────────────────────────────────────────────────────────────
+repo_url:           "git@github.com:YOUR_ORG/autobids.git"   # CHANGE_ME
+repo_branch:        "main"
+app_dir:            "/opt/autobids"
+backend_dir:        "{{ app_dir }}/backend"
+frontend_build_dir: "{{ app_dir }}/frontend/build"
+web_root:           "/var/www/autobids/build"
+venv_dir:           "{{ app_dir }}/venv"
+secrets_dir:        "/etc/autobids"
+log_dir:            "/var/log/autobids"
+backup_dir:         "/var/backups/autobids"
+
+# ─── Versions ────────────────────────────────────────────────────────────────
+python_version:   "3.11"
+node_major:       "20"
+mongo_major:      "7.0"
+postgres_major:   "16"
+
+# ─── Services ────────────────────────────────────────────────────────────────
+service_user:     "www-data"
+service_group:    "www-data"
+backend_port:     8001
+
+# ─── Network — used in /etc/hosts and ufw rules ──────────────────────────────
+hosts_entries:
+  - { name: "ab-front1", ip: "10.0.0.2" }
+  - { name: "ab-back1",  ip: "10.0.0.3" }
+  - { name: "ab-db1",    ip: "10.0.0.3" }
+  - { name: "ab-deploy", ip: "10.0.0.2" }
+
+private_network_cidr: "10.0.0.0/16"
+
+# ─── Domain ──────────────────────────────────────────────────────────────────
+primary_domain:   "autoandbid.com"
+domains:
+  - "autoandbid.com"
+  - "www.autoandbid.com"

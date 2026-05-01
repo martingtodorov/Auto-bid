@@ -1,0 +1,236 @@
+---
+# Backend role — runs on ab-back1.
+# Sets up Python 3.11, MongoDB, PostgreSQL, code checkout, venv,
+# secrets file, systemd unit, backup cron.
+
+- name: Open backend & DB ports on the private LAN only
+  community.general.ufw:
+    rule: allow
+    src: "{{ private_network_cidr }}"
+    port: "{{ item }}"
+    proto: tcp
+  loop: ['8001', '27017', '5432']
+  become: yes
+
+# ─── Python 3.11 ──────────────────────────────────────────────────────────────
+- name: Add deadsnakes PPA (Ubuntu — for Python 3.11)
+  ansible.builtin.apt_repository:
+    repo: ppa:deadsnakes/ppa
+    state: present
+  become: yes
+  when: ansible_distribution == "Ubuntu"
+
+- name: Install Python {{ python_version }} + build deps
+  ansible.builtin.apt:
+    name:
+      - "python{{ python_version }}"
+      - "python{{ python_version }}-venv"
+      - "python{{ python_version }}-dev"
+      - build-essential
+      - libpq-dev
+      - libssl-dev
+      - libffi-dev
+      - libjpeg-dev
+      - zlib1g-dev
+    state: present
+    update_cache: yes
+  become: yes
+
+# ─── MongoDB 7 ────────────────────────────────────────────────────────────────
+- name: Add MongoDB GPG key
+  ansible.builtin.apt_key:
+    url: "https://pgp.mongodb.com/server-{{ mongo_major }}.asc"
+    state: present
+  become: yes
+
+- name: Add MongoDB apt repo
+  ansible.builtin.apt_repository:
+    repo: "deb [arch=amd64,arm64] https://repo.mongodb.org/apt/ubuntu {{ ansible_distribution_release }}/mongodb-org/{{ mongo_major }} multiverse"
+    state: present
+    filename: "mongodb-org-{{ mongo_major }}"
+  become: yes
+
+- name: Install MongoDB
+  ansible.builtin.apt:
+    name: mongodb-org
+    state: present
+    update_cache: yes
+  become: yes
+
+- name: Enable & start MongoDB
+  ansible.builtin.service:
+    name: mongod
+    state: started
+    enabled: yes
+  become: yes
+
+# ─── PostgreSQL ───────────────────────────────────────────────────────────────
+- name: Install PostgreSQL
+  ansible.builtin.apt:
+    name:
+      - "postgresql-{{ postgres_major }}"
+      - "postgresql-client-{{ postgres_major }}"
+      - python3-psycopg2
+    state: present
+  become: yes
+
+- name: Ensure PostgreSQL is running
+  ansible.builtin.service:
+    name: postgresql
+    state: started
+    enabled: yes
+  become: yes
+
+# ─── App layout ───────────────────────────────────────────────────────────────
+- name: Create app directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: deploy
+    group: deploy
+    mode: "0755"
+  loop:
+    - "{{ app_dir }}"
+    - "{{ log_dir }}"
+    - "{{ backup_dir }}"
+  become: yes
+
+- name: Create secrets dir (root-only readable)
+  ansible.builtin.file:
+    path: "{{ secrets_dir }}"
+    state: directory
+    owner: root
+    group: "{{ service_group }}"
+    mode: "0750"
+  become: yes
+
+# ─── Code ─────────────────────────────────────────────────────────────────────
+- name: Clone or update repo
+  ansible.builtin.git:
+    repo: "{{ repo_url }}"
+    dest: "{{ app_dir }}/repo"
+    version: "{{ repo_branch }}"
+    force: yes
+    update: yes
+  become_user: deploy
+  become: yes
+
+- name: Sync backend/ into runtime location
+  ansible.posix.synchronize:
+    src: "{{ app_dir }}/repo/backend/"
+    dest: "{{ backend_dir }}/"
+    delete: yes
+    rsync_opts: ["--exclude=__pycache__", "--exclude=*.pyc", "--exclude=.venv"]
+  delegate_to: "{{ inventory_hostname }}"
+
+- name: Create venv
+  ansible.builtin.command: "python{{ python_version }} -m venv {{ venv_dir }}"
+  args:
+    creates: "{{ venv_dir }}/bin/python"
+  become_user: deploy
+  become: yes
+
+- name: pip install --upgrade pip
+  ansible.builtin.pip:
+    name: ["pip", "wheel", "setuptools"]
+    state: latest
+    virtualenv: "{{ venv_dir }}"
+  become_user: deploy
+  become: yes
+
+- name: pip install requirements
+  ansible.builtin.pip:
+    requirements: "{{ backend_dir }}/requirements.txt"
+    virtualenv: "{{ venv_dir }}"
+  become_user: deploy
+  become: yes
+
+# ─── Secrets ──────────────────────────────────────────────────────────────────
+- name: Deploy backend.env (production secrets)
+  ansible.builtin.copy:
+    src: backend.env
+    dest: "{{ secrets_dir }}/backend.env"
+    owner: root
+    group: "{{ service_group }}"
+    mode: "0640"
+  become: yes
+  notify: restart backend
+
+# ─── systemd ──────────────────────────────────────────────────────────────────
+- name: Install autobids-backend systemd unit
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../systemd/autobids-backend.service"
+    dest: /etc/systemd/system/autobids-backend.service
+    owner: root
+    group: root
+    mode: "0644"
+  become: yes
+  notify:
+    - reload systemd
+    - restart backend
+
+- name: Make app dirs writable by service user
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ service_user }}"
+    group: "{{ service_group }}"
+    mode: "0755"
+    recurse: no
+  loop:
+    - "{{ log_dir }}"
+    - "{{ backup_dir }}"
+    - "/var/lib/autobids"
+  become: yes
+
+- name: Enable & start backend
+  ansible.builtin.systemd:
+    name: autobids-backend
+    enabled: yes
+    state: started
+    daemon_reload: yes
+  become: yes
+
+# ─── Backups (daily at 03:30) ─────────────────────────────────────────────────
+- name: Install nightly DB backup script
+  ansible.builtin.copy:
+    dest: /usr/local/bin/autobids-backup.sh
+    mode: "0755"
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      DATE=$(date +%Y-%m-%d)
+      BACKUP_DIR="{{ backup_dir }}"
+      mkdir -p "$BACKUP_DIR"
+      mongodump --quiet --gzip --archive="$BACKUP_DIR/mongo-$DATE.gz"
+      sudo -u postgres pg_dumpall | gzip > "$BACKUP_DIR/postgres-$DATE.sql.gz"
+      # Retention: keep last 14 days
+      find "$BACKUP_DIR" -type f -mtime +14 -delete
+  become: yes
+
+- name: Add backup cron
+  ansible.builtin.cron:
+    name: "autobids nightly backup"
+    user: root
+    minute: "30"
+    hour: "3"
+    job: "/usr/local/bin/autobids-backup.sh >> {{ log_dir }}/backup.log 2>&1"
+  become: yes
+
+# ─── Rollback helper ──────────────────────────────────────────────────────────
+- name: Drop rollback helper
+  ansible.builtin.copy:
+    dest: "{{ app_dir }}/scripts/rollback.sh"
+    mode: "0755"
+    content: |
+      #!/bin/bash
+      # Quick rollback — swap live ↔ previous and restart.
+      set -euo pipefail
+      cd {{ app_dir }}
+      [ -d backend.previous ] || { echo "no previous release"; exit 1; }
+      mv backend backend.tmp
+      mv backend.previous backend
+      mv backend.tmp backend.previous
+      sudo systemctl restart autobids-backend
+      echo "Rolled back. Service restarted."
+  become: yes

@@ -797,3 +797,29 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 
 
 
+
+
+### Hetzner Deployment Files (30 Apr 2026)
+
+Създадена е пълна `deploy/hetzner/` структура (no Docker — nginx + systemd + uvicorn):
+
+**`/app/deploy/hetzner/`:**
+- `README.md` — арх. диаграма, prerequisites, init deploy, redeploy, Cloudflare config, rollback.
+- `nginx/autoandbid.conf` — reverse proxy, SPA fallback, /api → ab-back1:8001, WebSocket support, Cloudflare real-IP, security headers.
+- `systemd/autobids-backend.service` — uvicorn под `www-data`, `EnvironmentFile=/etc/autobids/backend.env`, security hardening.
+- `env-templates/backend.env.example` — всички production env vars.
+- `env-templates/frontend.env.production.example` — `REACT_APP_BACKEND_URL=https://autoandbid.com`.
+
+**Ansible (`/app/deploy/hetzner/ansible/`):**
+- `inventory.ini` — ab-front1 (public) + ab-back1 (private чрез ProxyJump).
+- `requirements.yml` — community.general + ansible.posix.
+- `group_vars/all.yml` — версии, paths, /etc/hosts mappings, private CIDR.
+- 3 роли: `common/` (UFW, fail2ban, /etc/hosts), `backend/` (Python 3.11 + Mongo 7 + Postgres 16 + venv + systemd + nightly backups), `frontend/` (Node 20 + yarn build + nginx).
+- 4 playbooks (всички минават `--syntax-check`): `bootstrap.yml`, `site.yml`, `deploy_backend.yml` (с rollback snapshot + health check), `deploy_frontend.yml` (atomic swap).
+
+**Network setup (по спецификацията на хостинга):**
+- ab-front1 → public 178.105.37.1, private 10.0.0.2
+- ab-back1 / ab-db1 → private 10.0.0.3 (no public IP)
+- /etc/hosts на двете машини: ab-front1 10.0.0.2, ab-back1 10.0.0.3, ab-db1 10.0.0.3, ab-deploy 10.0.0.2 — кодът ползва имена, не IP.
+- UFW: front1 публично 22/80/443; back1 само от 10.0.0.0/16 за 22/8001/27017/5432.
+

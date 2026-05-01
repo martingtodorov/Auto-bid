@@ -1,0 +1,56 @@
+---
+# Code-only redeploy of the FastAPI backend.
+# Pulls latest commit, syncs files, reinstalls deps, restarts uvicorn.
+- hosts: backend
+  become: yes
+  vars_prompt:
+    - name: ref
+      prompt: "Git ref to deploy (e.g. main, v1.2.3) — leave empty for default"
+      default: ""
+      private: no
+  pre_tasks:
+    - name: Resolve deploy ref
+      ansible.builtin.set_fact:
+        deploy_ref: "{{ ref if ref else repo_branch }}"
+  tasks:
+    - name: Snapshot current backend → previous (for rollback)
+      ansible.builtin.command:
+        cmd: "rsync -a --delete {{ backend_dir }}/ {{ app_dir }}/backend.previous/"
+      changed_when: true
+
+    - name: Update repo
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ app_dir }}/repo"
+        version: "{{ deploy_ref }}"
+        force: yes
+        update: yes
+      become_user: deploy
+
+    - name: Sync code
+      ansible.posix.synchronize:
+        src: "{{ app_dir }}/repo/backend/"
+        dest: "{{ backend_dir }}/"
+        delete: yes
+        rsync_opts: ["--exclude=__pycache__", "--exclude=*.pyc", "--exclude=.venv"]
+      delegate_to: "{{ inventory_hostname }}"
+
+    - name: Reinstall pip deps
+      ansible.builtin.pip:
+        requirements: "{{ backend_dir }}/requirements.txt"
+        virtualenv: "{{ venv_dir }}"
+      become_user: deploy
+
+    - name: Restart backend
+      ansible.builtin.service:
+        name: autobids-backend
+        state: restarted
+
+    - name: Wait for backend health
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ backend_port }}/api/health"
+        status_code: 200
+      register: hc
+      until: hc.status == 200
+      retries: 12
+      delay: 2

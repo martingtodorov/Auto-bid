@@ -1,0 +1,5 @@
+# Top-level ignores for /deploy/hetzner — never commit production secrets.
+ansible/files/backend.env
+ansible/files/frontend.env.production
+ansible/.ansible_cache/
+ansible/*.retry
