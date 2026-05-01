@@ -132,6 +132,43 @@ def optimize_data_url(data_url: str) -> tuple[str, str]:
     return _to_data_url(web), _to_data_url(thumb)
 
 
+AVATAR_DIM = 256                         # square avatar size (px)
+AVATAR_MAX_RAW_BYTES = 6 * 1024 * 1024   # 6 MB per upload
+
+
+def _center_crop_square(img: Image.Image) -> Image.Image:
+    w, h = img.size
+    side = min(w, h)
+    left = (w - side) // 2
+    top = (h - side) // 2
+    return img.crop((left, top, left + side, top + side))
+
+
+def optimize_avatar_data_url(data_url: str) -> str:
+    """Re-encode an inbound avatar data URL to a 256×256 square JPEG.
+
+    Returns a single optimized data URL ready to be passed to
+    `storage.store_image`. Raises `ImageProcessingError` on bad input.
+    """
+    if not data_url:
+        raise ImageProcessingError("empty image")
+    if not data_url.startswith("data:image/"):
+        return data_url
+
+    _ext, raw = _decode_data_url(data_url)
+    if len(raw) > AVATAR_MAX_RAW_BYTES:
+        raise ImageProcessingError(
+            f"image too large: {round(len(raw) / 1024 / 1024, 1)} MB "
+            f"(max {AVATAR_MAX_RAW_BYTES // 1024 // 1024} MB)"
+        )
+
+    img = _open_and_normalise(raw)
+    img = _center_crop_square(img)
+    img = img.resize((AVATAR_DIM, AVATAR_DIM), Image.LANCZOS)
+    return _to_data_url(_encode_jpeg(img, quality=88))
+
+
+
 def optimize_many(urls: list[str]) -> tuple[list[str], list[str], list[str]]:
     """Bulk optimize. Returns (web_urls, thumb_urls, error_messages).
 

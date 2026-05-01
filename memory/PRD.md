@@ -641,6 +641,30 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 - Всички keyframes в `/app/frontend/src/index.css`
 - `prefers-reduced-motion: reduce` спира всички
 
+
+### Profile Avatars + Live Ticker Fix (30 Apr 2026)
+
+**Profile pictures:**
+- Нов компонент `Avatar.jsx` — кръгла снимка с fallback initials (детерминистични цветове).
+- Нова секция `AvatarSection.jsx` в `/settings` — upload през file input → base64 → POST `/api/me/avatar`.
+- Backend: `imgproc.optimize_avatar_data_url()` (256×256 center-crop, JPEG q=88, max 6MB).
+- Storage: ползва `storage.store_image` (inline или S3 според `STORAGE_BACKEND`).
+- При upload: backfill на `seller_avatar_url` в auctions и `user_avatar_url` в comments чрез `update_many`.
+- Аватара се показва в:
+  - `AuctionDetailPage.jsx` → seller card (sidebar, 44px)
+  - `CommentItem` → до името на автора (28px)
+- DELETE `/api/me/avatar` премахва snapshot-а от user, auctions и comments.
+- Преводи: `avatar.*` ключове в bg/en/ro.
+
+**Live ticker (`/api/auctions/featured`):**
+- Махнат дублиран `{a.make}` префикс (показваше „BMW BMW M-performance").
+- До 10 елемента: всички `featured && live`, после допълнено с `live && !featured` (sorted ends_at asc).
+
+**Файлове:**
+- Нови: `/app/frontend/src/components/Avatar.jsx`, `/app/frontend/src/components/AvatarSection.jsx`
+- Променени: `/app/backend/server.py` (avatar endpoints, seller_avatar_url at create, user_avatar_url at comment), `/app/backend/services/image_processing.py` (optimize_avatar_data_url), `/app/frontend/src/pages/AccountSettingsPage.jsx`, `/app/frontend/src/pages/AuctionDetailPage.jsx`, `/app/frontend/src/components/LiveTicker.jsx`, i18n files.
+
+
 **Copy update:**
 - `bg.brand_tagline` промяна: „Първата редакционна платформа за автомобилни търгове в България..." → „Редакционна платформа за автомобилни търгове. Подбрани екземпляри, прозрачни продажби."
 

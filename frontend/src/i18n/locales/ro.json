@@ -1,4 +1,16 @@
 {
+  "avatar": {
+    "title": "Poză de profil",
+    "subtitle": "Această poză apare lângă numele tău pe anunțuri și comentarii. Format pătrat recomandat, min. 256×256 px.",
+    "upload": "Încarcă poza",
+    "change": "Schimbă poza",
+    "remove": "Șterge poza",
+    "confirm_remove": "Ștergi poza?",
+    "saved": "Poza a fost încărcată",
+    "removed": "Poza a fost ștearsă",
+    "err_not_image": "Fișierul nu este o imagine.",
+    "err_too_large": "Fișier prea mare (max 6 MB)."
+  },
   "common": {
     "min_short": "min.",
     "loading": "Se încarcă…",

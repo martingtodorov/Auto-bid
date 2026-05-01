@@ -1,4 +1,16 @@
 {
+  "avatar": {
+    "title": "Profile picture",
+    "subtitle": "This picture is shown next to your name on listings and comments. Square format recommended, min. 256×256 px.",
+    "upload": "Upload picture",
+    "change": "Change picture",
+    "remove": "Remove picture",
+    "confirm_remove": "Remove picture?",
+    "saved": "Picture uploaded",
+    "removed": "Picture removed",
+    "err_not_image": "File is not an image.",
+    "err_too_large": "File too large (max 6 MB)."
+  },
   "common": {
     "min_short": "min.",
     "loading": "Loading…",

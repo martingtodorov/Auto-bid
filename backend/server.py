@@ -829,6 +829,7 @@ async def create_auction(request: Request, payload: AuctionCreate, user: dict = 
         "id": auction_id,
         "seller_id": user["id"],
         "seller_name": user["name"],
+        "seller_avatar_url": user.get("avatar_url"),
         "current_bid_eur": payload.starting_bid_eur,
         "bid_count": 0,
         "created_at": now.isoformat(),
@@ -1747,6 +1748,7 @@ async def add_comment(auction_id: str, payload: CommentCreate, user: dict = Depe
         "auction_id": auction_id,
         "user_id": user["id"],
         "user_name": user["name"],
+        "user_avatar_url": user.get("avatar_url"),
         "text": payload.text.strip(),
         "deleted": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -2178,6 +2180,41 @@ async def update_my_profile(payload: ProfileUpdate, user: dict = Depends(get_cur
         await db.users.update_one({"id": user["id"]}, {"$set": update})
     u = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0, "totp_secret": 0, "totp_backup_codes": 0})
     return u
+
+
+# ---- Profile avatar ----
+class AvatarPayload(BaseModel):
+    image: str  # data:image/...;base64,...
+
+
+@api.post("/me/avatar")
+async def upload_my_avatar(payload: AvatarPayload, user: dict = Depends(get_current_user)):
+    """Accepts a base64 data URL, optimizes to a 256x256 square JPEG and
+    persists via the configured storage backend (inline or S3)."""
+    from services import image_processing as imgproc
+    if not payload.image or not payload.image.startswith("data:image/"):
+        raise HTTPException(status_code=400, detail="Невалиден формат на изображението")
+    try:
+        opt = await asyncio.to_thread(imgproc.optimize_avatar_data_url, payload.image)
+    except imgproc.ImageProcessingError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    from storage import store_image
+    url = await asyncio.to_thread(store_image, opt)
+    await db.users.update_one({"id": user["id"]}, {"$set": {"avatar_url": url}})
+    # Backfill avatar on this user's auctions and comments so existing rows
+    # render the new picture without requiring a re-fetch of /me from each
+    # detail page (frontend reads avatar_url straight from auction/comment).
+    await db.auctions.update_many({"seller_id": user["id"]}, {"$set": {"seller_avatar_url": url}})
+    await db.comments.update_many({"user_id": user["id"]}, {"$set": {"user_avatar_url": url}})
+    return {"avatar_url": url}
+
+
+@api.delete("/me/avatar")
+async def delete_my_avatar(user: dict = Depends(get_current_user)):
+    await db.users.update_one({"id": user["id"]}, {"$unset": {"avatar_url": ""}})
+    await db.auctions.update_many({"seller_id": user["id"]}, {"$unset": {"seller_avatar_url": ""}})
+    await db.comments.update_many({"user_id": user["id"]}, {"$unset": {"user_avatar_url": ""}})
+    return {"ok": True}
 
 
 # ---- Saved searches ----

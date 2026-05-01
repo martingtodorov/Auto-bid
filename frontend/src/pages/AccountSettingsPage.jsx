@@ -8,6 +8,7 @@ import TwoFactorSection from "../components/TwoFactorSection";
 import PushSettings from "../components/PushSettings";
 import SessionsSection from "../components/SessionsSection";
 import SavedCardSection from "../components/SavedCardSection";
+import AvatarSection from "../components/AvatarSection";
 
 export default function AccountSettingsPage() {
   const { t } = useTranslation();
@@ -69,6 +70,8 @@ export default function AccountSettingsPage() {
       <div className="max-w-[900px] mx-auto px-4 sm:px-6 lg:px-10 py-16">
         <div className="overline text-[hsl(var(--accent))]">Настройки</div>
         <h1 className="font-serif text-4xl lg:text-5xl mt-3 tracking-tight">Акаунт и известия</h1>
+
+        <AvatarSection />
 
         <section className="mt-12 rounded-card border border-[hsl(var(--line))] bg-white p-6 lg:p-8" data-testid="profile-section">
           <div className="flex items-center gap-3">

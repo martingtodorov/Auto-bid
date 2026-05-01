@@ -10,6 +10,7 @@ import BiddingCreditModal from "../components/BiddingCreditModal";
 import AuctionCard from "../components/AuctionCard";
 import NegotiationPortal from "../components/NegotiationPortal";
 import Lightbox from "../components/Lightbox";
+import Avatar from "../components/Avatar";
 import { useSiteSettings, computeBuyerFee } from "../lib/settings";
 import { setPageMeta, resetPageMeta, buildVehicleJsonLd, buildBreadcrumbs, combineJsonLd } from "../lib/seo";
 import { brandNameForLang } from "../i18n/index";
@@ -850,11 +851,22 @@ export default function AuctionDetailPage() {
               <div className="rounded-card border border-[hsl(var(--line))] p-6 bg-[hsl(var(--surface))]">
                 <div className="overline text-[hsl(var(--ink-muted))]">{t("auction.seller")}</div>
                 {a.seller_id && a.seller_id !== "platform" ? (
-                  <h2 className="font-serif text-xl mt-2">
-                    <Link to={`/profile/${a.seller_id}`} className="block hover:text-[hsl(var(--accent))]" data-testid="seller-link">{a.seller_name}</Link>
-                  </h2>
+                  <div className="mt-2 flex items-center gap-3">
+                    <Avatar
+                      url={a.seller_avatar_url}
+                      name={a.seller_name}
+                      size={44}
+                      testId="seller-avatar"
+                    />
+                    <h2 className="font-serif text-xl">
+                      <Link to={`/profile/${a.seller_id}`} className="block hover:text-[hsl(var(--accent))]" data-testid="seller-link">{a.seller_name}</Link>
+                    </h2>
+                  </div>
                 ) : (
-                  <h2 className="font-serif text-xl mt-2">{a.seller_name}</h2>
+                  <div className="mt-2 flex items-center gap-3">
+                    <Avatar url={a.seller_avatar_url} name={a.seller_name} size={44} />
+                    <h2 className="font-serif text-xl">{a.seller_name}</h2>
+                  </div>
                 )}
                 <p className="text-xs text-[hsl(var(--ink-muted))] mt-2" data-testid="seller-badge">
                   {a.seller_is_verified_dealer ? t("auction.verified_dealer") : t("auction.private_person", "Частно лице")} · {translateEnum(a.city, "city", i18n.language)}{a.country ? `, ${a.country}` : ""}
@@ -1073,6 +1085,9 @@ function CommentItem({ c, t, i18nLang, isAdmin, onDelete }) {
     <div className={`rounded-card border border-[hsl(var(--line))] p-5 ${c.deleted ? "bg-[hsl(var(--surface))] opacity-70" : ""}`} data-testid={`comment-${c.id}`}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 flex-wrap">
+          {!c.deleted && (
+            <Avatar url={c.user_avatar_url} name={c.user_name} size={28} testId={`comment-avatar-${c.id}`} />
+          )}
           {c.user_id && !c.deleted ? (
             <Link to={`/profile/${c.user_id}`} className="text-sm font-semibold hover:text-[hsl(var(--accent))]">{c.user_name}</Link>
           ) : (
