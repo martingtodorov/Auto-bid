@@ -6,6 +6,7 @@ import { useAuth, formatError } from "../lib/auth";
 import { api } from "../lib/apiClient";
 import TwoFactorSection from "../components/TwoFactorSection";
 import PushSettings from "../components/PushSettings";
+import EmailSettings from "../components/EmailSettings";
 import SessionsSection from "../components/SessionsSection";
 import SavedCardSection from "../components/SavedCardSection";
 import AvatarSection from "../components/AvatarSection";
@@ -73,6 +74,13 @@ export default function AccountSettingsPage() {
 
         <AvatarSection />
 
+        {/* Notification preferences — placed right after the avatar section
+            so users discover them immediately after creating their profile. */}
+        <div className="mt-8 grid gap-6 lg:grid-cols-2">
+          <PushSettings />
+          <EmailSettings />
+        </div>
+
         <section className="mt-12 rounded-card border border-[hsl(var(--line))] bg-white p-6 lg:p-8" data-testid="profile-section">
           <div className="flex items-center gap-3">
             <Phone size={18} className="text-[hsl(var(--accent))]" />
@@ -138,10 +146,6 @@ export default function AccountSettingsPage() {
         <SavedCardSection />
 
         <SessionsSection />
-
-        <div className="mt-8">
-          <PushSettings />
-        </div>
 
         <DangerZone />
       </div>

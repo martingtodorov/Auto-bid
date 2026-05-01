@@ -57,6 +57,18 @@ TEMPLATES: dict[str, dict[str, dict[str, str]]] = {
         "en": {"title": "Auction ended · {title}", "body": "You didn't win this time. Your hold has been released."},
         "ro": {"title": "Licitația s-a încheiat · {title}", "body": "Nu ați câștigat. Depozitul a fost eliberat."},
     },
+    # Ending soon (≈1h before auction ends) — sent to watchers and active bidders
+    "ending_soon": {
+        "bg": {"title": "Изтича скоро · {title}", "body": "Около 1 час до края. Текуща оферта €{amount}."},
+        "en": {"title": "Ending soon · {title}", "body": "About 1 hour left. Current bid €{amount}."},
+        "ro": {"title": "Se încheie curând · {title}", "body": "Aprox. 1 oră rămasă. Ofertă curentă €{amount}."},
+    },
+    # Reserve met on the seller's own auction
+    "reserve_met": {
+        "bg": {"title": "Резервът е достигнат · {title}", "body": "Текущата оферта (€{amount}) надхвърля резервната цена."},
+        "en": {"title": "Reserve met · {title}", "body": "Current bid (€{amount}) has met the reserve price."},
+        "ro": {"title": "Prag atins · {title}", "body": "Oferta curentă (€{amount}) a atins prețul de rezervă."},
+    },
 }
 
 

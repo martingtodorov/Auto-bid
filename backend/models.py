@@ -195,6 +195,7 @@ class NegotiationMessage(BaseModel):
 class ProfileUpdate(BaseModel):
     phone: Optional[str] = None
     sms_opt_in: Optional[bool] = None
+    notification_prefs: Optional[dict] = None  # {"push": {...}, "email": {...}}
 
 
 class AdminUserUpdate(BaseModel):

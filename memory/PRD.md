@@ -696,3 +696,35 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 - ✅ Frontend `/verify-email` без token → показва "Invalid link" / "No token in the link"
 
 
+
+
+### Granular Notification Preferences + 2 New Events (30 Apr 2026)
+
+**Backend (`/app/backend/services/notif_prefs.py` + integrations):**
+- Нов модул `notif_prefs.py`:
+  - `is_enabled(user, channel, kind)` — default-enabled при липсваща pref.
+  - `normalize_input(payload)` — sanitize PATCH payload, drop unknowns, coerce bool.
+  - 5 kinds × 2 channels = 10 toggle-а: `outbid`, `seller_new_bid`, `saved_search`, `ending_soon`, `reserve_met`.
+- `ProfileUpdate` модел приема `notification_prefs` (partial merge през dotted-path keys в Mongo).
+- Всички съществуващи notif call sites обвити с `_nprefs.is_enabled` checks.
+
+**Нови events:**
+- **`reserve_met`**: при поставен бид, ако `amount >= reserve` и още не е изпратено, маркира `reserve_met_notified=true` атомарно, праща email + push до seller-а.
+- **`ending_soon`** (≈1h преди край): нов `_ending_soon_loop` background task (всеки 5 мин), стартиран при startup. Намира live търгове в прозорец 55–65 мин напред, маркира идемпотентно, праща email + push до watchers ∪ active bidders.
+
+**Frontend:**
+- Нов `NotificationToggles.jsx` (channel-agnostic switch UI с PATCH /me/profile partial + revert on failure).
+- Refactor `PushSettings.jsx`: постоянен iOS install tip + granular toggles (disabled докато не е subscribed → hint).
+- Нов `EmailSettings.jsx` (email channel мирор).
+- Двата поставени **веднага след `AvatarSection`** в `AccountSettingsPage` (2-колонен grid).
+- Преводи `notif_prefs.kinds.*`, `email_prefs.*`, `push.ios_install_tip` за bg/en/ro.
+
+**Файлове:**
+- Нови: `services/notif_prefs.py`, `components/NotificationToggles.jsx`, `components/EmailSettings.jsx`
+- Променени: `server.py` (5 notif call sites + ending-soon loop + reserve-met + profile PATCH), `models.py` (ProfileUpdate.notification_prefs), `emails.py`, `services/push_templates.py`, `components/PushSettings.jsx`, `pages/AccountSettingsPage.jsx`, всички i18n.
+
+**E2E тествано:**
+- ✅ PATCH /me/profile с `{notification_prefs: {push:{outbid:false}, email:{ending_soon:false}}}` → persists в Mongo.
+- ✅ Refetch /auth/me връща правилните prefs.
+- ✅ Playwright UI рендер: 5 push toggles + 5 email toggles, hint "Enable push first" видим, iOS install tip визуализиран на всеки.
+

@@ -1,4 +1,20 @@
 {
+  "notif_prefs": {
+    "section": "What to receive",
+    "save_err": "Could not save",
+    "push_hint": "Enable push notifications above first, then choose which events to receive.",
+    "kinds": {
+      "outbid": "You've been outbid",
+      "seller_new_bid": "New bid on one of your listings",
+      "saved_search": "New listing matches a saved search",
+      "ending_soon": "1 hour before end of a watched / actively bid auction",
+      "reserve_met": "Reserve price reached on your own listing"
+    }
+  },
+  "email_prefs": {
+    "title": "Email notifications",
+    "description": "Get emails for important events: outbids, bids on your listings, matches on saved searches, and more."
+  },
   "verify_email": {
     "checking": "Verifying…",
     "title_ok": "Email verified",
@@ -627,6 +643,7 @@
     "test_sent": "Test notification sent. Check your phone/browser.",
     "unsupported": "This browser doesn't support push notifications. Try Chrome, Edge, Firefox or Safari (iOS 16.4+).",
     "ios_install": "On iPhone/iPad: tap the Share button in Safari → \"Add to Home Screen\". Then open the app from your home screen and enable notifications here.",
+    "ios_install_tip": "On iPhone/iPad: to receive push notifications, open the site in Safari → tap the Share button → \"Add to Home Screen\". Then open the app from the home screen and enable notifications here.",
     "denied": "Notifications are blocked in the browser. Allow them in the site settings (lock icon in the address bar) and try again."
   },
   "seo": {

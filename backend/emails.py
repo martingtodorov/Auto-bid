@@ -152,3 +152,33 @@ async def email_seller_new_comment(to: str, name: str, auction_title: str, aucti
       <p><a href="{APP_URL}/auctions/{auction_id}" style="display:inline-block;background:#111827;color:#fff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:600;">Отговори</a></p>
     """
     await send_email(to, f"Нов коментар · {auction_title}", _shell("Нов коментар в обявата ви", body))
+
+
+
+async def email_ending_soon(to: str, name: str, auction_title: str, auction_id: str, current_bid: float, role: str = "watcher"):
+    """role: 'watcher' (favourited) or 'bidder' (currently leading or active in bidding)."""
+    headline = "Любим търг изтича скоро" if role == "watcher" else "Търг с ваша наддавка изтича скоро"
+    body = f"""
+      <p>Здравейте, {name},</p>
+      <p>До края на търга <strong>{auction_title}</strong> остава около 1 час.</p>
+      <div style="margin:18px 0;padding:14px 16px;background:#fafafa;border:1px solid #e5e7eb;border-radius:10px;">
+        <div style="font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.08em;">Текуща оферта</div>
+        <div style="font-size:24px;font-weight:700;margin-top:4px;">€{int(current_bid):,}</div>
+      </div>
+      <p><a href="{APP_URL}/auctions/{auction_id}" style="display:inline-block;background:#1B4D3E;color:#fff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:600;">Отвори търга</a></p>
+    """
+    await send_email(to, f"⏰ Изтича скоро · {auction_title}", _shell(headline, body))
+
+
+async def email_reserve_met(to: str, name: str, auction_title: str, auction_id: str, current_bid: float, reserve: float):
+    body = f"""
+      <p>Поздравления, {name}!</p>
+      <p>Резервната цена на вашата обява <strong>{auction_title}</strong> беше достигната.</p>
+      <div style="margin:18px 0;padding:14px 16px;background:#fafafa;border:1px solid #e5e7eb;border-radius:10px;">
+        <div style="font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.08em;">Резерв · Текуща</div>
+        <div style="font-size:22px;font-weight:700;margin-top:4px;">€{int(reserve):,} → <span style="color:#1B4D3E;">€{int(current_bid):,}</span></div>
+      </div>
+      <p>Търгът вече е гарантирано продаваем при текущата или по-висока оферта.</p>
+      <p><a href="{APP_URL}/auctions/{auction_id}" style="display:inline-block;background:#1B4D3E;color:#fff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:600;">Виж търга</a></p>
+    """
+    await send_email(to, f"🎯 Резервът е достигнат · {auction_title}", _shell("Резервната цена е достигната", body))

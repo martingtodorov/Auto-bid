@@ -1494,22 +1494,25 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
         )
         prev_user = await db.users.find_one({"id": prev_high}, {"_id": 0})
         if prev_user and prev_user.get("email"):
-            try:
-                await email_outbid(prev_user["email"], prev_user["name"], a["title"], auction_id, amount)
-            except Exception as e:
-                logger.error("email_outbid failed: %s", e)
+            from services import notif_prefs as _nprefs
+            if _nprefs.is_enabled(prev_user, "email", "outbid"):
+                try:
+                    await email_outbid(prev_user["email"], prev_user["name"], a["title"], auction_id, amount)
+                except Exception as e:
+                    logger.error("email_outbid failed: %s", e)
             # Web Push — outbid notification (localized to user's lang)
-            try:
-                from services import push_templates
-                await push_templates.send_template(
-                    prev_high,
-                    "outbid",
-                    fmt_args={"title": a["title"][:60], "amount": f"{int(amount):,}"},
-                    url=f"/auctions/{auction_id}",
-                    tag=f"outbid-{auction_id}",
-                )
-            except Exception as e:
-                logger.error("push outbid failed: %s", e)
+            if _nprefs.is_enabled(prev_user, "push", "outbid"):
+                try:
+                    from services import push_templates
+                    await push_templates.send_template(
+                        prev_high,
+                        "outbid",
+                        fmt_args={"title": a["title"][:60], "amount": f"{int(amount):,}"},
+                        url=f"/auctions/{auction_id}",
+                        tag=f"outbid-{auction_id}",
+                    )
+                except Exception as e:
+                    logger.error("push outbid failed: %s", e)
 
     # Mirror denormalised fields onto the Mongo auction so the rest of the app
     # (filters, listings, sorting, sitemap) keeps working without a join.
@@ -1562,13 +1565,14 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
     seller_id = a.get("seller_id")
     if seller_id and seller_id != "platform":
         seller = await db.users.find_one({"id": seller_id}, {"_id": 0})
-        if seller and seller.get("email"):
+        from services import notif_prefs as _nprefs
+        if seller and seller.get("email") and _nprefs.is_enabled(seller, "email", "seller_new_bid"):
             try:
                 await email_seller_new_bid(seller["email"], seller.get("name", ""), a["title"], auction_id, user["name"], amount, result["bid_count"])
             except Exception as e:
                 logger.error("email_seller_new_bid failed: %s", e)
         # Web Push — your car got a bid (localized for the seller)
-        if seller_id:
+        if seller_id and _nprefs.is_enabled(seller, "push", "seller_new_bid"):
             try:
                 from services import push_templates
                 await push_templates.send_template(
@@ -1585,6 +1589,38 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
                 )
             except Exception as e:
                 logger.error("push seller_new_bid failed: %s", e)
+
+        # Reserve-met notification (only fires once per auction)
+        reserve = a.get("reserve_eur")
+        if (
+            seller
+            and reserve is not None
+            and float(reserve) > 0
+            and amount >= float(reserve)
+            and not a.get("reserve_met_notified")
+        ):
+            await db.auctions.update_one(
+                {"id": auction_id, "reserve_met_notified": {"$ne": True}},
+                {"$set": {"reserve_met_notified": True, "reserve_met_at": now.isoformat()}},
+            )
+            if seller.get("email") and _nprefs.is_enabled(seller, "email", "reserve_met"):
+                try:
+                    from emails import email_reserve_met
+                    await email_reserve_met(seller["email"], seller.get("name", ""), a["title"], auction_id, amount, float(reserve))
+                except Exception as e:
+                    logger.error("email_reserve_met failed: %s", e)
+            if _nprefs.is_enabled(seller, "push", "reserve_met"):
+                try:
+                    from services import push_templates
+                    await push_templates.send_template(
+                        seller_id,
+                        "reserve_met",
+                        fmt_args={"title": a["title"][:60], "amount": f"{int(amount):,}"},
+                        url=f"/auctions/{auction_id}",
+                        tag=f"reserve-met-{auction_id}",
+                    )
+                except Exception as e:
+                    logger.error("push reserve_met failed: %s", e)
 
     # FOMO SMS blast in final 5 minutes
     new_ends_at = datetime.fromisoformat(new_ends_at_iso.replace("Z", "+00:00"))
@@ -2191,6 +2227,15 @@ async def update_my_profile(payload: ProfileUpdate, user: dict = Depends(get_cur
         update["phone"] = phone
     if payload.sms_opt_in is not None:
         update["sms_opt_in"] = bool(payload.sms_opt_in)
+    # Granular notification toggles (push & email per kind). The client may
+    # send a partial update (e.g. only one toggle) — we merge into the
+    # existing prefs document by writing dotted-path keys.
+    if getattr(payload, "notification_prefs", None) is not None:
+        from services import notif_prefs as _nprefs
+        clean = _nprefs.normalize_input(payload.notification_prefs or {})
+        for ch, kinds in clean.items():
+            for kind, val in kinds.items():
+                update[f"notification_prefs.{ch}.{kind}"] = bool(val)
     if update:
         await db.users.update_one({"id": user["id"]}, {"$set": update})
     u = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0, "totp_secret": 0, "totp_backup_codes": 0})
@@ -2291,7 +2336,8 @@ async def notify_matching_saved_searches(auction: dict):
     for s in searches:
         if _matches_saved_search(auction, s.get("filters", {})):
             u = await db.users.find_one({"id": s["user_id"]}, {"_id": 0})
-            if u and u.get("email"):
+            from services import notif_prefs as _nprefs
+            if u and u.get("email") and _nprefs.is_enabled(u, "email", "saved_search"):
                 try:
                     from emails import send_email, _shell, APP_URL
                     html = _shell("Нова обява по ваш критерий", f"""
@@ -2305,7 +2351,7 @@ async def notify_matching_saved_searches(auction: dict):
                 except Exception as e:
                     logger.error("saved search email failed: %s", e)
             # Web Push — saved-search match (localized)
-            if u:
+            if u and _nprefs.is_enabled(u, "push", "saved_search"):
                 try:
                     from services import push_templates
                     await push_templates.send_template(
@@ -3315,6 +3361,8 @@ async def on_startup():
     await _seed_makes()
     # Start background scheduler for auction finalization
     asyncio.create_task(_auction_finalizer_loop())
+    # Start background scheduler for "ending soon" notifications (≈1h before end)
+    asyncio.create_task(_ending_soon_loop())
 
 
 async def _seed_makes():
@@ -3370,6 +3418,92 @@ async def _auction_finalizer_loop():
         except Exception as e:
             logger.error("Auction finalizer loop error: %s", e)
         await asyncio.sleep(60)
+
+
+async def _ending_soon_loop():
+    """Runs every 5 minutes. Notifies watchers + active bidders ~1h before
+    a live auction ends. Idempotent via the `ending_soon_notified` flag."""
+    # Stagger start so it doesn't race with the finalizer on the same tick.
+    await asyncio.sleep(20)
+    while True:
+        try:
+            await _notify_ending_soon_once()
+        except Exception as e:
+            logger.error("Ending-soon notifier error: %s", e)
+        await asyncio.sleep(300)
+
+
+async def _notify_ending_soon_once():
+    """Find live auctions ending in 55–65 minutes that haven't been
+    notified yet, and dispatch email + push to:
+      - users on the watchlist for that auction, AND
+      - users who have placed at least one bid on that auction.
+    """
+    from services import notif_prefs as _nprefs
+    from services import push_templates
+    now = datetime.now(timezone.utc)
+    window_start = (now + timedelta(minutes=55)).isoformat()
+    window_end = (now + timedelta(minutes=65)).isoformat()
+    cursor = db.auctions.find(
+        {
+            "status": "live",
+            "ends_at": {"$gte": window_start, "$lte": window_end},
+            "ending_soon_notified": {"$ne": True},
+        },
+        {"_id": 0, "id": 1, "title": 1, "ends_at": 1, "current_bid_eur": 1, "is_archived": 1},
+    )
+    candidates = await cursor.to_list(200)
+    for a in candidates:
+        if a.get("is_archived"):
+            continue
+        auction_id = a["id"]
+        # Mark first to avoid double-fire if the loop overlaps another instance
+        marked = await db.auctions.update_one(
+            {"id": auction_id, "ending_soon_notified": {"$ne": True}},
+            {"$set": {"ending_soon_notified": True, "ending_soon_notified_at": now.isoformat()}},
+        )
+        if marked.modified_count == 0:
+            continue
+
+        # Collect recipients: watchers + active bidders
+        recipients: dict[str, str] = {}  # user_id → role ("watcher"|"bidder")
+        async for w in db.watches.find({"auction_id": auction_id}, {"_id": 0, "user_id": 1}).limit(2000):
+            recipients[w["user_id"]] = "watcher"
+        try:
+            from services import bidding as _bidding
+            bidder_ids = await _bidding.collect_bidder_ids(auction_id, exclude_user_id=None, limit=2000)
+            for uid in bidder_ids:
+                # Bidder role wins over watcher (the email title differs)
+                recipients[uid] = "bidder"
+        except Exception as e:
+            logger.warning("ending_soon: collect_bidder_ids failed: %s", e)
+
+        if not recipients:
+            continue
+
+        users = await db.users.find({"id": {"$in": list(recipients.keys())}}, {"_id": 0}).to_list(2000)
+        title = a.get("title", "")
+        amount = float(a.get("current_bid_eur", 0))
+        for u in users:
+            uid = u["id"]
+            role = recipients.get(uid, "watcher")
+            if u.get("email") and _nprefs.is_enabled(u, "email", "ending_soon"):
+                try:
+                    from emails import email_ending_soon
+                    await email_ending_soon(u["email"], u.get("name", ""), title, auction_id, amount, role)
+                except Exception as e:
+                    logger.error("email_ending_soon failed for %s: %s", uid, e)
+            if _nprefs.is_enabled(u, "push", "ending_soon"):
+                try:
+                    await push_templates.send_template(
+                        uid,
+                        "ending_soon",
+                        fmt_args={"title": title[:60], "amount": f"{int(amount):,}"},
+                        url=f"/auctions/{auction_id}",
+                        tag=f"ending-soon-{auction_id}",
+                    )
+                except Exception as e:
+                    logger.error("push ending_soon failed for %s: %s", uid, e)
 
 
 async def _finalize_expired_auctions_once():

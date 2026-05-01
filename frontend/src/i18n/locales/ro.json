@@ -1,4 +1,20 @@
 {
+  "notif_prefs": {
+    "section": "Ce să primești",
+    "save_err": "Eroare la salvare",
+    "push_hint": "Activează mai întâi notificările push de mai sus pentru a configura ce evenimente să primești.",
+    "kinds": {
+      "outbid": "Ai fost depășit",
+      "seller_new_bid": "Ofertă nouă pe unul dintre anunțurile tale",
+      "saved_search": "Anunț nou care corespunde unei căutări salvate",
+      "ending_soon": "Cu 1 oră înainte de finalul unei licitații favorite / la care licitezi",
+      "reserve_met": "Prețul de rezervă a fost atins pe anunțul tău"
+    }
+  },
+  "email_prefs": {
+    "title": "Notificări email",
+    "description": "Primește email-uri pentru evenimente importante: depășiri, oferte pe anunțurile tale, anunțuri noi pe căutări salvate și altele."
+  },
   "verify_email": {
     "checking": "Se verifică…",
     "title_ok": "Email confirmat",
@@ -623,6 +639,7 @@
     "test_sent": "Notificarea de test a fost trimisă. Verificați telefonul/browserul.",
     "unsupported": "Acest browser nu acceptă notificări push. Încercați Chrome, Edge, Firefox sau Safari (iOS 16.4+).",
     "ios_install": "Pe iPhone/iPad: apăsați butonul \"Distribuie\" în Safari → \"Add to Home Screen\". Apoi deschideți aplicația de pe ecranul de start și activați notificările aici.",
+    "ios_install_tip": "Pe iPhone/iPad: pentru a primi notificări push, deschideți site-ul în Safari → apăsați butonul „Distribuie“ → „Add to Home Screen“. Apoi deschideți aplicația de pe ecranul de start și activați notificările aici.",
     "denied": "Notificările sunt blocate în browser. Permiteți-le din setările site-ului (pictograma lacăt în bara de adrese) și încercați din nou."
   },
   "seo": {

@@ -11,15 +11,14 @@ import {
   unsubscribePush,
   sendTestPush,
 } from "../lib/push";
+import NotificationToggles from "./NotificationToggles";
 
 /**
- * Settings card for Web Push notifications.
+ * Push notification settings.
  *
- * States:
- *  - unsupported  → explainer (e.g. iOS without PWA install)
- *  - default      → "Enable notifications" button
- *  - granted+sub  → "Disable" + "Send test"
- *  - denied       → reset instructions
+ * Top section: subscription state machine (enable / disable / test).
+ * Bottom section: granular per-event toggles (only meaningful once subscribed,
+ *                 but visible at all times so users can configure ahead of time).
  */
 export default function PushSettings() {
   const { t } = useTranslation();
@@ -45,60 +44,48 @@ export default function PushSettings() {
     setStatus(sub ? "subscribed" : "default");
   };
 
-  useEffect(() => {
-    refresh();
-  }, []);
+  useEffect(() => { refresh(); }, []);
 
   const enable = async () => {
-    setWorking(true);
-    setErr("");
-    setMsg("");
+    setWorking(true); setErr(""); setMsg("");
     try {
       await subscribePush();
       setMsg(t("push.enabled_msg", "Известията са включени."));
       await refresh();
     } catch (e) {
       setErr(e.message || String(e));
-    } finally {
-      setWorking(false);
-    }
+    } finally { setWorking(false); }
   };
 
   const disable = async () => {
-    setWorking(true);
-    setErr("");
-    setMsg("");
+    setWorking(true); setErr(""); setMsg("");
     try {
       await unsubscribePush();
       setMsg(t("push.disabled_msg", "Известията са спрени."));
       await refresh();
     } catch (e) {
       setErr(e.message || String(e));
-    } finally {
-      setWorking(false);
-    }
+    } finally { setWorking(false); }
   };
 
   const test = async () => {
-    setWorking(true);
-    setErr("");
-    setMsg("");
+    setWorking(true); setErr(""); setMsg("");
     try {
       await sendTestPush();
       setMsg(t("push.test_sent", "Тестовото известие е изпратено. Проверете телефона/браузъра си."));
     } catch (e) {
       setErr(e.message || String(e));
-    } finally {
-      setWorking(false);
-    }
+    } finally { setWorking(false); }
   };
+
+  const togglesDisabled = status !== "subscribed";
 
   return (
     <section
       className="rounded-card border border-[hsl(var(--line))] p-5 sm:p-6 bg-[hsl(var(--surface))]"
       data-testid="push-settings"
     >
-      <header className="flex items-start gap-3 mb-4">
+      <header className="flex items-start gap-3 mb-3">
         <div className="w-10 h-10 rounded-full bg-[hsl(var(--accent-soft))] text-[hsl(var(--accent))] flex items-center justify-center">
           <Bell size={18} />
         </div>
@@ -113,11 +100,20 @@ export default function PushSettings() {
         </div>
       </header>
 
-      <ul className="text-sm text-[hsl(var(--ink-muted))] space-y-1.5 mb-5 list-disc pl-5">
-        <li>{t("push.bullet_outbid", "Надминати сте от друг купувач")}</li>
-        <li>{t("push.bullet_seller", "Ваш автомобил получи наддаване")}</li>
-        <li>{t("push.bullet_saved", "Нова обява съответства на запазено търсене")}</li>
-      </ul>
+      {/* iOS PWA install instruction is shown for everyone (always relevant
+          for our iOS users), in addition to the explicit error state below. */}
+      <div
+        className="flex items-start gap-2 text-xs text-[hsl(var(--ink-muted))] bg-[hsl(var(--bg))] border border-[hsl(var(--line))] rounded-lg p-3 mb-4"
+        data-testid="push-ios-tip"
+      >
+        <Smartphone size={14} className="shrink-0 mt-0.5" />
+        <p>
+          {t(
+            "push.ios_install_tip",
+            "На iPhone/iPad: за да получавате push известия, отворете сайта в Safari → бутона „Сподели“ → „Add to Home Screen“. След това отворете приложението от началния екран и активирайте известията тук."
+          )}
+        </p>
+      </div>
 
       {status === "loading" && (
         <p className="text-sm text-[hsl(var(--ink-muted))]">…</p>
@@ -141,7 +137,7 @@ export default function PushSettings() {
           <p>
             {t(
               "push.ios_install",
-              'На iPhone/iPad: натиснете бутона "Сподели" в Safari → "Add to Home Screen". След това отворете приложението от началния екран и включете известията тук.'
+              'На iPhone/iPad: натиснете бутона „Сподели" в Safari → „Add to Home Screen". След това отворете приложението от началния екран и включете известията тук.'
             )}
           </p>
         </div>
@@ -173,21 +169,11 @@ export default function PushSettings() {
 
       {status === "subscribed" && (
         <div className="flex flex-wrap gap-2">
-          <button
-            onClick={disable}
-            disabled={working}
-            className="btn btn-secondary"
-            data-testid="push-disable-btn"
-          >
+          <button onClick={disable} disabled={working} className="btn btn-secondary" data-testid="push-disable-btn">
             <BellOff size={16} className="mr-2" />
             {t("push.disable", "Спри известията")}
           </button>
-          <button
-            onClick={test}
-            disabled={working}
-            className="btn btn-secondary"
-            data-testid="push-test-btn"
-          >
+          <button onClick={test} disabled={working} className="btn btn-secondary" data-testid="push-test-btn">
             {t("push.send_test", "Изпрати тест")}
           </button>
         </div>
@@ -195,6 +181,19 @@ export default function PushSettings() {
 
       {msg && <p className="text-sm text-[hsl(var(--accent))] mt-3" data-testid="push-msg">{msg}</p>}
       {err && <p className="text-sm text-[hsl(var(--danger))] mt-3" data-testid="push-err">{err}</p>}
+
+      {/* Per-event toggles */}
+      <div className="mt-5 pt-5 border-t border-[hsl(var(--line))]">
+        <p className="text-xs uppercase tracking-wider text-[hsl(var(--ink-muted))] mb-1">
+          {t("notif_prefs.section", "Какво да получавате")}
+        </p>
+        <NotificationToggles channel="push" disabled={togglesDisabled} />
+        {togglesDisabled && status !== "loading" && (
+          <p className="text-xs text-[hsl(var(--ink-muted))] mt-2" data-testid="push-toggles-hint">
+            {t("notif_prefs.push_hint", "Първо включете push известията по-горе, за да можете да настроите кои събития да получавате.")}
+          </p>
+        )}
+      </div>
     </section>
   );
 }
