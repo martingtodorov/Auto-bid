@@ -1347,3 +1347,53 @@ identical to every other card on the site.
   2017 / 95 000 км / Petrol / Sofia, Bulgaria / 5000 € / 0 bids / No
   reserve.
 
+
+---
+
+## 2026-05-02 (iter 17) — Copy + bid steps + hero size + sticky polish
+
+### 1. "Подай наддаване" → "Наддавай"
+`i18n/locales/bg.json` → `auction.place_bid` updated.
+
+### 2. Bid steps halved across ALL brackets
+`backend/helpers.py` `bid_step()` + `frontend/pages/AuctionDetailPage.jsx`
+`bidStepFor()`:
+| current bid | old step | new step |
+|---|---|---|
+| €0-1k | €50 | **€25** |
+| 1k-5k | 100 | **50** |
+| 5k-10k | 250 | **125** |
+| 10k-25k | 500 | **250** |
+| 25k-50k | 750 | **400** |
+| 50k-100k | 1000 | **500** |
+| 100k-200k | 2000 | **1000** |
+| 200k-500k | 5000 | **2500** |
+| 500k-1M | 10000 | **5000** |
+| 1M+ | 25000 | **10000** |
+
+Verified backend: `bid_step(500)=25, bid_step(2000)=50, bid_step(7000)=125, …`
+Verified frontend: bid input `min=5125, step=125` for 5000€ auction.
+
+### 3. Desktop hero shrunk
+`LandingPage.jsx`: `lg:col-span-6/6` → `lg:col-span-7` (copy) + `lg:col-span-5`
+(hero) with `lg:justify-self-end lg:max-w-[420px]`. Result at 1440: hero card
+= 420×577 (was ≈720 wide). Standard auction-card footprint on desktop.
+
+### 4. Mobile sticky header redesigned
+`AuctionDetailPage.jsx` sticky block:
+- Font sizes bumped: title `15px → 17px`, meta row `11px → 13px`, bid `→15px`.
+- **Current bid bolded and moved to leftmost slot** of the meta row
+  (`font-mono font-bold tabular-nums text-[15px] text-ink`).
+- Comments counter removed; replaced with **bid counter** `<Gavel /> {bid_count}`
+  (`data-testid="sticky-bid-count"`).
+- Watch button upgraded to 40×40 (was 36×36), CTA button padding ++, icons ++.
+- All `data-testid`s preserved (`sticky-title`, `sticky-bid`, `sticky-time`,
+  `sticky-bid-count`, `sticky-watch-button`, `sticky-bid-button`).
+
+### Verified
+- Desktop hero 420×577 at 1440 viewport.
+- Mobile sticky fields populate correctly; comments element no longer exists
+  in DOM (verified via `document.querySelector` returning null).
+- Bid step `500€ → min €5,125, step €125` (0→1000 bracket is €25, 1k-5k €50,
+  5k-10k €125 ✓).
+

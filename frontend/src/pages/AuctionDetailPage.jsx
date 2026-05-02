@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { Calendar, Gauge, Fuel, Settings, MapPin, Palette, Zap, Cog, MessageCircle, Heart, ArrowLeft, Shield, Wifi, Share2, Languages } from "lucide-react";
+import { Calendar, Gauge, Fuel, Settings, MapPin, Palette, Zap, Cog, MessageCircle, Heart, ArrowLeft, Shield, Wifi, Share2, Languages, Gavel } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, API_BASE, formatEUR, formatLocal, formatKM, timeLeft, formatTimeLeft, intlLocale } from "../lib/apiClient";
 import { translateEnum } from "../lib/carTranslations";
@@ -50,19 +50,19 @@ export default function AuctionDetailPage() {
   // Client-side buyer fee for preview (mirrors backend _buyer_fee)
   const buyerFeeFor = (amount) => computeBuyerFee(amount, settings);
 
-  // Variable bid step (mirrors backend _bid_step)
+  // Variable bid step (mirrors backend _bid_step — halved brackets)
   const bidStepFor = (price) => {
     const p = Number(price) || 0;
-    if (p < 1000) return 50;
-    if (p < 5000) return 100;
-    if (p < 10000) return 250;
-    if (p < 25000) return 500;
-    if (p < 50000) return 750;
-    if (p < 100000) return 1000;
-    if (p < 200000) return 2000;
-    if (p < 500000) return 5000;
-    if (p < 1000000) return 10000;
-    return 25000;
+    if (p < 1000) return 25;
+    if (p < 5000) return 50;
+    if (p < 10000) return 125;
+    if (p < 25000) return 250;
+    if (p < 50000) return 400;
+    if (p < 100000) return 500;
+    if (p < 200000) return 1000;
+    if (p < 500000) return 2500;
+    if (p < 1000000) return 5000;
+    return 10000;
   };
 
   const load = useCallback(async () => {
@@ -453,22 +453,39 @@ export default function AuctionDetailPage() {
         >
           <div className="bg-[hsl(var(--bg))]/95 backdrop-blur-md border-b border-[hsl(var(--line))] shadow-lg">
             <div className="px-3 py-2.5">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
+                {/*
+                  Left: bold current bid + meta row (time + bid count).
+                  Title sits above on its own line, larger, so it remains
+                  readable during fast scroll. Bold price leads the eye.
+                */}
                 <div className="flex-1 min-w-0">
-                  <div className="font-serif text-[15px] leading-tight truncate text-[hsl(var(--ink))]" data-testid="sticky-title">
+                  <div
+                    className="font-serif text-[17px] leading-tight truncate text-[hsl(var(--ink))]"
+                    data-testid="sticky-title"
+                  >
                     {a.title}
                   </div>
-                  <div className="mt-0.5 flex items-center gap-2 text-[11px] text-[hsl(var(--ink-muted))]">
-                    <span className="font-mono tabular-nums whitespace-nowrap" data-testid="sticky-time">
-                      {tl.label || "—"}
-                    </span>
-                    <span className="text-[hsl(var(--line))]">·</span>
-                    <span className="font-mono whitespace-nowrap text-[hsl(var(--ink))]" data-testid="sticky-bid">
+                  <div className="mt-1 flex items-center gap-2.5 text-[13px] text-[hsl(var(--ink-muted))]">
+                    <span
+                      className="font-mono font-bold tabular-nums whitespace-nowrap text-[15px] text-[hsl(var(--ink))]"
+                      data-testid="sticky-bid"
+                    >
                       {formatEUR(vatRate > 0 ? currentBidGross : a.current_bid_eur)}
                     </span>
                     <span className="text-[hsl(var(--line))]">·</span>
-                    <span className="flex items-center gap-0.5 whitespace-nowrap" data-testid="sticky-comments">
-                      <MessageCircle size={11} /> {comments.length}
+                    <span
+                      className="font-mono tabular-nums whitespace-nowrap"
+                      data-testid="sticky-time"
+                    >
+                      {tl.label || "—"}
+                    </span>
+                    <span className="text-[hsl(var(--line))]">·</span>
+                    <span
+                      className="flex items-center gap-1 whitespace-nowrap"
+                      data-testid="sticky-bid-count"
+                    >
+                      <Gavel size={12} /> {a.bid_count || 0}
                     </span>
                   </div>
                 </div>
@@ -476,14 +493,14 @@ export default function AuctionDetailPage() {
                   type="button"
                   onClick={toggleWatch}
                   aria-label={watching ? t("auction.watchlist_remove") : t("auction.watchlist_add")}
-                  className={`shrink-0 h-9 w-9 rounded-full border flex items-center justify-center transition ${
+                  className={`shrink-0 h-10 w-10 rounded-full border flex items-center justify-center transition ${
                     watching
                       ? "border-[hsl(var(--accent))] text-[hsl(var(--accent))]"
                       : "border-[hsl(var(--line))] text-[hsl(var(--ink-muted))]"
                   }`}
                   data-testid="sticky-watch-button"
                 >
-                  <Heart size={16} className={watching ? "fill-current" : ""} />
+                  <Heart size={18} className={watching ? "fill-current" : ""} />
                 </button>
                 {isLive ? (
                   <button
@@ -498,13 +515,13 @@ export default function AuctionDetailPage() {
                         }, 400);
                       }
                     }}
-                    className="shrink-0 btn btn-accent !px-4 !py-2 !text-sm"
+                    className="shrink-0 btn btn-accent !px-5 !py-2.5 !text-sm"
                     data-testid="sticky-bid-button"
                   >
-                    {t("auction.bid_word", "Наддавай")}
+                    {t("auction.place_bid", "Наддавай")}
                   </button>
                 ) : (
-                  <span className="shrink-0 text-[11px] uppercase tracking-wider text-[hsl(var(--ink-muted))] px-2">
+                  <span className="shrink-0 text-[12px] uppercase tracking-wider text-[hsl(var(--ink-muted))] px-2">
                     {a.status === "sold" ? t("auction.sold", "Продаден") : t("auction.ended", "Завършил")}
                   </span>
                 )}

@@ -9,21 +9,22 @@ from datetime import datetime, timezone
 # ---------- Bid increments (BaT-style) ----------
 def bid_step(current_price: float) -> float:
     """Variable bid increment based on current bid price.
-    €0-1k → €50; 1k-5k → €100; 5k-10k → €250; 10k-25k → €500; 25k-50k → €750;
-    50k-100k → €1,000; 100k-200k → €2,000; 200k-500k → €5,000;
-    500k-1M → €10,000; above €1M → €25,000.
+    Halved brackets compared to BaT:
+    €0-1k → €25; 1k-5k → €50; 5k-10k → €125; 10k-25k → €250; 25k-50k → €400;
+    50k-100k → €500; 100k-200k → €1,000; 200k-500k → €2,500;
+    500k-1M → €5,000; above €1M → €10,000.
     """
     p = float(current_price or 0)
-    if p < 1000:     return 50.0
-    if p < 5000:     return 100.0
-    if p < 10000:    return 250.0
-    if p < 25000:    return 500.0
-    if p < 50000:    return 750.0
-    if p < 100000:   return 1000.0
-    if p < 200000:   return 2000.0
-    if p < 500000:   return 5000.0
-    if p < 1000000:  return 10000.0
-    return 25000.0
+    if p < 1000:     return 25.0
+    if p < 5000:     return 50.0
+    if p < 10000:    return 125.0
+    if p < 25000:    return 250.0
+    if p < 50000:    return 400.0
+    if p < 100000:   return 500.0
+    if p < 200000:   return 1000.0
+    if p < 500000:   return 2500.0
+    if p < 1000000:  return 5000.0
+    return 10000.0
 
 
 def buyer_fee(amount_eur: float, pct: float, fmin: float, fmax: float) -> float:

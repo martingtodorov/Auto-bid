@@ -101,7 +101,7 @@ export default function LandingPage() {
       <section className="rule-b hero-ambient">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-3">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-12 items-center">
-            <div className="lg:col-span-6 fade-up">
+            <div className="lg:col-span-7 fade-up">
               {cmsHeadline ? (
                 <h1
                   className="hero-headline text-5xl sm:text-6xl lg:text-[60px] lg:leading-[1.05] mt-0"
@@ -133,7 +133,7 @@ export default function LandingPage() {
               </div>
             </div>
 
-            <div className="lg:col-span-6 fade-up">
+            <div className="lg:col-span-5 fade-up lg:justify-self-end w-full lg:max-w-[420px]">
               {hero ? (
                 <div data-testid="hero-featured-auction" className="relative">
                   <div className="overline text-[hsl(var(--accent))] mb-2">{t("hero.featured_listing")}</div>
