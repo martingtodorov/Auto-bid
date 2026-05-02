@@ -387,13 +387,15 @@ def _public_auction(a: dict, viewer: Optional[dict] = None, *, unmask_vin: bool 
 # what `AuctionCard.jsx` actually renders. Cuts typical payloads from
 # ~19 KB → ~1.5 KB per auction (92% reduction).
 _LIST_KEEP = {
-    "id", "title", "make", "model", "year", "mileage_km", "fuel", "transmission",
-    "body_type", "color", "region", "city",
-    "starting_bid_eur", "current_bid_eur", "buy_now_eur", "reserve_eur",
-    "reserve_met", "bid_count", "ends_at", "starts_at", "status",
-    "is_featured", "sold_via_buy_now", "seller_is_dealer",
+    "id", "slug",
+    "title", "make", "model", "year", "mileage_km", "fuel", "transmission",
+    "body_type", "color", "region", "city", "country",
+    "starting_bid_eur", "current_bid_eur", "buy_now_eur",
+    "reserve_met", "has_reserve", "no_reserve",
+    "bid_count", "ends_at", "starts_at", "status",
+    "featured", "is_archived",
+    "seller_is_verified_dealer",
     "vat_status", "vat_rate_pct",
-    "slug",
 }
 
 
@@ -601,9 +603,18 @@ async def sold(
     raw = await cursor.to_list(limit)
     items = [_public_auction(a, viewer) for a in raw]
     await _enrich_dealer_status(items)
+    use_list_shape = (view == "list")
+    # Public sold listings are long-lived and identical for everybody. Cache
+    # aggressively at the edge — 5 minutes shared, 10 minutes stale-while-
+    # revalidate. Saves a lot of MongoDB work on the /sales page.
+    response.headers["Cache-Control"] = "public, max-age=60, s-maxage=300, stale-while-revalidate=600"
     # Backwards-compat: return plain list when no pagination requested (offset=0 & small query)
     if offset == 0 and not any([make, body_type, fuel, year_min, year_max, price_min, price_max, q]) and sort == "recent" and limit == 48:
+        if use_list_shape:
+            items = [_list_shape(a) for a in items]
         return items
+    if use_list_shape:
+        items = [_list_shape(a) for a in items]
     return {"items": items, "total": total, "offset": offset, "limit": limit}
 
 

@@ -21,7 +21,7 @@ export default function LiveTicker() {
   useEffect(() => {
     const load = async () => {
       try {
-        const { data } = await api.get("/auctions/featured");
+        const { data } = await api.get("/auctions/featured", { params: { view: "list" } });
         setItems(Array.isArray(data) ? data : []);
       } catch (e) {}
     };

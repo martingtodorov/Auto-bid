@@ -67,6 +67,7 @@ export default function AuctionsPage() {
     params.paginated = 1;
     params.limit = PAGE_SIZE;
     params.offset = (page - 1) * PAGE_SIZE;
+    params.view = "list";
     const { data } = await api.get("/auctions", { params });
     setItems(data?.items || []);
     setTotal(data?.total || 0);

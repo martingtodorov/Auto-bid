@@ -44,9 +44,9 @@ export function landingCacheIsFresh(entry) {
  */
 export async function fetchLandingData() {
   const [l, f, s] = await Promise.all([
-    api.get("/auctions", { params: { sort: "ending_soon", status: "live", limit: 6 } }),
-    api.get("/auctions/featured"),
-    api.get("/auctions/sold"),
+    api.get("/auctions", { params: { sort: "ending_soon", status: "live", limit: 6, view: "list" } }),
+    api.get("/auctions/featured", { params: { view: "list" } }),
+    api.get("/auctions/sold", { params: { view: "list" } }),
   ]);
   const payload = { live: l.data || [], featured: f.data || [], sold: s.data || [] };
   writeLandingCache(payload);

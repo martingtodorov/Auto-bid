@@ -67,7 +67,7 @@ export default function SalesPage() {
   // List (filtered)
   useEffect(() => {
     setLoading(true);
-    const params = { limit: LIMIT, offset, sort };
+    const params = { limit: LIMIT, offset, sort, view: "list" };
     Object.entries(filters).forEach(([k, v]) => { if (v !== "" && v !== null) params[k] = v; });
     api.get("/auctions/sold", { params })
       .then((r) => {
