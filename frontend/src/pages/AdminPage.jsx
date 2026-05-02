@@ -356,7 +356,7 @@ export default function AdminPage() {
                     <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-0">
                       <div className="aspect-[4/3] md:aspect-auto bg-[hsl(var(--surface))]">
                         {a.images?.[0] ? (
-                          <img src={a.images[0]} alt={a.title} className="w-full h-full object-cover" />
+                          <img src={a.thumbnails?.[0] || a.images[0]} alt={a.title} className="w-full h-full object-cover" loading="lazy" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-[hsl(var(--ink-muted))] text-xs">Без снимка</div>
                         )}
@@ -459,7 +459,7 @@ export default function AdminPage() {
                 {allListings.map((a) => (
                   <div key={a.id} className="grid grid-cols-1 md:grid-cols-[1.8fr_0.7fr_0.9fr_0.7fr_1.3fr] gap-3 items-center p-4 rule-b last:border-b-0" data-testid={`listing-row-${a.id}`}>
                     <div className="flex items-center gap-3 min-w-0">
-                      {a.images?.[0] ? <img src={a.images[0]} className="w-14 h-10 object-cover rounded-md shrink-0" alt="" /> : <div className="w-14 h-10 bg-[hsl(var(--surface))] rounded-md shrink-0" />}
+                      {a.images?.[0] ? <img src={a.thumbnails?.[0] || a.images[0]} className="w-14 h-10 object-cover rounded-md shrink-0" alt="" loading="lazy" /> : <div className="w-14 h-10 bg-[hsl(var(--surface))] rounded-md shrink-0" />}
                       <div className="min-w-0">
                         <div className="font-semibold text-sm truncate">{a.title}</div>
                         <div className="text-xs text-[hsl(var(--ink-muted))]">{a.make} · {a.year} · {a.city}</div>
@@ -616,7 +616,7 @@ export default function AdminPage() {
                   return (
                     <div key={a.id} className="grid grid-cols-1 md:grid-cols-[1.6fr_1fr_0.9fr_0.8fr_1.2fr] gap-4 items-center p-5 rule-b last:border-b-0" data-testid={`sold-${a.id}`}>
                       <div className="flex items-center gap-3 min-w-0">
-                        {a.images?.[0] && <img src={a.images[0]} className="w-14 h-10 object-cover rounded-md shrink-0" alt="" />}
+                        {a.images?.[0] && <img src={a.thumbnails?.[0] || a.images[0]} className="w-14 h-10 object-cover rounded-md shrink-0" alt="" loading="lazy" />}
                         <div className="min-w-0">
                           <div className="font-semibold text-sm truncate">{a.title}</div>
                           <div className="text-xs text-[hsl(var(--ink-muted))]">{a.make} · {a.year}</div>

@@ -153,7 +153,7 @@ export default function AdminUnsoldTab() {
             >
               <div className="flex items-center gap-3 min-w-0">
                 {a.images?.[0] ? (
-                  <img src={a.images[0]} className="w-14 h-10 object-cover rounded-md shrink-0" alt="" />
+                  <img src={a.thumbnails?.[0] || a.images[0]} className="w-14 h-10 object-cover rounded-md shrink-0" alt="" loading="lazy" />
                 ) : (
                   <div className="w-14 h-10 bg-[hsl(var(--surface))] rounded-md shrink-0" />
                 )}

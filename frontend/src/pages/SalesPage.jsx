@@ -128,7 +128,19 @@ export default function SalesPage() {
                 >
                   <div className="w-24 h-16 overflow-hidden rounded-card shrink-0 bg-[hsl(var(--surface))]">
                     {stats.highest_sale.images?.[0] && (
-                      <img src={stats.highest_sale.images[0]} alt={stats.highest_sale.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                      <img
+                        src={stats.highest_sale.thumbnails?.[0] || stats.highest_sale.images[0]}
+                        srcSet={
+                          stats.highest_sale.thumbnails?.[0] && stats.highest_sale.images?.[0]
+                            ? `${stats.highest_sale.thumbnails[0]} 400w, ${stats.highest_sale.images[0]} 1600w`
+                            : undefined
+                        }
+                        sizes="(min-width: 1024px) 540px, 100vw"
+                        alt={stats.highest_sale.title}
+                        loading="lazy"
+                        decoding="async"
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">

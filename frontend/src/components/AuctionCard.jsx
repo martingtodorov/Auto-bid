@@ -27,7 +27,18 @@ export default function AuctionCard({ auction, compact = false }) {
       data-testid={`auction-card-${auction.id}`}
     >
       <div className="card-img aspect-[4/3] bg-[hsl(var(--surface))]">
-        <img src={auction.images?.[0]} alt={auction.title} loading="lazy" />
+        <img
+          src={auction.thumbnails?.[0] || auction.images?.[0]}
+          srcSet={
+            auction.thumbnails?.[0] && auction.images?.[0]
+              ? `${auction.thumbnails[0]} 400w, ${auction.images[0]} 1600w`
+              : undefined
+          }
+          sizes="(min-width: 1024px) 380px, (min-width: 640px) 50vw, 100vw"
+          alt={auction.title}
+          loading="lazy"
+          decoding="async"
+        />
         <div className="absolute top-3 left-3 flex gap-2 flex-wrap max-w-[calc(100%-1.5rem)]">
           {isSold ? (
             <span className="pill pill-sold">{t("my_listings.status.sold")}</span>

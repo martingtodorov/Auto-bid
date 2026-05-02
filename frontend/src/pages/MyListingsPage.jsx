@@ -137,7 +137,7 @@ export default function MyListingsPage() {
                 <div key={a.id} className="rounded-card border border-[hsl(var(--line))] overflow-hidden bg-white" data-testid={`listing-${a.id}`}>
                   <div className="grid grid-cols-1 md:grid-cols-[180px_1fr_auto] gap-0">
                     <div className="aspect-[4/3] md:aspect-auto md:min-h-[160px] bg-[hsl(var(--surface))]">
-                      {a.images?.[0] ? <img src={a.images[0]} alt={a.title} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-[hsl(var(--ink-muted))] text-xs">Без снимка</div>}
+                      {a.images?.[0] ? <img src={a.thumbnails?.[0] || a.images[0]} alt={a.title} className="w-full h-full object-cover" loading="lazy" /> : <div className="w-full h-full flex items-center justify-center text-[hsl(var(--ink-muted))] text-xs">Без снимка</div>}
                     </div>
                     <div className="p-5">
                       <div className="flex items-center gap-2 flex-wrap">
