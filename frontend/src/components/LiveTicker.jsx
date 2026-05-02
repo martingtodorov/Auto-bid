@@ -41,7 +41,7 @@ export default function LiveTicker() {
             {loop.map((a, i) => (
               <Link
                 key={i}
-                to={`/auctions/${a.id}`}
+                to={auctionUrl(a)}
                 className="flex items-center gap-3 text-xs font-mono text-white/80 hover:text-white transition shrink-0 pr-10"
                 data-testid={`ticker-item-${i}`}
               >

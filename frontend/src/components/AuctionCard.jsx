@@ -22,7 +22,7 @@ export default function AuctionCard({ auction, compact = false }) {
 
   return (
     <Link
-      to={`/auctions/${auction.id}`}
+      to={auctionUrl(auction)}
       className="card-editorial block group"
       data-testid={`auction-card-${auction.id}`}
     >

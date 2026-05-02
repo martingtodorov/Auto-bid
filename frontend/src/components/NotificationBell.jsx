@@ -82,7 +82,7 @@ export default function NotificationBell() {
     }
     closePanel();
     if (n.link) navigate(n.link);
-    else if (n.auction_id) navigate(`/auctions/${n.auction_id}`);
+    else if (n.auction_id) navigate(auctionUrl({ id: n.auction_id, title: n.auction_title }));
     refreshCount();
   };
 

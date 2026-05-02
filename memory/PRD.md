@@ -1603,3 +1603,30 @@ push notifications (they have a different aspect-aware silhouette).
 
 Frontend restarted — `curl /` confirms the new tags are served.
 
+
+---
+
+## 2026-05-02 (iter 23) — Слуг URL fix for 3 missed call-sites
+
+User reported raw-UUID URL: `/auctions/fab36414-...` — slugs were
+built but not consumed by every link builder. `auctionUrl()` existed;
+three call-sites bypassed it:
+
+- `components/AuctionCard.jsx:25` — **main card link** (most visible)
+- `components/LiveTicker.jsx:44` — marquee ticker
+- `components/NotificationBell.jsx:85` — notification navigate()
+
+All three now call `auctionUrl(a)` or
+`auctionUrl({ id, title: auction_title })`. Smoke test on preview:
+
+| source | URL |
+|---|---|
+| card | `/auctions/bmw-m240i-xdrive-m-performance-ff615975` |
+| card | `/auctions/bmw-m2-club-sport-spec-n55-2017-5a476c7a` |
+| card | `/auctions/mercedes-benz-c-43-amg-4matic-9g-37bd9fa1` |
+| ticker | (same — all slug form) |
+
+Login-redirect URLs (`/login?next=/auctions/{id}`) intentionally keep
+the UUID — the slug middleware on backend rewrites to canonical UUID
+regardless of which form arrives.
+
