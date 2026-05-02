@@ -1031,3 +1031,52 @@ Four enforcement layers:
 - P3: Cloudflare Turnstile CAPTCHA на регистрация.
 - P4: WebAuthn / Passkeys.
 - Refactor: split `server.py` (4 200+ LOC) into `routers/`.
+
+---
+
+## 2026-05-02 — API payload optimization (view=list)
+
+### Goal
+Shrink the JSON payload of the three public list endpoints so homepage +
+/auctions + /sales load dramatically faster. Typical auction document
+carried ~19 KB each (full descriptions, 4 image arrays, specs, seller
+info, contact fields). List cards only need ~30 fields + cover image.
+
+### What changed
+
+**Backend — `/app/backend/server.py`**
+- Added `_LIST_KEEP` whitelist (30 fields) + `_list_shape()` helper that
+  projects a public auction dict down to the minimum needed by
+  `AuctionCard.jsx`. Images + thumbnails are sliced to the cover only.
+- `GET /api/auctions?view=list` — returns trimmed items (both array and
+  paginated shapes).
+- `GET /api/auctions/featured?view=list` — returns trimmed array.
+  Cache-Control: `public, max-age=30, s-maxage=60, stale-while-revalidate=120`
+- `GET /api/auctions/sold?view=list` — returns trimmed array (or
+  `{items,total,...}` when paginated). Cache-Control:
+  `public, max-age=60, s-maxage=300, stale-while-revalidate=600`.
+- `_LIST_KEEP` contains the **actual** field names emitted by
+  `_public_auction()`: `featured` (not `is_featured`),
+  `seller_is_verified_dealer` (not `seller_is_dealer`), `has_reserve`,
+  `country`, `no_reserve`.
+
+**Frontend — callers pass `view=list`**
+- `lib/landingCache.js` — three homepage fetches.
+- `pages/AuctionsPage.jsx` — main listing (paginated).
+- `pages/SalesPage.jsx` — sold listing.
+- `components/LiveTicker.jsx` — featured ticker.
+
+### Verified
+- Backend tests: `/app/backend/tests/test_payload_optimization.py` — 14/14
+  green (trimmed / excluded fields, pagination, Cache-Control headers on
+  localhost:8001).
+- Payload reduction: **~93%** (37 KB → 2.5 KB for 5 auctions).
+- Frontend: homepage (6 cards + LiveTicker + featured + sold), /auctions
+  and /sales all render correctly with the trimmed payload (cards,
+  titles, prices with VAT, no-reserve/featured/verified-dealer badges).
+- Backwards-compat: legacy callers without `view=list` still get the full
+  payload — zero breaking changes to `AuctionDetailPage`, admin rails,
+  etc.
+- Cloudflare preview edge rewrites Cache-Control to `no-store` — expected;
+  production Nginx on Hetzner passes our headers intact.
+
