@@ -5,6 +5,7 @@ import { formatError } from "../lib/auth";
 import AdminBidHistoryModal from "./AdminBidHistoryModal";
 import AdminEditModal from "./AdminEditModal";
 import { auctionUrl } from "../lib/auctionUrl";
+import { grossEUR } from "../lib/vat";
 
 const STATUS_LABELS = {
   ended: "Приключил без продажба",
@@ -169,7 +170,7 @@ export default function AdminUnsoldTab() {
                   {STATUS_LABELS[a.status] || a.status}
                 </span>
               </div>
-              <div className="font-serif text-base">{formatEUR(a.current_bid_eur || 0)}</div>
+              <div className="font-serif text-base">{formatEUR(grossEUR(a.current_bid_eur || 0, a))}</div>
               <div className="text-xs min-w-0">
                 {a.high_bidder_name ? (
                   <>

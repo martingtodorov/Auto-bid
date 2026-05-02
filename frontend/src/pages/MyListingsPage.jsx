@@ -4,6 +4,7 @@ import { Plus, Clock, CheckCircle2, XCircle, Gavel, Archive, AlertCircle, Edit3,
 import { useTranslation } from "react-i18next";
 import { useAuth, formatError } from "../lib/auth";
 import { api, formatEUR, timeLeft, formatTimeLeft } from "../lib/apiClient";
+import { grossEUR } from "../lib/vat";
 import SellerRequestModal from "../components/SellerRequestModal";
 import { auctionUrl } from "../lib/auctionUrl";
 
@@ -176,13 +177,13 @@ export default function MyListingsPage() {
                               <div className="overline text-[hsl(var(--accent))]">{t("auction.auction_ended_below_reserve")}</div>
                               <p className="mt-2 text-sm">
                                 {t("auction.auction_ended_below_reserve_hint", {
-                                  bid: formatEUR(a.current_bid_eur),
-                                  reserve: formatEUR(a.reserve_eur || 0),
+                                  bid: formatEUR(grossEUR(a.current_bid_eur, a)),
+                                  reserve: formatEUR(grossEUR(a.reserve_eur || 0, a)),
                                 })}
                               </p>
                               <div className="mt-3 flex flex-wrap gap-2">
                                 <button onClick={() => acceptHighBid(a.id)} className="btn btn-accent !py-2 !px-4 text-xs flex items-center gap-2" data-testid={`accept-high-${a.id}`}>
-                                  <CheckCircle2 size={13} /> {t("auction.accept_high_bid", { amount: formatEUR(a.current_bid_eur) })}
+                                  <CheckCircle2 size={13} /> {t("auction.accept_high_bid", { amount: formatEUR(grossEUR(a.current_bid_eur, a)) })}
                                 </button>
                                 <button onClick={() => setCounterFor(a.id)} className="btn btn-primary !py-2 !px-4 text-xs flex items-center gap-2" data-testid={`counter-${a.id}`}>
                                   <Gift size={13} /> {t("auction.counter_offer_cta")}
@@ -198,7 +199,7 @@ export default function MyListingsPage() {
                             </div>
                           )}
                           {counter === "pending" && (
-                            <p className="mt-3 text-xs text-[hsl(var(--ink-muted))]">{t("auction.pending_counter")} · {formatEUR(a.counter_offer_eur)}</p>
+                            <p className="mt-3 text-xs text-[hsl(var(--ink-muted))]">{t("auction.pending_counter")} · {formatEUR(grossEUR(a.counter_offer_eur, a))}</p>
                           )}
 
                           <div className="mt-4 flex gap-2 flex-wrap">
@@ -250,20 +251,20 @@ export default function MyListingsPage() {
                     <div className="p-5 md:border-l border-[hsl(var(--line))] flex flex-col justify-center items-start md:items-end gap-2 min-w-[200px]">
                       {a.status === "live" && (<>
                         <div className="overline text-[hsl(var(--ink-muted))]">Текуща</div>
-                        <div className="font-serif text-2xl">{formatEUR(a.current_bid_eur)}</div>
+                        <div className="font-serif text-2xl">{formatEUR(grossEUR(a.current_bid_eur, a))}</div>
                         <div className="text-xs text-[hsl(var(--ink-muted))]">{a.bid_count || 0} {t("time.bids_short")} · {tl ? formatTimeLeft(tl, t) : ""}</div>
                       </>)}
                       {a.status === "sold" && (<>
                         <div className="overline text-[hsl(var(--ink-muted))]">Продаден за</div>
-                        <div className="font-serif text-2xl">{formatEUR(a.current_bid_eur)}</div>
+                        <div className="font-serif text-2xl">{formatEUR(grossEUR(a.current_bid_eur, a))}</div>
                       </>)}
                       {(a.status === "pending" || a.status === "rejected" || a.status === "withdrawn") && (<>
                         <div className="overline text-[hsl(var(--ink-muted))]">Начална</div>
-                        <div className="font-serif text-2xl">{formatEUR(a.starting_bid_eur)}</div>
+                        <div className="font-serif text-2xl">{formatEUR(grossEUR(a.starting_bid_eur, a))}</div>
                       </>)}
                       {isRNM && (<>
                         <div className="overline text-[hsl(var(--ink-muted))]">Водеща оферта</div>
-                        <div className="font-serif text-2xl">{formatEUR(a.current_bid_eur)}</div>
+                        <div className="font-serif text-2xl">{formatEUR(grossEUR(a.current_bid_eur, a))}</div>
                       </>)}
                       {(a.status === "live" || a.status === "sold" || isRNM) && <Link to={auctionUrl(a)} className="btn btn-secondary !py-2 !px-4 mt-1">Виж обявата</Link>}
                     </div>

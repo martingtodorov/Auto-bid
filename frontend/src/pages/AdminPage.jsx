@@ -19,6 +19,7 @@ import AdminArchiveTab from "../components/AdminArchiveTab";
 import AdminUnsoldTab from "../components/AdminUnsoldTab";
 import AdminChatPanel from "../components/AdminChatPanel";
 import { auctionUrl } from "../lib/auctionUrl";
+import { grossEUR } from "../lib/vat";
 import AdminHealthTab from "../components/AdminHealthTab";
 
 const STATUS_LABELS = {
@@ -374,7 +375,7 @@ export default function AdminPage() {
                         <div className="mt-4 flex items-center justify-between">
                           <div>
                             <div className="overline text-[hsl(var(--ink-muted))]">Начална цена</div>
-                            <div className="font-serif text-xl">{formatEUR(a.starting_bid_eur)}</div>
+                            <div className="font-serif text-xl">{formatEUR(grossEUR(a.starting_bid_eur, a))}</div>
                           </div>
                           <div className="text-xs text-[hsl(var(--ink-muted))] font-mono">От {a.seller_name}</div>
                         </div>
@@ -468,7 +469,7 @@ export default function AdminPage() {
                     <div>
                       <span className={`pill text-xs ${a.status === "live" ? "pill-live" : ""}`} data-testid={`status-${a.id}`}>{STATUS_LABELS[a.status] || a.status}</span>
                     </div>
-                    <div className="font-serif text-base">{formatEUR(a.current_bid_eur || 0)}</div>
+                    <div className="font-serif text-base">{formatEUR(grossEUR(a.current_bid_eur || 0, a))}</div>
                     <div className="text-xs truncate">{a.seller_name || "—"}</div>
                     <div className="flex gap-2 flex-wrap justify-end md:justify-start">
                       <button onClick={() => setEditingId(a.id)} className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1" data-testid={`edit-${a.id}`}>
@@ -626,7 +627,7 @@ export default function AdminPage() {
                         <div>{a.winner_name || "—"}</div>
                         <div className="text-xs text-[hsl(var(--ink-muted))] font-mono truncate">{a.winner_email || "—"}</div>
                       </div>
-                      <div className="font-serif text-lg">{formatEUR(a.current_bid_eur)}</div>
+                      <div className="font-serif text-lg">{formatEUR(grossEUR(a.current_bid_eur, a))}</div>
                       <div>
                         <div className="font-serif text-lg">{formatEUR(commission)}</div>
                         <div className="text-[11px] text-[hsl(var(--ink-muted))] font-mono">

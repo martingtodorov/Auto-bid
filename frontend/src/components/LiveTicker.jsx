@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api, formatEUR } from "../lib/apiClient";
+import { grossEUR } from "../lib/vat";
 import { auctionUrl } from "../lib/auctionUrl";
 
 /** Top promoted-listings ticker.
@@ -45,7 +46,7 @@ export default function LiveTicker() {
                 data-testid={`ticker-item-${i}`}
               >
                 <span className="truncate max-w-[220px]">{a.title}</span>
-                <span className="font-semibold" style={{ color: "#6DE0B1" }}>{formatEUR(a.current_bid_eur)}</span>
+                <span className="font-semibold" style={{ color: "#6DE0B1" }}>{formatEUR(grossEUR(a.current_bid_eur, a))}</span>
                 <span className="text-white/30">·</span>
                 <span className="text-white/40">{a.bid_count || 0} {t("time.bids_short")}</span>
                 <span className="text-white/20 ml-3">|</span>
