@@ -156,6 +156,7 @@ export default function AdminSettingsTab() {
         favicon_url: form.favicon_url,
         maintenance_mode: !!form.maintenance_mode,
         maintenance_message: form.maintenance_message,
+        deindex_mode: !!form.deindex_mode,
         hero_headline_bg: form.hero_headline_bg,
         hero_subtitle_bg: form.hero_subtitle_bg,
         hero_headline_ro: form.hero_headline_ro,
@@ -421,13 +422,14 @@ export default function AdminSettingsTab() {
         <CmsMultiLangField key={f.key} field={f} form={form} set={set} />
       ))}
 
-      <div className="sticky bottom-4 flex justify-end gap-3 items-center">
-        {msg && <span className="text-sm text-[hsl(var(--accent))]" data-testid="settings-save-ok">{msg}</span>}
-        {err && <span className="text-sm text-[hsl(var(--danger))]" data-testid="settings-save-err">{err}</span>}
+      <div className="sticky bottom-4 z-20 flex justify-end gap-3 items-center pointer-events-none">
+        {msg && <span className="text-sm text-[hsl(var(--accent))] bg-white px-3 py-1 rounded-card shadow pointer-events-auto" data-testid="settings-save-ok">{msg}</span>}
+        {err && <span className="text-sm text-[hsl(var(--danger))] bg-white px-3 py-1 rounded-card shadow pointer-events-auto" data-testid="settings-save-err">{err}</span>}
         <button
+          type="button"
           onClick={save}
           disabled={saving}
-          className="btn btn-accent !px-8 shadow-lg"
+          className="btn btn-accent !px-8 shadow-lg pointer-events-auto"
           data-testid="admin-settings-save"
         >
           {saving ? "Запазване…" : "Запази промените"}
