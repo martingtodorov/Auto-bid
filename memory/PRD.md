@@ -1481,3 +1481,49 @@ all three locales:
 - Computed font sizes: `bid=18px, time=15px, count=15px`.
 - `/auctions/hero` still returns stable pair (30-min cache intact).
 
+
+---
+
+## 2026-05-02 (iter 20) — Zero-pixel sticky (fixed → sticky)
+
+### Bug (user report)
+"при скролване нагоре след зареждане на auctiondetailspage отново се
+бъгва header-ът. Оправи го. не искам да влиза въобще под menu header
+дори с един пиксел"
+
+### Root cause
+Nav uses `position: sticky; top: 0` inside the document flow — so when
+a banner sits above the nav (e.g. the `/auctions` marquee ticker), the
+nav is rendered at `y ≈ 37` at scroll-top and only snaps to `y=0`
+once the user scrolls past the banner. My sticky header was `position:
+fixed; top: 16` — that's 64 px from the **viewport**, irrespective of
+where nav actually is. Result: at scroll-top, nav occupied y=37-102
+while my `fixed` bar sat at y=64-144 → 38 px of overlap. On scroll up
+back to the top, the same overlap reappeared.
+
+### Fix
+Switched from `fixed top-16` to **`sticky top-[65px]`**:
+- `sticky` lives in the document flow, right below the nav.
+- When the user is at scroll-top, the sticky stays at its natural
+  position under the nav (no hard viewport offset).
+- When the user scrolls down, the sticky pins at exactly 65 px from
+  viewport top — right below the nav's 64 + 1 px border.
+- `65px` chosen instead of `64px` (`h-16`) because nav has a 1 px
+  border-bottom (`.rule-b`), making its visual height 65 px.
+- Removed the now-unneeded `pt-[88px]` on `<main>` — sticky reserves
+  its own space naturally.
+
+### Verified
+Scroll cycle `0 → 500 → 1500 → 0 → 300 → 0`:
+
+| scrollY | nav bottom | sticky top | overlap |
+|---|---|---|---|
+| 0 | 102 | 155 | **0.0 px** |
+| 500 | 65 | 65 | **0.0 px** |
+| 1500 | 65 | 65 | **0.0 px** |
+| 0 | 102 | 155 | **0.0 px** |
+| 300 | 65 | 65 | **0.0 px** |
+| 0 | 102 | 155 | **0.0 px** |
+
+Zero-pixel overlap at every scroll position, every direction.
+

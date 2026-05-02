@@ -419,18 +419,19 @@ export default function AuctionDetailPage() {
   };
 
   return (
-    <main className="rule-b pt-[88px] lg:pt-0" data-testid="auction-detail-page">
+    <main className="rule-b" data-testid="auction-detail-page">
       {/*
-        Mobile-only sticky header — always visible beneath the main nav
-        (64 px tall, z-50). We sit right below it at `top-16` with `z-40`
-        so the nav always wins z-ordering while we pin directly underneath.
-        The auction <h1> is hidden on mobile since the sticky already
-        renders the title. On lg+ the sidebar/h1 takes over and this bar
-        is `lg:hidden`.
+        Mobile-only sticky header — uses `sticky top-16` (NOT `fixed`) so
+        it lives in the document flow right below the main nav (64 px
+        tall, `sticky top-0 z-50`). The `sticky` positioning keeps it
+        correctly offset from the nav during the top-banner reveal /
+        iOS address-bar bounce — `fixed` was overlapping the nav by a
+        few pixels at scroll-top because the nav rides with the banner
+        above it before it actually sticks.
       */}
       {a && (
         <div
-          className="fixed inset-x-0 top-16 z-40 lg:hidden"
+          className="sticky top-[65px] z-40 lg:hidden"
           data-testid="mobile-sticky-header"
         >
           <div className="bg-[hsl(var(--bg))]/95 backdrop-blur-md border-b border-[hsl(var(--line))] shadow-lg">
