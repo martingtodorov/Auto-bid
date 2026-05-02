@@ -1186,3 +1186,57 @@ For a fresh, categorized 24-photo auction with 400 px thumbs:
 - Zero regressions on homepage, /auctions, /sales
 - Lightbox opens from hero, side thumb, "+N" overlay, and interior shot
 
+
+---
+
+## 2026-05-02 (iter 13) — Copy polish + i18n city import
+
+### Copy changes (BG landing benefits block — `landing.steps.*`)
+- `s1_desc`: "Преди първата наддавка" → **"Преди първото наддаване"**
+- `s2_desc`: премахнат "и независим технически доклад" → **"Пълен фото
+  отчет, сервизна история и VIN проверка."**
+- `s3_desc`: "последните 2 минути удължават търга" → **"наддаване в
+  последните 2 минути удължава търга"**
+- `s4_desc`: "регистрация и финализиране" → **"прехвърляне и
+  регистрация"**
+
+### City import — Cyrillic support
+- `backend/translate.py`:
+  - New `transliterate_city_to_latin(name)` — accepts Cyrillic, returns
+    Latin. Path: curated `_CITY_OVERRIDES` fast-dict (≈40 big BG cities,
+    no LLM call) → Gemini (if `GEMINI_API_KEY`) → Emergent universal key
+    → ISO-9 deterministic char-map fallback.
+  - New `country_from_host(host)` — `.bg` → Bulgaria, `.ro` → Romania,
+    `.com` → Bulgaria (default). Used so mobile.bg imports pre-fill the
+    country based on which tenant the user is on.
+- `backend/server.py` — `/auctions/import-mobile-bg` now:
+  - Transliterates the Cyrillic city before returning it.
+  - Adds a `country` field to the response based on request Host.
+- `frontend/src/pages/SellPage.jsx`:
+  - Dropped the client-side Latin-only regex + HTML `pattern` attr.
+  - New placeholder: `"Sofia, София, Bucharest, Plovdiv…"`.
+  - Import flow now consumes `data.country` and pre-fills the form.
+- `i18n/locales/{bg,en,ro}.json`: `sell.form.city_hint` updated to
+  "Приемаме и кирилица, и латиница." / "We accept both Latin and
+  Cyrillic script." / "Acceptăm atât alfabetul latin, cât și chirilic."
+
+### Mobile.bg image dedup fix
+Problem: mobile.bg galleries embed each photo twice (thumbnail + big).
+Old import accepted 7+ low-res dupes alongside the real high-res files.
+Fix in `/auctions/import-mobile-bg`:
+- `_canon(url)`: strip size folders (`/big/`, `/small/`, `/thumb/`, …),
+  strip size suffixes (`_big.jpg`, `_t.jpg`, …), strip numeric size
+  prefixes (`/8-name.jpg`), strip querystring → canonical photo key.
+- `_score(url)`: resolution score — `/big/` > standard > `/small/` /
+  `/thumb/`.
+- Keep the highest-scoring URL per canonical key, preserve first-seen
+  ordering.
+- Result: 9 URLs → 5 best-resolution URLs, no low-res leftovers.
+
+### Verified (iteration_13.json)
+- Backend: 44/44 pytest green
+- Frontend: 100%, BG locale shows the 4 updated phrases, EN/RO render
+  cleanly, SellPage no longer has `pattern` or regex restriction.
+- Unit: `transliterate_city_to_latin`, `country_from_host`, image dedup
+  helpers all verified.
+
