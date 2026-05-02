@@ -14,7 +14,7 @@ to what it was before granular toggles were introduced.
 """
 from __future__ import annotations
 
-NOTIF_KINDS = ("outbid", "seller_new_bid", "saved_search", "ending_soon", "reserve_met")
+NOTIF_KINDS = ("outbid", "seller_new_bid", "saved_search", "ending_soon", "reserve_met", "listing_approved")
 NOTIF_CHANNELS = ("push", "email")
 
 

@@ -105,6 +105,8 @@ def build_chat_router(db, get_current_user, require_admin_or_moderator, limiter=
                 body=f"{msg['sender_name']}: {body_clean[:120]}",
                 data={"thread_user_id": user["id"], "preview": body_clean[:120]},
                 link="/admin?tab=chat",
+                push_template_id="admin_chat_new_message",
+                push_fmt={"user": msg["sender_name"][:60], "preview": body_clean[:120]},
             )
         except Exception:
             pass

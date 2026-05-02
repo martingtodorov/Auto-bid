@@ -110,6 +110,18 @@ def register_routes():
         }
         await db.seller_requests.insert_one(doc)
         doc.pop("_id", None)
+        try:
+            from routers.inbox import notify_admins as _notify_admins
+            await _notify_admins(
+                db, type="promotion_request",
+                data={"seller": user.get("name", ""), "title": a.get("title", "")},
+                auction_id=auction_id,
+                link="/admin?tab=requests",
+                push_template_id="admin_promotion_request",
+                push_fmt={"seller": (user.get("name") or "Продавач")[:60], "title": (a.get("title") or "")[:80]},
+            )
+        except Exception:
+            pass
         await audit_log(
             db, actor_id=user["id"], actor_email=user.get("email", ""), actor_role=user.get("role", "user"),
             action="seller_request.create", target_type="auction", target_id=auction_id,
@@ -153,6 +165,18 @@ def register_routes():
         }
         await db.seller_requests.insert_one(doc)
         doc.pop("_id", None)
+        try:
+            from routers.inbox import notify_admins as _notify_admins
+            await _notify_admins(
+                db, type="text_change_request",
+                data={"seller": user.get("name", ""), "title": a.get("title", "")},
+                auction_id=auction_id,
+                link="/admin?tab=requests",
+                push_template_id="admin_text_change_request",
+                push_fmt={"seller": (user.get("name") or "Продавач")[:60], "title": (a.get("title") or "")[:80]},
+            )
+        except Exception:
+            pass
         await audit_log(
             db, actor_id=user["id"], actor_email=user.get("email", ""), actor_role=user.get("role", "user"),
             action="seller_request.create", target_type="auction", target_id=auction_id,

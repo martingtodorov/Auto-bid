@@ -924,6 +924,8 @@ async def create_auction(request: Request, payload: AuctionCreate, user: dict = 
             data={"seller": user.get("name", ""), "title": doc.get("title", "")},
             auction_id=auction_id,
             link="/admin?tab=pending",
+            push_template_id="admin_new_pending_listing",
+            push_fmt={"seller": user.get("name", "") or "Продавач", "title": doc.get("title", "")[:80]},
         )
     except Exception as e:
         logger.warning("notify_admins (pending) failed: %s", e)
@@ -1823,6 +1825,19 @@ async def buy_now(auction_id: str, request: Request, user: dict = Depends(requir
                 )
         except Exception as e:
             logger.warning("buy-now seller email failed: %s", e)
+    # Admin push (in-app + Web Push)
+    try:
+        from routers.inbox import notify_admins as _notify_admins
+        await _notify_admins(
+            db,
+            type="auction_buy_now",
+            data={"title": a.get("title", ""), "amount": bn, "buyer": user.get("name", "")},
+            auction_id=auction_id,
+            push_template_id="admin_auction_buy_now",
+            push_fmt={"title": (a.get("title") or "")[:80], "amount": int(bn)},
+        )
+    except Exception:
+        pass
     return {"ok": True, "auction_id": auction_id, "amount_eur": bn, "buyer_fee_eur": fee_amount}
 
 
@@ -2098,6 +2113,21 @@ async def admin_approve(auction_id: str, _admin: dict = Depends(require_admin)):
             await email_approved(seller["email"], seller.get("name", ""), a["title"], auction_id)
         except Exception as e:
             logger.error("email_approved failed: %s", e)
+    # In-app + push notification to seller (user can opt-out via notification_prefs.push.listing_approved)
+    try:
+        if a.get("seller_id") and a["seller_id"] != "platform":
+            from routers.inbox import notify_user as _notify_user
+            await _notify_user(
+                db, user_id=a["seller_id"],
+                type="listing_approved",
+                data={"title": a.get("title", "")},
+                auction_id=auction_id,
+                push_template_id="listing_approved",
+                push_fmt={"title": (a.get("title") or "")[:80]},
+                push_kind="listing_approved",
+            )
+    except Exception as e:
+        logger.warning("notify listing_approved failed: %s", e)
     # Notify users with matching saved searches
     try:
         fresh = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
@@ -3803,6 +3833,8 @@ async def _finalize_expired_auctions_once():
                     db, type="auction_no_bids",
                     data={"title": a.get("title", "")},
                     auction_id=auction_id,
+                    push_template_id="admin_auction_no_bids",
+                    push_fmt={"title": (a.get("title") or "")[:80]},
                 )
                 if a.get("seller_id") and a["seller_id"] != "platform":
                     await _notify_user(db, user_id=a["seller_id"],
@@ -3885,6 +3917,8 @@ async def _finalize_expired_auctions_once():
                 db,
                 type="auction_sold_above_reserve" if has_reserve else "auction_sold_no_reserve",
                 data=payload, auction_id=auction_id,
+                push_template_id="admin_auction_sold_above_reserve" if has_reserve else "admin_auction_sold_no_reserve",
+                push_fmt={"title": (a.get("title") or "")[:80], "bid": int(current_bid), "margin": int(margin) if has_reserve else 0},
             )
             if a.get("seller_id") and a["seller_id"] != "platform":
                 await _notify_user(db, user_id=a["seller_id"], type="auction_sold_seller",

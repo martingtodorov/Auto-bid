@@ -9,6 +9,7 @@ export const NOTIF_KINDS = [
   "saved_search",
   "ending_soon",
   "reserve_met",
+  "listing_approved",
 ];
 
 const DEFAULT_PREFS = {

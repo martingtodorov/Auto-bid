@@ -69,6 +69,63 @@ TEMPLATES: dict[str, dict[str, dict[str, str]]] = {
         "en": {"title": "Reserve met · {title}", "body": "Current bid (€{amount}) has met the reserve price."},
         "ro": {"title": "Prag atins · {title}", "body": "Oferta curentă (€{amount}) a atins prețul de rezervă."},
     },
+    # User — listing approved (opt-out via notification_prefs)
+    "listing_approved": {
+        "bg": {"title": "Обявата е одобрена · {title}", "body": "Вашата обява вече е активна и видима за участниците."},
+        "en": {"title": "Listing approved · {title}", "body": "Your listing is live and visible to bidders."},
+        "ro": {"title": "Anunț aprobat · {title}", "body": "Anunțul dvs. este activ și vizibil pentru ofertanți."},
+    },
+    # ── Admin-only templates (always sent, no opt-out) ─────────────────────
+    "admin_new_pending_listing": {
+        "bg": {"title": "Нова обява за одобрение", "body": "{seller} подаде „{title}“."},
+        "en": {"title": "New listing for approval", "body": "{seller} submitted \"{title}\"."},
+        "ro": {"title": "Anunț nou pentru aprobare", "body": "{seller} a trimis „{title}”."},
+    },
+    "admin_promotion_request": {
+        "bg": {"title": "Заявка за промотиране", "body": "{seller} моли за промоция на „{title}“."},
+        "en": {"title": "Promotion request", "body": "{seller} requested a promotion for \"{title}\"."},
+        "ro": {"title": "Cerere de promovare", "body": "{seller} a cerut promovare pentru „{title}”."},
+    },
+    "admin_text_change_request": {
+        "bg": {"title": "Заявка за промяна на текст", "body": "{seller}: „{title}“"},
+        "en": {"title": "Text-change request", "body": "{seller}: \"{title}\""},
+        "ro": {"title": "Cerere modificare text", "body": "{seller}: „{title}”"},
+    },
+    "admin_auction_no_bids": {
+        "bg": {"title": "Търг без наддавания", "body": "„{title}“ изтече без участници."},
+        "en": {"title": "Auction received no bids", "body": "\"{title}\" expired with no participants."},
+        "ro": {"title": "Licitație fără oferte", "body": "„{title}” a expirat fără ofertanți."},
+    },
+    "admin_auction_below_reserve": {
+        "bg": {"title": "Резерв не е достигнат", "body": "„{title}“ — оферта €{bid}, под резерв €{reserve}."},
+        "en": {"title": "Reserve not met", "body": "\"{title}\" — bid €{bid}, below reserve €{reserve}."},
+        "ro": {"title": "Prag neatins", "body": "„{title}” — ofertă €{bid}, sub rezervă €{reserve}."},
+    },
+    "admin_auction_sold_above_reserve": {
+        "bg": {"title": "Продажба над резерв", "body": "„{title}“ — €{bid} (+€{margin} над резерв)."},
+        "en": {"title": "Sold above reserve", "body": "\"{title}\" — €{bid} (+€{margin} above reserve)."},
+        "ro": {"title": "Vândut peste rezervă", "body": "„{title}” — €{bid} (+€{margin} peste rezervă)."},
+    },
+    "admin_auction_sold_no_reserve": {
+        "bg": {"title": "Продаден търг без резерв", "body": "„{title}“ — €{bid}."},
+        "en": {"title": "Sold — no reserve", "body": "\"{title}\" — €{bid}."},
+        "ro": {"title": "Vândut fără rezervă", "body": "„{title}” — €{bid}."},
+    },
+    "admin_auction_buy_now": {
+        "bg": {"title": "Обявата е купена с Купи сега", "body": "„{title}“ — €{amount}."},
+        "en": {"title": "Listing bought via Buy Now", "body": "\"{title}\" — €{amount}."},
+        "ro": {"title": "Cumpărat prin Buy Now", "body": "„{title}” — €{amount}."},
+    },
+    "admin_auction_sold_negotiated": {
+        "bg": {"title": "Продаден след преговори", "body": "„{title}“ — €{price}."},
+        "en": {"title": "Sold after negotiation", "body": "\"{title}\" — €{price}."},
+        "ro": {"title": "Vândut după negociere", "body": "„{title}” — €{price}."},
+    },
+    "admin_chat_new_message": {
+        "bg": {"title": "Ново съобщение · {user}", "body": "{preview}"},
+        "en": {"title": "New message · {user}", "body": "{preview}"},
+        "ro": {"title": "Mesaj nou · {user}", "body": "{preview}"},
+    },
 }
 
 

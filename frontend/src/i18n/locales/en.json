@@ -12,7 +12,8 @@
       "seller_new_bid": "New bid on one of your listings",
       "saved_search": "New listing matches a saved search",
       "ending_soon": "1 hour before end of a watched / actively bid auction",
-      "reserve_met": "Reserve price reached on your own listing"
+      "reserve_met": "Reserve price reached on your own listing",
+      "listing_approved": "Your listing was approved"
     }
   },
   "email_prefs": {

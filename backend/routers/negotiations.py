@@ -143,6 +143,19 @@ async def _complete_negotiation(auction_id: str, negotiation_id: str, price: flo
                 await _email_won(winner["email"], winner["name"], a["title"], auction_id, float(price))
             except Exception as e:
                 logger.error("email_won (negotiation) failed: %s", e)
+    # Admin push — sale concluded after reserve-not-met negotiation
+    try:
+        from routers.inbox import notify_admins as _notify_admins
+        await _notify_admins(
+            db,
+            type="auction_sold_negotiated",
+            data={"title": (a or {}).get("title", ""), "price": float(price)},
+            auction_id=auction_id,
+            push_template_id="admin_auction_sold_negotiated",
+            push_fmt={"title": ((a or {}).get("title") or "")[:80], "price": int(price)},
+        )
+    except Exception:
+        pass
 
 
 @router.get("/auctions/{auction_id}/negotiation")

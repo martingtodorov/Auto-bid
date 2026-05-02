@@ -71,10 +71,19 @@ def build_inbox_router(db, get_current_user):
 
 async def notify_user(db, *, user_id: str, type: str, title: str = "", body: str = "",
                       data: Optional[dict] = None,
-                      auction_id: Optional[str] = None, link: Optional[str] = None) -> str:
+                      auction_id: Optional[str] = None, link: Optional[str] = None,
+                      push_template_id: Optional[str] = None,
+                      push_fmt: Optional[dict] = None,
+                      push_kind: Optional[str] = None) -> str:
     """Emit a single in-app notification. Returns the notification id.
     `data` carries placeholder args (e.g. {"car": "BMW", "amount": 23000}) that
-    the frontend interpolates into a translated `notifications.types.{type}.{title|body}` key."""
+    the frontend interpolates into a translated `notifications.types.{type}.{title|body}` key.
+
+    If `push_template_id` is given, ALSO dispatch a Web Push notification
+    using that template. Respects the user's `notification_prefs.push.<push_kind>`
+    flag (defaults to enabled). Admins/moderators always receive the push —
+    operational alerts cannot be muted.
+    """
     nid = str(uuid.uuid4())
     doc = {
         "id": nid,
@@ -90,19 +99,53 @@ async def notify_user(db, *, user_id: str, type: str, title: str = "", body: str
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.user_notifications.insert_one(doc)
+
+    # Optional Web Push dispatch. Wrapped so a push failure never breaks the
+    # in-app notification write above.
+    if push_template_id:
+        try:
+            user = await db.users.find_one({"id": user_id}, {"_id": 0, "role": 1, "notification_prefs": 1})
+            role = (user or {}).get("role", "user")
+            # Admins/mods always receive; user opt-out only applies to the
+            # `user` role and only if a `push_kind` is supplied.
+            allowed = True
+            if role == "user" and push_kind:
+                prefs = (user or {}).get("notification_prefs") or {}
+                push_prefs = prefs.get("push") or {}
+                # Default: enabled. Only explicit `false` disables.
+                if push_prefs.get(push_kind) is False:
+                    allowed = False
+            if allowed:
+                from services import push_templates as _pt
+                await _pt.send_template(
+                    user_id,
+                    push_template_id,
+                    fmt_args=push_fmt or {},
+                    url=doc.get("link") or "/",
+                    tag=f"{type}:{auction_id or nid}",
+                )
+        except Exception:
+            pass
     return nid
 
 
 async def notify_admins(db, *, type: str, title: str = "", body: str = "",
                         data: Optional[dict] = None,
-                        auction_id: Optional[str] = None, link: Optional[str] = None) -> int:
-    """Fan out one notification to every admin & moderator. Returns count fanned out."""
+                        auction_id: Optional[str] = None, link: Optional[str] = None,
+                        push_template_id: Optional[str] = None,
+                        push_fmt: Optional[dict] = None) -> int:
+    """Fan out one notification to every admin & moderator. Returns count fanned out.
+
+    If `push_template_id` is supplied, each admin ALSO receives a localized
+    Web Push — admins have no opt-out for operational alerts.
+    """
     cursor = db.users.find({"role": {"$in": ["admin", "moderator"]}}, {"_id": 0, "id": 1})
     count = 0
     async for u in cursor:
         try:
             await notify_user(db, user_id=u["id"], type=type, title=title, body=body, data=data,
-                              auction_id=auction_id, link=link)
+                              auction_id=auction_id, link=link,
+                              push_template_id=push_template_id, push_fmt=push_fmt)
             count += 1
         except Exception:
             pass
