@@ -1630,3 +1630,55 @@ Login-redirect URLs (`/login?next=/auctions/{id}`) intentionally keep
 the UUID — the slug middleware on backend rewrites to canonical UUID
 regardless of which form arrives.
 
+
+---
+
+## 2026-05-02 (iter 24) — Dynamic per-auction OG images (English)
+
+### Goal
+Replace the generic `/og-default.jpg` on social shares of
+`/auctions/{slug-uuid}` with a beautiful dynamic 1200×630 PNG that
+shows the car + Auto&Bid wordmark + English countdown + current bid.
+
+### Implementation
+**`backend/services/og_image.py`** (new, 230 LoC)
+- Composition: 780 px left (cropped cover photo) + 420 px right
+  (solid dark-navy panel #0B1220).
+- Wordmark: white **"Auto"** + emerald **"&"** + white **"Bid"**
+  drawn with three `ImageDraw.text` calls so only the ampersand is
+  accent-green. Liberation Sans Bold 56 px.
+- Title: 3-line wrap with ellipsis, Liberation Serif Regular 30 px.
+- Bottom stack: "CURRENT BID" label + `€5 000` bold (44 px) +
+  "Ends in 4d 23h" accent-green (22 px, right-aligned).
+- When there's no bid yet, the countdown takes over as the hero
+  piece.
+- Cover photo is fetched from the auction's
+  `thumbnails[0]` (400 px) when available, full-res fallback.
+- Cache-key = sha1(id + int(current_bid) + ends_at_minute). On-disk
+  cache at `/tmp/og_cache/{key}.png`, 24 h TTL. Regenerates
+  whenever the bid changes or ends_at ticks a new minute.
+
+**`backend/routers/seo.py`**
+- New `GET /api/og/auction/{id}.png` — returns the PNG, `Cache-Control:
+  public, max-age=60, s-maxage=300, stale-while-revalidate=600`.
+- `GET /api/share/auction/{id}` meta tags now point `og:image`,
+  `twitter:image` at the new endpoint with `og:image:width=1200`,
+  `og:image:height=630`, `og:image:type=image/png`.
+- Public origin resolution rewritten to read `Host` + `X-Forwarded-Proto`
+  from the request (not `request.base_url` which returns the internal
+  cluster host).
+
+**`frontend/src/pages/AuctionDetailPage.jsx`**
+- `setPageMeta({ image: `${API_BASE}/og/auction/${a.id}.png` })` —
+  JS-rendered `og:image` meta now matches what the `/share/` fallback
+  serves.
+
+### Verified
+- `GET /api/og/auction/{id}.png` → 200, **1200×630 PNG, 492 KB**.
+- Second call returns from cache (same file).
+- Visual preview shows: BMW M2 photo / **Auto&Bid** (green &) /
+  title "BMW M2 Club sport spec N55 2017" / **€5 000** / **Ends in
+  4d 23h**.
+- `/share/auction/{id}` HTML now emits all three image meta tags
+  pointing at `/api/og/auction/{id}.png`.
+

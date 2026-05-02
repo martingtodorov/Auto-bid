@@ -143,7 +143,11 @@ export default function AuctionDetailPage() {
     setPageMeta({
       title: `${a.title} — ${brand}`,
       description: a.description,
-      image: a.images?.[0],
+      // Dynamic per-auction OG image (English, with Auto&Bid wordmark,
+      // time remaining + current bid). Backend endpoint returns a
+      // 1200×630 PNG keyed on bid + ends_at so crawlers see fresh
+      // numbers after each bid.
+      image: `${API_BASE}/og/auction/${a.id}.png`,
       url,
       jsonLd: combineJsonLd(vehicle, breadcrumbs),
     });

@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import PlainTextResponse
 
 from deps import db
+from services import og_image
 
 router = APIRouter()
 
@@ -297,10 +298,45 @@ async def sitemap_images_xml(request: Request):
     return Response(content="\n".join(xml), media_type="application/xml; charset=utf-8")
 
 
+@router.get("/og/auction/{auction_id}.png")
+async def og_auction_image(auction_id: str):
+    """Dynamic Open Graph PNG for a single auction. English text only.
+
+    URL is shaped as `.png` so social crawlers don't second-guess the
+    Content-Type (some cache the URL extension). Cached in memory +
+    on-disk by (id, current_bid, ends_at_minute) so every new bid
+    produces a fresh image the next time the share link is scraped.
+    """
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Auction not found")
+    png = await og_image.build_or_cache(a)
+    # Long edge cache is safe — the cache key already embeds the bid +
+    # ends_at minute, so new versions get a new URL-less file behind
+    # the scenes but the public URL stays the same. We give Cloudflare
+    # 5 min to absorb traffic spikes during viral shares, then
+    # revalidate.
+    return Response(
+        content=png,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600"},
+    )
+
+
 @router.get("/share/auction/{auction_id}", response_class=PlainTextResponse)
 async def share_auction(auction_id: str, request: Request):
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
-    frontend_base = request.headers.get("origin") or str(request.base_url).rstrip("/")
+    # Build the public-facing origin from the `Host` header (what the
+    # crawler actually typed), NOT `request.base_url` — the latter
+    # returns the internal cluster host when we sit behind the ingress
+    # and social crawlers would then be served a URL they can't resolve.
+    origin_hdr = request.headers.get("origin")
+    if origin_hdr:
+        frontend_base = origin_hdr.rstrip("/")
+    else:
+        proto = request.headers.get("x-forwarded-proto", "https")
+        host = request.headers.get("host") or request.url.hostname or "autoandbid.com"
+        frontend_base = f"{proto}://{host}"
     # Redirect crawlers to the SEO-friendly slug URL.
     target = f"{frontend_base}{_auction_slug_url(a) if a else f'/auctions/{auction_id}'}"
 
@@ -312,7 +348,11 @@ async def share_auction(auction_id: str, request: Request):
     else:
         title = f"{a.get('title','')} — autoandbid.com"
         description = (a.get("description") or "")[:280]
-        image = (a.get("images") or [None])[0] or f"{frontend_base}/og-default.jpg"
+        # Dynamic per-auction OG image (car photo + Auto&Bid wordmark +
+        # English countdown + current bid). Falls back to the static
+        # `/og-default.jpg` if the generator endpoint ever errors — the
+        # HTML still renders valid meta tags regardless.
+        image = f"{frontend_base}/api/og/auction/{auction_id}.png"
         json_ld = f'<script type="application/ld+json">{_json_ld_vehicle(a, target)}</script>'
 
     html = f"""<!DOCTYPE html>
@@ -326,6 +366,9 @@ async def share_auction(auction_id: str, request: Request):
 <meta property="og:title" content="{_esc(title)}">
 <meta property="og:description" content="{_esc(description)}">
 <meta property="og:image" content="{_esc(image)}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:type" content="image/png">
 <meta property="og:url" content="{_esc(target)}">
 <meta property="og:locale" content="bg_BG">
 <meta name="twitter:card" content="summary_large_image">
