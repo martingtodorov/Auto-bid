@@ -1283,3 +1283,27 @@ the last 7 being low-res dupes of the first 7. Sample URL:
   related listings.
 - iteration_14.json: **16/16 backend tests pass, 0 issues**.
 
+
+---
+
+## 2026-05-02 (iter 15) — Landing hero dedup
+
+User: the auction shown in the landing hero must NOT appear again
+in the sections below.
+
+### Fix — `/app/frontend/src/pages/LandingPage.jsx`
+- Compute `hero = featured[0] || auctions[0]` as before.
+- Derive two filtered lists once: `auctionsEx`, `featuredEx` — both
+  exclude the `hero.id`.
+- `Active auctions` grid now renders `auctionsEx.slice(0, 6)`.
+- `Selected editorial` grid renders `featuredEx.slice(0, 6)`.
+- The editorial section gate changed from `featured.length > 1` to
+  `featuredEx.length > 0` (correct semantics: show the rail as long
+  as there's at least one non-hero featured car).
+
+### Verified
+- Preview BG: hero = BMW M240i xdrive M-Performance; `Active auctions`
+  below shows only BMW M2 Club sport + Mercedes-Benz C 43 AMG — no
+  duplicate of the hero car.
+- No backend changes.
+

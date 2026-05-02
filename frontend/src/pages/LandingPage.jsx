@@ -86,6 +86,10 @@ export default function LandingPage() {
   }, []);
 
   const hero = featured[0] || auctions[0];
+  // Filter lists used by the sections below so the hero listing never
+  // appears twice on the same page (hero + its card right below).
+  const featuredEx = featured.filter((a) => !hero || a.id !== hero.id);
+  const auctionsEx = auctions.filter((a) => !hero || a.id !== hero.id);
 
   // CMS-editable hero text per language (falls back to static i18n)
   const cmsHeadline = settings?.[`hero_headline_${lang}`];
@@ -171,7 +175,7 @@ export default function LandingPage() {
             </Link>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 stagger" data-testid="landing-auctions-grid">
-            {auctions.slice(0, 6).map((a) => <AuctionCard key={a.id} auction={a} />)}
+            {auctionsEx.slice(0, 6).map((a) => <AuctionCard key={a.id} auction={a} />)}
           </div>
         </div>
       </section>
@@ -206,7 +210,7 @@ export default function LandingPage() {
       </section>
 
       {/* Featured editorial */}
-      {featured.length > 1 && (
+      {featuredEx.length > 0 && (
         <section className="rule-b">
           <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-16 lg:py-24">
             <div className="flex items-end justify-between mb-10">
@@ -216,7 +220,7 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 stagger">
-              {featured.slice(0, 6).map((a) => <AuctionCard key={a.id} auction={a} />)}
+              {featuredEx.slice(0, 6).map((a) => <AuctionCard key={a.id} auction={a} />)}
             </div>
           </div>
         </section>
