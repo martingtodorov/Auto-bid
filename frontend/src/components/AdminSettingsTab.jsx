@@ -105,6 +105,7 @@ export default function AdminSettingsTab() {
         favicon_url: data.favicon_url ?? "",
         maintenance_mode: !!data.maintenance_mode,
         maintenance_message: data.maintenance_message ?? "",
+        deindex_mode: !!data.deindex_mode,
         hero_headline_bg: data.hero_headline_bg ?? "",
         hero_subtitle_bg: data.hero_subtitle_bg ?? "",
         hero_headline_ro: data.hero_headline_ro ?? "",
@@ -288,6 +289,41 @@ export default function AdminSettingsTab() {
               data-testid="maintenance-message-input"
             />
           </Field>
+        </div>
+      </section>
+
+      {/* Deindex mode — pre-launch SEO gate. NOT a login gate: тестерите виждат
+          нормалния сайт, просто search engines получават noindex/nofollow.*/}
+      <section className="rounded-card border border-rose-300 bg-rose-50 p-6" data-testid="deindex-section">
+        <h2 className="font-serif text-2xl text-rose-900">Deindex режим (пре-лансиране)</h2>
+        <p className="mt-2 text-sm text-rose-900/90">
+          Скрива сайта от Google / Bing / Yandex преди официалния launch. Когато е активен:
+        </p>
+        <ul className="mt-2 list-disc pl-5 text-sm text-rose-900/90 space-y-1">
+          <li><code className="text-xs font-mono bg-white px-1 rounded">/robots.txt</code> връща <code className="text-xs font-mono bg-white px-1 rounded">Disallow: /</code></li>
+          <li>Всеки API отговор носи header <code className="text-xs font-mono bg-white px-1 rounded">X-Robots-Tag: noindex, nofollow, noarchive, nosnippet</code></li>
+          <li>Фронтенд добавя <code className="text-xs font-mono bg-white px-1 rounded">&lt;meta name="robots" content="noindex,nofollow,noarchive,nosnippet"&gt;</code> към <code className="text-xs font-mono bg-white px-1 rounded">&lt;head&gt;</code></li>
+          <li><code className="text-xs font-mono bg-white px-1 rounded">/sitemap.xml</code> и <code className="text-xs font-mono bg-white px-1 rounded">/sitemap-images.xml</code> връщат 404</li>
+        </ul>
+        <p className="mt-3 text-xs text-rose-900/80">
+          ⚠️ НЕ блокира логин, API или админ панела. Всички тестери продължават да използват сайта нормално. Изключете преди launch.
+        </p>
+        <div className="mt-5">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!form.deindex_mode}
+              onChange={(e) => set("deindex_mode", e.target.checked)}
+              className="h-4 w-4"
+              data-testid="deindex-toggle"
+            />
+            <span className="text-sm font-medium">Активирай deindex режим</span>
+            {form.deindex_mode && (
+              <span className="ml-2 text-[10px] font-bold uppercase tracking-wider bg-rose-600 text-white px-2 py-0.5 rounded-full" data-testid="deindex-active-badge">
+                Активен
+              </span>
+            )}
+          </label>
         </div>
       </section>
 

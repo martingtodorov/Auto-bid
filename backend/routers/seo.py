@@ -6,12 +6,54 @@ import os
 import json as _json
 from html import escape as _esc
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import PlainTextResponse
 
 from deps import db
 
 router = APIRouter()
+
+
+async def _deindex_enabled() -> bool:
+    """True when admin has toggled pre-launch `deindex_mode`. Read directly
+    from Mongo so any replica / worker sees fresh state without a cache bust.
+    """
+    doc = await db.site_settings.find_one({"id": "global"}, {"_id": 0, "deindex_mode": 1})
+    return bool(doc and doc.get("deindex_mode"))
+
+
+@router.get("/robots.txt", response_class=PlainTextResponse)
+async def robots_txt(request: Request):
+    """Dynamic robots.txt — flips to full Disallow when admin enables
+    `deindex_mode` in /admin/settings. Nginx should proxy `/robots.txt`
+    → this endpoint so crawlers see the live value."""
+    frontend_base = _frontend_base(request)
+    if await _deindex_enabled():
+        body = (
+            "# Site is in pre-launch deindex mode — search engines stay out.\n"
+            "User-agent: *\n"
+            "Disallow: /\n"
+        )
+        return PlainTextResponse(content=body, headers={"Cache-Control": "no-store"})
+    body = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "\n"
+        "# Disallow internal/admin flows\n"
+        "Disallow: /admin\n"
+        "Disallow: /login\n"
+        "Disallow: /register\n"
+        "Disallow: /dashboard\n"
+        "Disallow: /settings\n"
+        "Disallow: /watchlist\n"
+        "Disallow: /inbox\n"
+        "Disallow: /verify-email\n"
+        "Disallow: /reset-password\n"
+        "\n"
+        f"Sitemap: {frontend_base}/sitemap.xml\n"
+        f"Sitemap: {frontend_base}/sitemap-images.xml\n"
+    )
+    return PlainTextResponse(content=body, headers={"Cache-Control": "public, max-age=3600"})
 
 
 def _json_ld_vehicle(a: dict, url: str) -> str:
@@ -118,6 +160,9 @@ def _collect_imgs(a: dict, max_count: int) -> list:
 @router.get("/sitemap.xml", response_class=Response)
 async def sitemap_xml(request: Request):
     """Dynamic XML sitemap (with Google Image Sitemap namespace)."""
+    if await _deindex_enabled():
+        # Pre-launch deindex — pretend we never had one.
+        raise HTTPException(status_code=404, detail="Not found")
     frontend_base = _frontend_base(request)
     pages = [
         ("", "daily", "1.0"),
@@ -179,6 +224,8 @@ async def sitemap_xml(request: Request):
 @router.get("/sitemap-images.xml", response_class=Response)
 async def sitemap_images_xml(request: Request):
     """Dedicated image-only sitemap."""
+    if await _deindex_enabled():
+        raise HTTPException(status_code=404, detail="Not found")
     frontend_base = _frontend_base(request)
     cursor = db.auctions.find(
         {

@@ -220,6 +220,7 @@ class SiteSettingsUpdate(BaseModel):
     favicon_url: Optional[str] = None             # Site favicon (link rel=icon)
     maintenance_mode: Optional[bool] = None       # Phase 5: maintenance toggle
     maintenance_message: Optional[str] = None
+    deindex_mode: Optional[bool] = None            # Pre-launch SEO gate
     seo_title: Optional[str] = None
     seo_description: Optional[str] = None
     seo_title_bg: Optional[str] = None

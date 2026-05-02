@@ -20,6 +20,7 @@ const DEFAULTS = {
   contacts_content: "",
   fees_content: "",
   how_it_works_content: "",
+  deindex_mode: false,
 };
 
 export async function refreshSettings() {
@@ -33,6 +34,13 @@ export async function refreshSettings() {
     _cached = _cached || DEFAULTS;
     return _cached;
   }
+}
+
+// Kick one refresh on module import so global meta tags (deindex robots,
+// GA, site verification) are applied even on pages that don't call
+// `useSiteSettings()` themselves. Browser-only — skipped during SSR.
+if (typeof window !== "undefined") {
+  refreshSettings();
 }
 
 // Inject Google / Bing site verification meta tags + GA script once settings load.
@@ -55,6 +63,25 @@ function applyVerificationTags(s) {
   };
   ensure("google-site-verification", s.google_site_verification);
   ensure("msvalidate.01", s.bing_site_verification);
+
+  // Deindex mode — mark <head> with a persistent noindex meta that survives
+  // client-side navigation. `setPageMeta()` intentionally does NOT override
+  // this element (see the `data-global` attribute check in seo.js).
+  const DEINDEX_ID = "deindex-robots";
+  const existingDeindex = document.getElementById(DEINDEX_ID);
+  if (s.deindex_mode) {
+    let el = existingDeindex;
+    if (!el) {
+      el = document.createElement("meta");
+      el.id = DEINDEX_ID;
+      el.setAttribute("name", "robots");
+      el.setAttribute("data-global", "1");
+      head.appendChild(el);
+    }
+    el.setAttribute("content", "noindex, nofollow, noarchive, nosnippet");
+  } else if (existingDeindex) {
+    existingDeindex.remove();
+  }
 
   // Dynamic favicon — applies CMS-configured icon URL (link rel="icon").
   const fav = (s.favicon_url || "").trim();
@@ -112,8 +139,7 @@ export function useSiteSettings() {
 // Compute buyer fee locally using settings (mirror of backend _buyer_fee).
 export function computeBuyerFee(amount, settings) {
   const pct = Number(settings?.buyer_fee_pct ?? 2) / 100;
-  const fmin = Number(settings?.buyer_fee_min_eur ?? 150);
-  const fmax = Number(settings?.buyer_fee_max_eur ?? 4000);
+  const fmin = Number(settings?.buyer_fee_min_eur ?? 150);  const fmax = Number(settings?.buyer_fee_max_eur ?? 4000);
   return Math.min(fmax, Math.max(fmin, Math.round((Number(amount) || 0) * pct)));
 }
 

@@ -42,7 +42,12 @@ export function setPageMeta({ title, description, image, url, jsonLd, robots } =
   document.title = t;
 
   ensureMeta('meta[name="description"]', "content", d);
-  ensureMeta('meta[name="robots"]', "content", robots || "index, follow, max-image-preview:large, max-snippet:-1");
+  // Respect the global deindex override if it's in place — its meta element
+  // is marked with `data-global="1"` and must win over per-page robots.
+  const deindex = document.getElementById("deindex-robots");
+  if (!deindex) {
+    ensureMeta('meta[name="robots"]', "content", robots || "index, follow, max-image-preview:large, max-snippet:-1");
+  }
 
   ensureMeta('meta[property="og:title"]', "content", t);
   ensureMeta('meta[property="og:description"]', "content", d);

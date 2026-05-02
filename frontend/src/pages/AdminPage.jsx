@@ -46,6 +46,14 @@ export default function AdminPage() {
   const [busy, setBusy] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [bidsForAuction, setBidsForAuction] = useState(null); // {id, title}
+  // Tab counters — one aggregate request drives every badge. Auto-refreshes
+  // on mount and after any admin action via loadCounters().
+  const [counters, setCounters] = useState({});
+
+  const loadCounters = useCallback(async () => {
+    try { const { data } = await api.get("/admin/counters"); setCounters(data || {}); }
+    catch (e) { /* non-fatal — badges just stay empty */ }
+  }, []);
 
   const loadPending = useCallback(async () => {
     try { const { data } = await api.get("/admin/pending"); setPending(data); }
@@ -73,6 +81,12 @@ export default function AdminPage() {
 
   // Reset offset when query/status changes (avoid pagination "stuck" after filter change)
   useEffect(() => { setAllOffset(0); }, [allQuery, allStatusFilter]);
+
+  useEffect(() => {
+    if (user?.role === "admin" || user?.role === "moderator") {
+      loadCounters();
+    }
+  }, [user, loadCounters]);
 
   useEffect(() => {
     if (user?.role === "admin") {
@@ -274,17 +288,17 @@ export default function AdminPage() {
 
   const tabs = [
     { k: "dashboard", label: t("admin.tabs.dashboard"), icon: BarChart3 },
-    { k: "pending", label: `${t("admin.tabs.pending")} (${pending.length})`, icon: Clock },
-    { k: "all", label: `${t("admin.tabs.all_listings")} (${allListings.length})`, icon: List },
-    { k: "requests", label: t("admin.tabs.requests"), icon: Inbox },
-    { k: "users", label: t("admin.tabs.users"), icon: Users },
-    { k: "sold", label: `${t("admin.tabs.sold")} (${sold.length})`, icon: Archive },
-    { k: "unsold", label: "Непродадени", icon: XCircle },
-    { k: "archive", label: t("admin.tabs.archive"), icon: Archive, adminOnly: true },
+    { k: "pending", label: t("admin.tabs.pending"), icon: Clock, count: counters.pending ?? pending.length },
+    { k: "all", label: t("admin.tabs.all_listings"), icon: List, count: counters.all ?? allListings.length },
+    { k: "requests", label: t("admin.tabs.requests"), icon: Inbox, count: counters.requests },
+    { k: "users", label: t("admin.tabs.users"), icon: Users, count: counters.users },
+    { k: "sold", label: t("admin.tabs.sold"), icon: Archive, count: counters.sold ?? sold.length },
+    { k: "unsold", label: "Непродадени", icon: XCircle, count: counters.unsold },
+    { k: "archive", label: t("admin.tabs.archive"), icon: Archive, adminOnly: true, count: counters.archive },
     { k: "makes", label: t("admin.tabs.makes"), icon: Tag, adminOnly: true },
     { k: "stripe", label: t("admin.tabs.stripe"), icon: CreditCard, adminOnly: true },
-    { k: "notifications", label: t("admin.tabs.notifications"), icon: Mail },
-    { k: "chat", label: "Чат", icon: MessageCircle },
+    { k: "notifications", label: t("admin.tabs.notifications"), icon: Mail, count: counters.notifications },
+    { k: "chat", label: "Чат", icon: MessageCircle, count: counters.chat },
     { k: "health", label: "Здраве", icon: Activity, adminOnly: true },
     { k: "templates", label: t("admin.tabs.templates"), icon: FileEdit, adminOnly: true },
     { k: "audit", label: t("admin.tabs.audit"), icon: ScrollText },
@@ -300,6 +314,7 @@ export default function AdminPage() {
         <div className="mt-8 inline-flex rounded-card border border-[hsl(var(--line))] overflow-hidden bg-white flex-wrap">
           {tabs.map((t, i) => {
             const Icon = t.icon;
+            const n = typeof t.count === "number" ? t.count : null;
             return (
               <button
                 key={t.k}
@@ -308,6 +323,18 @@ export default function AdminPage() {
                 data-testid={`tab-${t.k}`}
               >
                 <Icon size={14} /> {t.label}
+                {n !== null && n > 0 && (
+                  <span
+                    className={`ml-1 inline-flex items-center justify-center min-w-[22px] h-[20px] px-1.5 rounded-full text-[11px] font-semibold leading-none ${
+                      tab === t.k
+                        ? "bg-white/20 text-white"
+                        : "bg-[hsl(var(--accent))] text-black"
+                    }`}
+                    data-testid={`tab-${t.k}-count`}
+                  >
+                    {n > 999 ? "999+" : n}
+                  </span>
+                )}
               </button>
             );
           })}

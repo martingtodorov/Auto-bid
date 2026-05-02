@@ -961,6 +961,72 @@ fresh Ubuntu 24.04 box** without any manual touch-ups.
 - Generate VAPID keypair on production: `npx web-push generate-vapid-keys`.
 - Verify Resend SPF/DKIM for each TLD zone in Cloudflare DNS.
 
+
+---
+
+## Admin Tab Counters + Pre-launch Deindex Mode (1 May 2026)
+
+### Admin tab badges
+- New endpoint `GET /api/admin/counters` — single aggregate request returns
+  counts for every admin tab (parallel `asyncio.gather` → ~1 DB round trip).
+- `AdminPage.jsx` renders a green pill badge next to each tab label.
+  Zero counts are hidden. 999+ truncation for very large numbers.
+- Covers: **pending**, **all**, **users**, **requests**, **sold**, **unsold**,
+  **archive**, **notifications**, **chat**.
+- Verified with admin login: `All 3`, `Users 14`, `Archive 2`,
+  `Notifications 29` render as badges. `data-testid="tab-<k>-count"` on each.
+
+### Deindex mode (pre-launch SEO gate)
+New admin setting **`deindex_mode`** (default: `false`). When toggled ON
+from `/admin` → Settings → Deindex section, the site disappears from
+every search engine without breaking login/API/admin/testing.
+
+Four enforcement layers:
+1. **robots.txt** — `/api/robots.txt` returns
+   `User-agent: * / Disallow: /`. Nginx proxies `/robots.txt` →
+   `/api/robots.txt` so the root URL crawlers hit is always live.
+2. **HTTP headers** — `deindex_headers_middleware` in `server.py` stamps
+   `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet` on every API
+   response.
+3. **Meta tag** — `settings.js::applyVerificationTags` injects
+   `<meta id="deindex-robots" name="robots" content="noindex,nofollow,noarchive,nosnippet">`
+   into `<head>`. `seo.js::setPageMeta` detects the `data-global="1"`
+   attribute and will NOT overwrite it during client-side navigation.
+4. **Sitemaps** — `/api/sitemap.xml` and `/api/sitemap-images.xml` return
+   404 so stale crawler-cached URLs stop reappearing.
+
+### Explicitly NOT blocked
+- Logins, authenticated API calls, admin panel — all work identically.
+- Manual tester traffic (real users, internal QA) — unchanged UX.
+- WebSocket live-bidding, push notifications, Stripe — all untouched.
+
+### Cleanup
+- Removed static `/app/frontend/public/robots.txt` (was
+  `Allow: /` baked into the bundle — would conflict with dynamic one).
+- Added nginx proxy rules for `/robots.txt`, `/sitemap.xml`,
+  `/sitemap-images.xml` → backend.
+
+### Verified
+- `deindex_mode=true` → `/api/robots.txt` shows `Disallow: /` ✅
+- `deindex_mode=true` → `/api/sitemap.xml` returns HTTP 404 ✅
+- `deindex_mode=true` → `X-Robots-Tag` header on `/api/settings`,
+  `/api/auctions/featured` ✅
+- Browser DOM: `#deindex-robots` meta element present + survives
+  SPA navigation ✅
+- `deindex_mode=false` → everything reverts to normal (robots allows
+  crawlers, sitemap 200, no X-Robots-Tag, meta removed) ✅
+
+### Next Action Items (from previous sessions, still pending)
+- 🔑 `GEMINI_API_KEY` on production (translations currently fallback to
+  Emergent preview only)
+- 🔑 `STRIPE_API_KEY=sk_live_...` + `STRIPE_WEBHOOK_SECRET=whsec_...`
+- 📧 Verify Resend SPF/DKIM in Cloudflare DNS for `.bg` and `.ro` zones
+
+### Future / Backlog
+- P3: Cloudflare Turnstile CAPTCHA on registration
+- P4: WebAuthn / Passkeys
+- Refactor: split `server.py` (~4 300 LOC) into `routers/`
+
 ### Future / Backlog
 - P3: Cloudflare Turnstile CAPTCHA на регистрация.
 - P4: WebAuthn / Passkeys.

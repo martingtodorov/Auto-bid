@@ -217,6 +217,15 @@ SETTINGS_DEFAULTS = {
     "favicon_url": "",
     "maintenance_mode": False,
     "maintenance_message": "Auto&Bid се обновява. Моля, върнете се след малко.",
+    # --- Deindex mode (pre-launch protection) ---
+    # Когато е активен:
+    #   • /api/robots.txt връща `User-agent: * / Disallow: /`
+    #   • `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet` се добавя на
+    #     всеки отговор (middleware)
+    #   • /api/sitemap.xml и /api/sitemap-images.xml връщат 404
+    #   • Frontend инжектира `<meta name="robots" content="noindex,...">`
+    # Не блокира логин/API/admin панела — чисто SEO gate.
+    "deindex_mode": False,
     # --- Phase 6: Multi-language hero CMS ---
     "hero_headline_bg": "",
     "hero_subtitle_bg": "",
@@ -1997,6 +2006,7 @@ async def get_public_settings():
         "favicon_url": s.get("favicon_url") or "",
         "maintenance_mode": bool(s.get("maintenance_mode")),
         "maintenance_message": s.get("maintenance_message") or "",
+        "deindex_mode": bool(s.get("deindex_mode")),
         "hero_headline_bg": s.get("hero_headline_bg") or "",
         "hero_subtitle_bg": s.get("hero_subtitle_bg") or "",
         "hero_headline_ro": s.get("hero_headline_ro") or "",
@@ -2096,6 +2106,62 @@ async def admin_approve(auction_id: str, _admin: dict = Depends(require_admin)):
     except Exception as e:
         logger.error("saved search notification failed: %s", e)
     return {"ok": True}
+
+
+# ---- Admin counters (tab badges) ----
+@api.get("/admin/counters")
+async def admin_counters(_admin: dict = Depends(require_admin_or_moderator)):
+    """Single-shot aggregate counts for every admin panel tab — used by
+    the sidebar to show badge numbers without firing one request per tab.
+
+    Individual counts are intentionally bounded (limit-based queries) to
+    keep the dashboard snappy even on 100k+ auction datasets.
+    """
+    # Fire all counts in parallel (asyncio.gather) — ~1 round-trip total.
+    pending_q = db.auctions.count_documents({"status": "pending", "is_archived": {"$ne": True}})
+    users_q = db.users.count_documents({})
+    requests_q = db.seller_requests.count_documents({"status": "pending"})
+    sold_q = db.auctions.count_documents({"status": "sold", "is_archived": {"$ne": True}})
+    unsold_q = db.auctions.count_documents({
+        "status": {"$in": ["ended", "reserve_not_met", "cancelled", "withdrawn"]},
+        "is_archived": {"$ne": True},
+    })
+    archived_q = db.auctions.count_documents({"$or": [{"is_archived": True}, {"status": "archived"}]})
+    all_listings_q = db.auctions.count_documents({"is_archived": {"$ne": True}})
+    # Chat: number of threads with unread admin-bound messages.
+    chat_pipeline = [
+        {"$match": {"sender_role": "user", "read_by_admin": False}},
+        {"$group": {"_id": "$thread_user_id"}},
+        {"$count": "n"},
+    ]
+    chat_unread_agg = db.chat_messages.aggregate(chat_pipeline)
+    # Notifications: unsent / failed email rows in the last 7 days — signal
+    # that admin probably wants to investigate.
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    notif_q = db.notification_log.count_documents({
+        "channel": "email",
+        "status": {"$in": ["error", "mock"]},
+        "at": {"$gte": week_ago},
+    })
+
+    pending_n, users_n, requests_n, sold_n, unsold_n, archived_n, all_n, notif_n, chat_list = await asyncio.gather(
+        pending_q, users_q, requests_q, sold_q, unsold_q, archived_q, all_listings_q, notif_q,
+        chat_unread_agg.to_list(1),
+    )
+    chat_n = int(chat_list[0]["n"]) if chat_list else 0
+
+    return {
+        "pending": int(pending_n),
+        "all": int(all_n),
+        "requests": int(requests_n),
+        "users": int(users_n),
+        "sold": int(sold_n),
+        "unsold": int(unsold_n),
+        "archive": int(archived_n),
+        "notifications": int(notif_n),
+        "chat": int(chat_n),
+    }
+
 
 @api.post("/admin/auctions/{auction_id}/reject")
 async def admin_reject(auction_id: str, payload: AdminDecision, _admin: dict = Depends(require_admin)):
@@ -4150,6 +4216,26 @@ async def waf_middleware(request: Request, call_next):
         from fastapi.responses import JSONResponse
         return JSONResponse({"detail": "Заявката е отхвърлена от защитата."}, status_code=400)
     return await call_next(request)
+
+
+# ---- Deindex mode: stamp X-Robots-Tag on every response when enabled ----
+# Admin can flip this via /admin/settings → Deindex mode. Use case: pre-launch
+# sites that must remain fully testable but must NOT be indexed. We read the
+# cached settings dict (zero DB round-trip per request) and short-circuit
+# when disabled.
+_NOINDEX_HEADER = "noindex, nofollow, noarchive, nosnippet"
+
+
+@app.middleware("http")
+async def deindex_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    try:
+        if _settings_cache.get("deindex_mode"):
+            # Don't clobber an existing header set by a more specific handler
+            response.headers.setdefault("X-Robots-Tag", _NOINDEX_HEADER)
+    except Exception:
+        pass
+    return response
 
 
 # ---- CSRF middleware (C3): double-submit cookie ----
