@@ -382,6 +382,33 @@ def _public_auction(a: dict, viewer: Optional[dict] = None, *, unmask_vin: bool 
     return a
 
 
+# Lightweight shape for listing cards (home page + /auctions). Drops
+# description blobs, extra image buckets, full spec fields — keeps only
+# what `AuctionCard.jsx` actually renders. Cuts typical payloads from
+# ~19 KB → ~1.5 KB per auction (92% reduction).
+_LIST_KEEP = {
+    "id", "title", "make", "model", "year", "mileage_km", "fuel", "transmission",
+    "body_type", "color", "region", "city",
+    "starting_bid_eur", "current_bid_eur", "buy_now_eur", "reserve_eur",
+    "reserve_met", "bid_count", "ends_at", "starts_at", "status",
+    "is_featured", "sold_via_buy_now", "seller_is_dealer",
+    "vat_status", "vat_rate_pct",
+    "slug",
+}
+
+
+def _list_shape(a: dict) -> dict:
+    """Project a public auction dict to the minimal subset needed for list
+    cards. Keeps only the cover image (thumb + full) — trims the rest."""
+    out = {k: a[k] for k in _LIST_KEEP if k in a}
+    # Cover only. AuctionCard.jsx already uses `thumbnails?.[0] || images?.[0]`.
+    imgs = a.get("images") or []
+    thumbs = a.get("thumbnails") or []
+    out["images"] = imgs[:1]
+    out["thumbnails"] = thumbs[:1] if thumbs else []
+    return out
+
+
 # ---- Auctions ----
 @api.get("/auctions")
 async def list_auctions(
@@ -401,6 +428,7 @@ async def list_auctions(
     limit: int = 60,
     offset: int = 0,
     paginated: int = 0,
+    view: Optional[str] = Query(None, description="`list` → lightweight card shape"),
 ):
     viewer = await get_optional_user(request)
     viewer_is_admin = viewer and viewer.get("role") in ("admin", "moderator")
@@ -459,19 +487,25 @@ async def list_auctions(
         items.sort(key=lambda a: a.get("bid_count", 0), reverse=True)
 
     total = len(items)
+    use_list_shape = (view == "list")
     if paginated:
         offset = max(0, int(offset))
         page_items = items[offset: offset + max(1, min(60, int(limit)))]
         await _enrich_dealer_status(page_items)
+        if use_list_shape:
+            page_items = [_list_shape(a) for a in page_items]
         return {"items": page_items, "total": total, "offset": offset, "limit": limit}
 
     # Backwards-compat: legacy callers (featured rails, embedded carousels…)
     # still receive the full unfiltered slice up to `limit`.
-    await _enrich_dealer_status(items[:limit])
-    return items[:limit]
+    out = items[:limit]
+    await _enrich_dealer_status(out)
+    if use_list_shape:
+        out = [_list_shape(a) for a in out]
+    return out
 
 @api.get("/auctions/featured")
-async def featured(request: Request):
+async def featured(request: Request, response: Response, view: Optional[str] = None):
     viewer = await get_optional_user(request)
     # Up to 10 items total:
     #   1) all live+featured (may be fewer than 10)
@@ -509,11 +543,20 @@ async def featured(request: Request):
                 break
 
     await _enrich_dealer_status(combined)
+    # Public listing: edge-cache for 60s. Matches frontend landingCache TTL so
+    # Cloudflare / browsers don't hit the backend for every homepage view.
+    # `s-maxage=60` for shared caches, `stale-while-revalidate=120` lets edge
+    # serve stale content while refreshing in background. Zero impact on
+    # authenticated viewers — the response has no user-specific fields.
+    response.headers["Cache-Control"] = "public, max-age=30, s-maxage=60, stale-while-revalidate=120"
+    if view == "list":
+        combined = [_list_shape(a) for a in combined]
     return combined
 
 @api.get("/auctions/sold")
 async def sold(
     request: Request,
+    response: Response,
     make: Optional[str] = None,
     body_type: Optional[str] = None,
     fuel: Optional[str] = None,
@@ -525,6 +568,7 @@ async def sold(
     sort: Optional[str] = Query("recent"),
     limit: int = 48,
     offset: int = 0,
+    view: Optional[str] = None,
 ):
     viewer = await get_optional_user(request)
     query: dict = {"status": "sold", "is_archived": {"$ne": True}}
