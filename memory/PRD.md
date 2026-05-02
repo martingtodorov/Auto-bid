@@ -1570,3 +1570,36 @@ required:
 - JSON / Python syntax clean, ESLint clean.
 - Backend restart green.
 
+
+---
+
+## 2026-05-02 (iter 22) — Brand favicon + OG / social sharing image
+
+User supplied two artefacts:
+- `Autoandbidfavicon.png` (1254×1254) — A&B monogram + car silhouette
+- `Autoandbidsocialmediasharing.png` (1254×659) — Auto&Bid wordmark + car
+
+### Generated asset set (from the first artefact)
+- `favicon.ico` — multi-size (16/32/48) ICO
+- `icons/favicon-{16,32,48}.png`
+- `icons/apple-touch-icon.png` (180×180)
+- `icons/app-icon-{192,512}.png` — PWA "any" purpose
+
+The older `push-icon-{192,512}.png` are kept as `maskable` purpose for
+push notifications (they have a different aspect-aware silhouette).
+
+### OG / Twitter sharing
+- Second artefact letter-boxed onto a 1200×630 white canvas at 90 %
+  scale → `og-default.jpg` (85 % JPEG, 43 KB). Meta tags
+  `og:image` + `twitter:image` already pointed at `/og-default.jpg`
+  so no HTML change was needed for sharing preview.
+
+### Wired up
+- `public/index.html`: added multi-size favicon `<link>` tags +
+  `apple-touch-icon` pointing at the new 180 px PNG (was
+  `push-icon-192.png`).
+- `public/manifest.webmanifest`: added `app-icon-192/512` as
+  `purpose: any`; kept the push icons as `maskable`.
+
+Frontend restarted — `curl /` confirms the new tags are served.
+
