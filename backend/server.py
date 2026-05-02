@@ -1722,7 +1722,7 @@ async def create_or_increase_credit(auction_id: str, payload: BiddingCreditCreat
         raise HTTPException(status_code=400, detail="Не можете да създавате credit за собствен търг")
     min_credit = float(a["current_bid_eur"]) + 100
     if payload.max_amount_eur < min_credit:
-        raise HTTPException(status_code=400, detail=f"Максималната сума трябва да е поне €{int(min_credit)} (следваща наддавка)")
+        raise HTTPException(status_code=400, detail=f"Максималната сума трябва да е поне €{int(min_credit)} (следващо наддаване)")
 
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat()
@@ -1866,7 +1866,7 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
         # min_bid:<value>
         if str(ve).startswith("min_bid:"):
             min_next = float(str(ve).split(":", 1)[1])
-            raise HTTPException(status_code=400, detail=f"Минималната следваща наддавка е €{int(min_next)}")
+            raise HTTPException(status_code=400, detail=f"Минималното следващо наддаване е €{int(min_next)}")
         raise
 
     triggered_extension = result["triggered_extension"]
@@ -2025,7 +2025,7 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
             ).to_list(500)
             mins = max(1, int(seconds_left // 60))
             app_url = os.environ.get("APP_URL", "")
-            body = f"autoandbid.com: Нова наддавка €{int(amount):,} за {a['title'][:50]}. Остават {mins}м. {app_url}/auctions/{auction_id}"
+            body = f"autoandbid.com: Ново наддаване €{int(amount):,} за {a['title'][:50]}. Остават {mins}м. {app_url}/auctions/{auction_id}"
             for r in recipients:
                 if r.get("phone"):
                     try:
@@ -2856,7 +2856,7 @@ async def update_listing(auction_id: str, payload: AuctionUpdate, user: dict = D
     if not is_admin:
         if status not in ("pending", "rejected"):
             if not (status == "live" and int(a.get("bid_count", 0)) == 0):
-                raise HTTPException(status_code=400, detail="Обявата може да се редактира само преди първата наддавка")
+                raise HTTPException(status_code=400, detail="Обявата може да се редактира само преди първото наддаване")
 
     update = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if v is not None}
     # Non-admins cannot change status/featured/ends_at

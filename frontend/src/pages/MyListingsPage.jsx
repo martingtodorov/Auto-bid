@@ -82,7 +82,7 @@ export default function MyListingsPage() {
     catch (e) { setErr(formatError(e)); }
   };
   const acceptHighBid = async (id) => {
-    if (!window.confirm("Приемате ли водещата наддавка?")) return;
+    if (!window.confirm("Приемате ли водещото наддаване?")) return;
     setErr("");
     try { await api.post(`/auctions/${id}/accept-high-bid`); load(); }
     catch (e) { setErr(formatError(e)); }

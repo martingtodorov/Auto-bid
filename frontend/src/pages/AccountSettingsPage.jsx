@@ -86,7 +86,7 @@ export default function AccountSettingsPage() {
             <Phone size={18} className="text-[hsl(var(--accent))]" />
             <h2 className="font-serif text-2xl">SMS известия</h2>
           </div>
-          <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">Получавайте SMS когато има наддавка в последните 5 минути от следен или наддаван от вас търг. Нужен е международен формат (+359...).</p>
+          <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">Получавайте SMS когато има наддаване в последните 5 минути от следен или наддаван от вас търг. Нужен е международен формат (+359...).</p>
 
           <div className="mt-6 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-end">
             <div>

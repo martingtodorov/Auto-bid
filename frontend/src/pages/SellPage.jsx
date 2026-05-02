@@ -398,7 +398,7 @@ export default function SellPage() {
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[hsl(var(--ink-muted))] font-mono text-sm">%</span>
                     </div>
-                    <p className="mt-1.5 text-xs text-[hsl(var(--ink-muted))]">{t("sell.form.vat_rate_hint", "Процент ДДС, който се добавя върху наддавката (напр. 20).")}</p>
+                    <p className="mt-1.5 text-xs text-[hsl(var(--ink-muted))]">{t("sell.form.vat_rate_hint", "Процент ДДС, който се добавя върху наддаването (напр. 20).")}</p>
                   </div>
                 )}
               </div>

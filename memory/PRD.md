@@ -1527,3 +1527,46 @@ Scroll cycle `0 → 500 → 1500 → 0 → 300 → 0`:
 
 Zero-pixel overlap at every scroll position, every direction.
 
+
+---
+
+## 2026-05-02 (iter 21) — Global BG copy: "наддавка" → "наддаване" (neuter)
+
+User-requested unification: replace every single instance of the feminine
+noun "наддавка" (incl. plural "наддавки", definite "наддавката",
+"наддавките") with the neuter "наддаване" across the site. Adjectives
+before it updated to the **correct neuter gender/number** where
+required:
+
+- `нова / нова` → **ново**  (e.g. "нова наддавка" → "ново наддаване")
+- `всяка` → **всяко**
+- `текуща` → **текущо**
+- `ваша / вашата` → **ваше / вашето**
+- `първата` → **първото**
+- `максимална` → **максимално**
+- `минимална / минималната` → **минимално / минималното**
+- `следваща / следващата` → **следващо / следващото**
+- `водеща / водещата` → **водещо / водещото**
+- `печелившата` → **печелившото**
+- `по-висока` → **по-високо**
+- `наддавки / наддавките` → **наддавания / наддаванията**
+- `подадените наддавки` → **подадените наддавания**
+- `всички наддавки` → **всички наддавания**
+
+### Files touched
+- `frontend/src/i18n/locales/bg.json` (15+ strings)
+- `frontend/src/lib/cmsDefaults.js` (CMS default FAQ / Fees / Rules HTML)
+- `frontend/src/components/StripeAuthorize.jsx`,
+  `components/NegotiationPortal.jsx`
+- `frontend/src/pages/{AuctionDetailPage,FAQPage,MyListingsPage,
+  AccountSettingsPage,FeesPage,SellPage}.jsx`
+- `backend/server.py` (HTTP 400 error details + SMS copy)
+- `backend/emails.py` (outbid, won, seller-new-bid, ending-soon templates)
+- `backend/services/push_templates.py` (BG push title)
+
+### Verified
+- `grep -r "наддавк" /app/frontend/src /app/backend` → **0 hits** outside
+  the unit test that explicitly asserts the old form isn't used.
+- JSON / Python syntax clean, ESLint clean.
+- Backend restart green.
+

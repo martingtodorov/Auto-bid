@@ -43,7 +43,7 @@ function DefaultFees({ pct, min, max }) {
         <div className="rounded-card border border-[hsl(var(--line))] bg-white p-6">
           <div className="overline text-[hsl(var(--accent))]">Buyer's premium</div>
           <div className="font-serif text-4xl mt-2">{pct}%</div>
-          <p className="mt-3 text-[hsl(var(--ink-muted))]">Върху финалната цена. Минимум €{min} / максимум €{max} на транзакция. Блокират се при всяка наддавка и се удържат само при печалба.</p>
+          <p className="mt-3 text-[hsl(var(--ink-muted))]">Върху финалната цена. Минимум €{min} / максимум €{max} на транзакция. Блокират се при всяко наддаване и се удържат само при печалба.</p>
           <p className="mt-3 text-xs text-[hsl(var(--ink-muted))]">Пример: финална цена €20 000 → комисионна €{Math.min(max, Math.max(min, Math.round(20000 * pct / 100)))}.</p>
         </div>
       </InfoSection>

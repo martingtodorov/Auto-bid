@@ -29,7 +29,7 @@ TEMPLATES: dict[str, dict[str, dict[str, str]]] = {
     },
     # Seller — your car got a new bid
     "seller_new_bid": {
-        "bg": {"title": "Нова наддавка · {title}", "body": "{bidder} наддаде €{amount}. Общо {count} наддавания."},
+        "bg": {"title": "Ново наддаване · {title}", "body": "{bidder} наддаде €{amount}. Общо {count} наддавания."},
         "en": {"title": "New bid · {title}", "body": "{bidder} placed €{amount}. {count} bids in total."},
         "ro": {"title": "Ofertă nouă · {title}", "body": "{bidder} a oferit €{amount}. {count} oferte în total."},
     },

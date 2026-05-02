@@ -245,7 +245,7 @@ export default function AuctionDetailPage() {
     const minNet = nextBid.min_next_eur || (Math.floor(a.current_bid_eur) + bidStepFor(a.current_bid_eur));
     if (!typed || netAmt < minNet - 0.5) {
       const minDisplay = vatRate > 0 ? Math.ceil(minNet * (1 + vatRate / 100)) : minNet;
-      setError(`${t("auction.min_bid_error", "Минималната следваща наддавка е")} €${minDisplay.toLocaleString()}`);
+      setError(`${t("auction.min_bid_error", "Минималното следващо наддаване е")} €${minDisplay.toLocaleString()}`);
       return;
     }
     if (credit && Number(credit.max_amount_eur) >= netAmt) {
@@ -891,7 +891,7 @@ export default function AuctionDetailPage() {
                   <div className="mt-6 rule-t pt-5">
                     <label className="overline text-[hsl(var(--ink-muted))] block mb-2">
                       {vatRate > 0
-                        ? t("auction.your_bid_eur_gross", "Вашата наддавка (EUR, вкл. ДДС {{rate}}%)", { rate: vatRate })
+                        ? t("auction.your_bid_eur_gross", "Вашето наддаване (EUR, вкл. ДДС {{rate}}%)", { rate: vatRate })
                         : t("auction.your_bid_eur")}
                     </label>
                     <div className="flex gap-2">

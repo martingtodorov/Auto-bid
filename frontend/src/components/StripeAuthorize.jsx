@@ -93,7 +93,7 @@ export default function StripeAuthorize({ auctionId, suggestedLimit = 10000 }) {
         </div>
       </div>
       <label className="overline text-[hsl(var(--ink-muted))] block mb-1.5">
-        {t("stripe.limit_label", "Максимална наддавка (EUR)")}
+        {t("stripe.limit_label", "Максимално наддаване (EUR)")}
       </label>
       <input
         type="number"

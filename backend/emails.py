@@ -78,8 +78,8 @@ def _shell(title: str, body_html: str) -> str:
 async def email_outbid(to: str, name: str, auction_title: str, auction_id: str, new_bid: float):
     body = f"""
       <p>Здравейте, {name},</p>
-      <p>Някой направи по-висока наддавка за <strong>{auction_title}</strong>.</p>
-      <p style="font-size:20px;margin:20px 0;">Нова текуща наддавка: <strong>€{int(new_bid):,}</strong></p>
+      <p>Някой направи по-високо наддаване за <strong>{auction_title}</strong>.</p>
+      <p style="font-size:20px;margin:20px 0;">Ново текущо наддаване: <strong>€{int(new_bid):,}</strong></p>
       <p>Вашата pre-authorization е автоматично освободена.</p>
       <p><a href="{APP_URL}/auctions/{auction_id}" style="display:inline-block;background:#111827;color:#fff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:600;">Върни се в търга</a></p>
     """
@@ -94,7 +94,7 @@ async def email_won(to: str, name: str, auction_title: str, auction_id: str, pri
       <p>Нашият екип ще се свърже с вас за финализирането в рамките на 24 часа. Вашата pre-authorization остава задържана до приключване на сделката.</p>
       <p><a href="{APP_URL}/auctions/{auction_id}" style="display:inline-block;background:#1B4D3E;color:#fff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:600;">Виж търга</a></p>
     """
-    await send_email(to, f"🏁 Спечелихте · {auction_title}", _shell("Вашата наддавка беше печелившата", body))
+    await send_email(to, f"🏁 Спечелихте · {auction_title}", _shell("Вашето наддаване беше печелившото", body))
 
 
 async def email_approved(to: str, name: str, auction_title: str, auction_id: str):
@@ -133,7 +133,7 @@ async def email_vin_delivery(to: str, name: str, auction_title: str, auction_id:
 async def email_seller_new_bid(to: str, name: str, auction_title: str, auction_id: str, bidder_name: str, amount: float, bid_count: int):
     body = f"""
       <p>Здравейте, {name},</p>
-      <p>Нова наддавка за <strong>{auction_title}</strong>.</p>
+      <p>Ново наддаване за <strong>{auction_title}</strong>.</p>
       <div style="margin:20px 0;padding:16px;background:#fafafa;border:1px solid #e5e7eb;border-radius:10px;">
         <div style="font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.1em;">Нова текуща</div>
         <div style="font-size:26px;font-weight:700;margin-top:4px;">€{int(amount):,}</div>
@@ -141,7 +141,7 @@ async def email_seller_new_bid(to: str, name: str, auction_title: str, auction_i
       </div>
       <p><a href="{APP_URL}/auctions/{auction_id}" style="display:inline-block;background:#1B4D3E;color:#fff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:600;">Следи търга</a></p>
     """
-    await send_email(to, f"Нова наддавка €{int(amount):,} · {auction_title}", _shell("Нова наддавка в търга ви", body))
+    await send_email(to, f"Ново наддаване €{int(amount):,} · {auction_title}", _shell("Ново наддаване в търга ви", body))
 
 
 async def email_seller_new_comment(to: str, name: str, auction_title: str, auction_id: str, commenter_name: str, snippet: str):
@@ -157,7 +157,7 @@ async def email_seller_new_comment(to: str, name: str, auction_title: str, aucti
 
 async def email_ending_soon(to: str, name: str, auction_title: str, auction_id: str, current_bid: float, role: str = "watcher"):
     """role: 'watcher' (favourited) or 'bidder' (currently leading or active in bidding)."""
-    headline = "Любим търг изтича скоро" if role == "watcher" else "Търг с ваша наддавка изтича скоро"
+    headline = "Любим търг изтича скоро" if role == "watcher" else "Търг с ваше наддаване изтича скоро"
     body = f"""
       <p>Здравейте, {name},</p>
       <p>До края на търга <strong>{auction_title}</strong> остава около 1 час.</p>

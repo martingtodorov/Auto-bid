@@ -129,7 +129,7 @@ export default function NegotiationPortal({ auctionId, auction }) {
       {/* Offer summary */}
       <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="rounded-card border border-[hsl(var(--line))] p-3">
-          <div className="overline text-[hsl(var(--ink-muted))]">Водеща наддавка</div>
+          <div className="overline text-[hsl(var(--ink-muted))]">Водещо наддаване</div>
           <div className="font-serif text-xl mt-1">{formatEUR(auction?.current_bid_eur || 0)}</div>
         </div>
         <div className="rounded-card border border-[hsl(var(--line))] p-3">
