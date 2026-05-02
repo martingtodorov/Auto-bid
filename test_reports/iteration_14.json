@@ -1,0 +1,88 @@
+{
+  "summary": "Iteration 14 testing complete. All 16 backend tests pass. Mobile.bg import fix verified: BMW M2 listing (URL: https://www.mobile.bg/obiava-11772388504582211-bmw-m2-competition-swiss-hk-carplay) now returns exactly 17 images (not 24 with 7 low-res dupes). All images contain /big1/ path, no images from related listings block, correct gallery order, city='Sofia', country='Bulgaria'.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration14_mobilebg_fix.py",
+    "/app/test_reports/pytest/pytest_iteration14.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_iteration14_mobilebg_fix.py"
+  ],
+  "success_rate": {
+    "backend": "100% (16/16 tests passed)",
+    "frontend": "N/A (backend-only testing per request)"
+  },
+  "test_credentials": "None required - import endpoint is public",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 14 focused on mobile.bg import fix. Root cause was: (1) /big1/ path not matched by old regex (only /big/ was matched), (2) Related listings section ('Още обяви в mobile.bg') was bleeding through. Fix: (a) Scoped image search to main gallery (#rezon-gallery / .owl-carousel / .newAdImages / section), (b) Canonical dedup key is now FILENAME only (e.g. 11772388504582211_Au.webp), (c) Updated regex to support big\\d* (big1, big2...) in _canon and _score, (d) Added focus.bg to host allowlist, (e) Added data-src-gallery as fallback attribute. All tests pass including regression tests for filename-based dedup.",
+  "tests_executed": {
+    "bmw_m2_import": [
+      "Returns exactly 17 images (not 24)",
+      "All images contain /big1/ path (high-res)",
+      "No images from related listing IDs (11772109399906432, 11749650820775475, 11755840738726260, 11774653575320034)",
+      "All images from correct listing ID (11772388504582211)",
+      "Images in correct gallery order (_Au, _U0, _8z, _bV, _NZ, _K6, _mp, _k8, _tz, _HX, _g0, _Id, _fP, _M8, _rK, _eG, _Iz)",
+      "City = 'Sofia' (transliterated from 'София')",
+      "Country = 'Bulgaria' (inferred from mobile.bg host)"
+    ],
+    "filename_based_dedup_regression": [
+      "_canon uses filename as canonical key",
+      "_score prefers /big1/ (score=5) over plain (score=3)",
+      "9 URLs → 5 unique images (4 big, 0 thumb)",
+      "/big1/, /big2/ variants correctly deduplicated"
+    ],
+    "url_without_extension_fallback": [
+      "_canon fallback strips /big1/ for URLs without extension"
+    ],
+    "focus_bg_host_allowlist": [
+      "focus.bg URLs accepted as valid image sources"
+    ],
+    "regression_endpoints": [
+      "/api/healthz → 200",
+      "/api/auctions → 200",
+      "/api/auctions/import-mobile-bg endpoint exists (400 for empty URL)"
+    ]
+  },
+  "verified_response": {
+    "url": "https://www.mobile.bg/obiava-11772388504582211-bmw-m2-competition-swiss-hk-carplay",
+    "total_images": 17,
+    "city": "Sofia",
+    "country": "Bulgaria",
+    "title": "BMW M2 COMPETITION* SWISS* HK* CARPLAY",
+    "make": "BMW",
+    "model": "M2 COMPETITION* SWISS* HK* CARPLAY",
+    "year": 2019,
+    "all_images_have_big1": true,
+    "image_filenames": [
+      "11772388504582211_Au.webp",
+      "11772388504582211_U0.webp",
+      "11772388504582211_8z.webp",
+      "11772388504582211_bV.webp",
+      "11772388504582211_NZ.webp",
+      "11772388504582211_K6.webp",
+      "11772388504582211_mp.webp",
+      "11772388504582211_k8.webp",
+      "11772388504582211_tz.webp",
+      "11772388504582211_HX.webp",
+      "11772388504582211_g0.webp",
+      "11772388504582211_Id.webp",
+      "11772388504582211_fP.webp",
+      "11772388504582211_M8.webp",
+      "11772388504582211_rK.webp",
+      "11772388504582211_eG.webp",
+      "11772388504582211_Iz.webp"
+    ]
+  }
+}

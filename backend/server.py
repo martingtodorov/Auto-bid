@@ -1434,49 +1434,66 @@ async def import_from_mobile_bg(request: Request, payload: MobileBgImport):
     # Images: collect ALL candidate photo URLs (may include thumbnail + big
     # variants of the same picture — mobile.bg embeds both in the gallery
     # markup). We deduplicate below by canonicalizing each URL.
+    #
+    # IMPORTANT: limit the search to the main ad gallery. mobile.bg
+    # appends a "Още обяви в mobile.bg" block with thumbnails of OTHER
+    # listings — pulling those in would mix unrelated cars into our
+    # imported photo list.
     candidates: list[str] = []
-    for img in soup.find_all("img"):
-        src = img.get("src") or img.get("data-src") or ""
+    gallery_roots = []
+    for sel in ["#rezon-gallery", ".owl-carousel", ".newAdImages", "section"]:
+        el = soup.select_one(sel)
+        if el:
+            gallery_roots.append(el)
+            break  # first matching scope is enough
+    search_root = gallery_roots[0] if gallery_roots else soup
+    for img in search_root.find_all("img"):
+        src = img.get("src") or img.get("data-src") or img.get("data-src-gallery") or ""
         if not src:
             continue
         if src.startswith("//"):
             src = "https:" + src
         elif src.startswith("/"):
             src = "https://www.mobile.bg" + src
-        if ("mobile.bg" in src or src.startswith("http")) and any(x in src.lower() for x in ["photo", "pic", "big", "jpg", "jpeg", "png", "webp"]):
+        if ("mobile.bg" in src or "focus.bg" in src or src.startswith("http")) and any(x in src.lower() for x in ["photo", "pic", "big", "jpg", "jpeg", "png", "webp"]):
             low = src.lower()
             if not any(bad in low for bad in ["logo", "icon", "nophoto", "placeholder", "sprite", "avatar"]):
                 candidates.append(src)
 
     # ---- Smart thumbnail dedup ----------------------------------------
     # mobile.bg consistently publishes two variants of the same photo in
-    # the gallery HTML: one in a "big/<id>" (or just "<id>") path and a
-    # second in a thumbnail path such as "thumb/", "small/", or a size
-    # suffix like "8-<id>.jpg" / "<id>_t.jpg". Plain URL equality misses
-    # these — users reported ~7 low-res dupes coming in alongside the
-    # full-size originals.
+    # the gallery HTML: one in a "big<N>/" path (e.g. /big1/, /big2/) with
+    # the high-res source, and a second in a parallel thumbnail path
+    # (the same directory WITHOUT the `/bigN/` segment, serving ~120 px
+    # low-res previews for the scroll rail). Users reported ~7 low-res
+    # dupes sneaking in because our original regex only matched `/big/`
+    # without a trailing digit.
     #
-    # Strategy: normalise each URL by stripping any size marker, bucket
-    # URLs that share the same normalised key, then keep the variant
-    # with the highest "resolution score" per bucket. Order is preserved
-    # using the first big/orig URL we see.
+    # Strategy: canonical key = the final filename only (mobile.bg
+    # assigns a deterministic `<listingId>_<code>.webp` filename that is
+    # IDENTICAL for the big and small variants of the same photo). Then
+    # keep the variant with the highest "resolution score" per key and
+    # preserve first-seen ordering. Filename-based keying also survives
+    # any future CDN path changes on mobile.bg's side.
     def _canon(u: str) -> str:
-        lu = u.lower()
-        # 1) Collapse size-folder components: /big/, /small/, /thumb/, /medium/, /orig/, /large/
-        lu = _re.sub(r"/(big|small|thumb|medium|orig|large|preview|tn)/", "/", lu)
-        # 2) Drop size suffixes before the extension: _big, _small, _t, _thumb, _orig, _large
-        lu = _re.sub(r"_(big|small|t|thumb|medium|orig|large|preview|tn)(?=\.[a-z0-9]+(?:\?|$))", "", lu)
-        # 3) Drop a leading numeric "size" prefix on the filename, e.g.
-        #    "/8-abc.jpg", "/15-abc.jpg" — mobile.bg puts a size code there.
-        lu = _re.sub(r"/(?:\d{1,3})-([^/]+\.(?:jpg|jpeg|png|webp))(?:\?|$)", r"/\1", lu)
-        # 4) Strip trailing querystring (cache busters vary per variant)
-        lu = lu.split("?", 1)[0]
+        lu = u.lower().split("?", 1)[0]
+        # Prefer the basename as the canonical key — mobile.bg uses the
+        # same filename for thumb + big (only the directory differs).
+        tail = lu.rsplit("/", 1)[-1]
+        if tail and "." in tail:
+            return tail
+        # Fallback for URLs without a clear filename — collapse any size
+        # folder or suffix so both variants still key the same.
+        lu = _re.sub(r"/(big\d*|small|thumb|medium|orig|large|preview|tn)/", "/", lu)
+        lu = _re.sub(r"_(big\d*|small|t|thumb|medium|orig|large|preview|tn)(?=\.[a-z0-9]+$)", "", lu)
+        lu = _re.sub(r"/(?:\d{1,3})-([^/]+\.(?:jpg|jpeg|png|webp))$", r"/\1", lu)
         return lu
 
     def _score(u: str) -> int:
         lu = u.lower()
         # Higher = bigger/better. Prefer explicit big/orig/large markers.
-        if "/big/" in lu or "_big." in lu or "/orig" in lu or "_orig." in lu:
+        # `big1`, `big2`… are mobile.bg's high-res directories.
+        if _re.search(r"/big\d*/", lu) or "_big." in lu or "/orig" in lu or "_orig." in lu:
             return 5
         if "/large/" in lu or "_large." in lu:
             return 4
