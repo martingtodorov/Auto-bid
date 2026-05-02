@@ -399,6 +399,39 @@ _LIST_KEEP = {
 }
 
 
+# MongoDB projection used when `view=list` is requested — strips the
+# heavy fields at the DB driver layer so we never transfer/parse them.
+# `images` is kept (cover slice happens in _list_shape), plus everything
+# _LIST_KEEP needs + the raw fields required to compute status.
+_LIST_MONGO_PROJECTION = {
+    "_id": 0,
+    "description": 0,
+    "description_en": 0,
+    "description_bg": 0,
+    "description_ro": 0,
+    "images_exterior": 0,
+    "images_wheels": 0,
+    "images_bumper": 0,
+    "images_interior": 0,
+    "contact_email": 0,
+    "contact_phone": 0,
+    "vin": 0,
+    "power_hp": 0,
+    "engine_cc": 0,
+    "price_net_eur": 0,
+    "price_gross_eur": 0,
+    "duration_days": 0,
+    "approved_at": 0,
+    "views_count": 0,
+    "specs": 0,
+    "documents": 0,
+    "history": 0,
+    "service_history": 0,
+    "rejection_reason": 0,
+    "translations": 0,
+}
+
+
 def _list_shape(a: dict) -> dict:
     """Project a public auction dict to the minimal subset needed for list
     cards. Keeps only the cover image (thumb + full) — trims the rest."""
@@ -415,6 +448,7 @@ def _list_shape(a: dict) -> dict:
 @api.get("/auctions")
 async def list_auctions(
     request: Request,
+    response: Response,
     make: Optional[str] = None,
     fuel: Optional[str] = None,
     transmission: Optional[str] = None,
@@ -434,6 +468,7 @@ async def list_auctions(
 ):
     viewer = await get_optional_user(request)
     viewer_is_admin = viewer and viewer.get("role") in ("admin", "moderator")
+    use_list_shape = (view == "list")
     query = {}
     # Hide archived listings at DB level for non-admins (admins see them via the dedicated archive tab).
     if not viewer_is_admin:
@@ -463,11 +498,19 @@ async def list_auctions(
     # before the Python filter. We fetch a generous batch (200) per page then
     # paginate after computing public statuses + sorting.
     fetch_cap = 200
-    cursor = db.auctions.find(query, {"_id": 0}).limit(fetch_cap)
+    # For `view=list`: use a lean DB projection that strips heavy fields
+    # (description, extra image arrays, specs, contacts, VIN, …) BEFORE
+    # they leave MongoDB. Cuts Mongo → API network transfer ~80%.
+    projection = _LIST_MONGO_PROJECTION if use_list_shape else {"_id": 0}
+    cursor = db.auctions.find(query, projection).limit(fetch_cap)
     items = await cursor.to_list(fetch_cap)
-    # Compute high-value pre-auth status ONCE per request so VIN unmasking
-    # doesn't trigger an extra DB query per row.
-    unmask_for_viewer = await _has_high_value_preauth(viewer["id"]) if viewer else False
+    # VIN unmask is irrelevant for `view=list` (VIN is already stripped by
+    # the projection) — skip the extra DB lookup entirely. Anonymous
+    # viewers also don't need it.
+    if viewer and not use_list_shape:
+        unmask_for_viewer = await _has_high_value_preauth(viewer["id"])
+    else:
+        unmask_for_viewer = False
     items = [_public_auction(a, viewer, unmask_vin=unmask_for_viewer) for a in items]
 
     # Hide non-public statuses from public listings (pending/rejected/withdrawn/removed/cancelled/paused)
@@ -489,7 +532,14 @@ async def list_auctions(
         items.sort(key=lambda a: a.get("bid_count", 0), reverse=True)
 
     total = len(items)
-    use_list_shape = (view == "list")
+    # Edge-cache anonymous list responses. Cards are identical for every
+    # unauthenticated visitor; a 30s shared cache means Cloudflare / nginx
+    # proxy cache absorbs virtually all traffic spikes. We still serve
+    # fresh data to logged-in users (whose cookies skip the edge cache
+    # via `Vary: Cookie`).
+    if not viewer:
+        response.headers["Cache-Control"] = "public, max-age=15, s-maxage=30, stale-while-revalidate=60"
+        response.headers["Vary"] = "Cookie, Accept-Language"
     if paginated:
         offset = max(0, int(offset))
         page_items = items[offset: offset + max(1, min(60, int(limit)))]
@@ -509,13 +559,17 @@ async def list_auctions(
 @api.get("/auctions/featured")
 async def featured(request: Request, response: Response, view: Optional[str] = None):
     viewer = await get_optional_user(request)
+    use_list_shape = (view == "list")
+    # Lean projection for list shape — strips description/extra image arrays
+    # at the DB layer. Saves Mongo→API transfer time.
+    projection = _LIST_MONGO_PROJECTION if use_list_shape else {"_id": 0}
     # Up to 10 items total:
     #   1) all live+featured (may be fewer than 10)
     #   2) top up with live+non-featured (newest first) until 10 or exhausted
     target = 10
     featured_raw = await db.auctions.find(
         {"featured": True, "is_archived": {"$ne": True}, "status": {"$ne": "archived"}},
-        {"_id": 0},
+        projection,
     ).limit(30).to_list(30)
     featured_items = [_public_auction(a, viewer) for a in featured_raw]
     featured_live = [a for a in featured_items if a["status"] == "live" and not a.get("is_archived")]
@@ -531,7 +585,7 @@ async def featured(request: Request, response: Response, view: Optional[str] = N
                 "is_archived": {"$ne": True},
                 "status": "live",
             },
-            {"_id": 0},
+            projection,
         ).sort("ends_at", 1).limit(needed * 3).to_list(needed * 3)
         extra_items = [_public_auction(a, viewer) for a in extra_raw]
         for a in extra_items:
@@ -551,7 +605,7 @@ async def featured(request: Request, response: Response, view: Optional[str] = N
     # serve stale content while refreshing in background. Zero impact on
     # authenticated viewers — the response has no user-specific fields.
     response.headers["Cache-Control"] = "public, max-age=30, s-maxage=60, stale-while-revalidate=120"
-    if view == "list":
+    if use_list_shape:
         combined = [_list_shape(a) for a in combined]
     return combined
 
@@ -599,11 +653,12 @@ async def sold(
     offset = max(0, int(offset))
 
     total = await db.auctions.count_documents(query)
-    cursor = db.auctions.find(query, {"_id": 0}).sort(sort_field, sort_dir).skip(offset).limit(limit)
+    use_list_shape = (view == "list")
+    projection = _LIST_MONGO_PROJECTION if use_list_shape else {"_id": 0}
+    cursor = db.auctions.find(query, projection).sort(sort_field, sort_dir).skip(offset).limit(limit)
     raw = await cursor.to_list(limit)
     items = [_public_auction(a, viewer) for a in raw]
     await _enrich_dealer_status(items)
-    use_list_shape = (view == "list")
     # Public sold listings are long-lived and identical for everybody. Cache
     # aggressively at the edge — 5 minutes shared, 10 minutes stale-while-
     # revalidate. Saves a lot of MongoDB work on the /sales page.

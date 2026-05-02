@@ -1,0 +1,98 @@
+{
+  "summary": "Iteration 11 Testing Complete - DB-level projection, anonymous caching, and sessionStorage cache all working correctly. Backend: 14/14 passed. Frontend: All pages render correctly with optimized payloads and caching.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration11_caching.py",
+    "/app/test_reports/pytest/pytest_iteration11_caching.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "DB-LEVEL PROJECTION (MongoDB _LIST_MONGO_PROJECTION):",
+    "  - GET /api/auctions?view=list uses MongoDB projection to strip heavy fields at DB layer ✅",
+    "  - Heavy fields excluded: description, description_en, images_exterior/wheels/bumper/interior, contact_email, contact_phone, vin, power_hp, engine_cc, price_net_eur, price_gross_eur, duration_days, approved_at, views_count, specs, documents, service_history, rejection_reason, translations ✅",
+    "  - Required fields present: title, make, model, year, mileage_km, fuel, city, country, current_bid_eur, buy_now_eur, bid_count, has_reserve, no_reserve, ends_at, status, featured, vat_status, vat_rate_pct, seller_is_verified_dealer, thumbnails, images ✅",
+    "ANONYMOUS CACHE-CONTROL HEADERS (GET /api/auctions):",
+    "  - Anonymous requests: 'public, max-age=15, s-maxage=30, stale-while-revalidate=60' ✅",
+    "  - Vary header: 'Cookie, Accept-Language' ✅",
+    "  - Authenticated requests: NO public Cache-Control header ✅",
+    "FEATURED/SOLD CACHE-CONTROL:",
+    "  - /api/auctions/featured: 'public, max-age=30, s-maxage=60, stale-while-revalidate=120' ✅",
+    "  - /api/auctions/sold: 'public, max-age=60, s-maxage=300, stale-while-revalidate=600' ✅",
+    "STATUS COMPUTATION:",
+    "  - status field computed correctly (live/ended/sold/reserve_not_met) ✅",
+    "  - has_reserve computed correctly ✅",
+    "  - reserve_met NOT leaked for live auctions (returns null) ✅",
+    "FRONTEND SESSIONSTORE CACHE:",
+    "  - Cache key: 'autobid:auctions_default_v1' ✅",
+    "  - Cache TTL: 60 seconds ✅",
+    "  - Cache written on default query (page=1, status=live, sort=ending_soon, no filters) ✅",
+    "  - On revisit: instant paint from cache, no 'No results' flash ✅",
+    "FRONTEND RENDERING:",
+    "  - /auctions: Grid renders with 3 auction cards ✅",
+    "  - /auctions: VAT, FEATURED, No-reserve, With-reserve badges all render ✅",
+    "  - /auctions: Filtering works (refetches, doesn't use stale cache) ✅",
+    "  - /auctions: Search query works ✅",
+    "  - Homepage: Featured listing + Active auctions section renders ✅",
+    "  - Homepage: LiveTicker visible with auction items ✅",
+    "  - /sales: Page renders correctly (empty state - no sold auctions) ✅",
+    "PERFORMANCE OPTIMIZATION:",
+    "  - Skip _has_high_value_preauth DB lookup when view=list (saves 1 Mongo round-trip) ✅"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration11_caching.py"
+  ],
+  "success_rate": {
+    "backend": "100% (14/14 passed)",
+    "frontend": "100% (all pages render correctly)"
+  },
+  "test_credentials": {
+    "admin": "admin@autoandbid.com / Nero08787"
+  },
+  "seed_data_creation": "None - used existing auction data",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 11 adds DB-level projection for view=list, anonymous Cache-Control headers on GET /auctions, and frontend sessionStorage cache. All features tested and working. Note: Cloudflare preview edge overrides Cache-Control headers to 'no-store' - test raw headers on localhost:8001. The sessionStorage cache (key=autobid:auctions_default_v1, TTL=60s) only caches the default query (page=1, status=live, sort=ending_soon, no filters). Filtering/search bypasses cache and refetches.",
+  "features_tested": {
+    "db_projection": [
+      "MongoDB _LIST_MONGO_PROJECTION excludes heavy fields at DB layer",
+      "Required fields for AuctionCard.jsx all present",
+      "Images/thumbnails limited to 1 per item"
+    ],
+    "anonymous_cache_control": [
+      "GET /api/auctions (anonymous): public, max-age=15, s-maxage=30, stale-while-revalidate=60",
+      "Vary: Cookie, Accept-Language",
+      "Authenticated requests do NOT get public Cache-Control"
+    ],
+    "featured_sold_cache_control": [
+      "/api/auctions/featured: public, max-age=30, s-maxage=60",
+      "/api/auctions/sold: public, max-age=60, s-maxage=300"
+    ],
+    "status_computation": [
+      "status field: live/ended/sold/reserve_not_met",
+      "has_reserve computed correctly",
+      "reserve_met hidden for live auctions"
+    ],
+    "frontend_session_cache": [
+      "sessionStorage cache written on default query",
+      "Instant paint on revisit (no loading spinner)",
+      "No 'No results' flash on revisit"
+    ],
+    "frontend_rendering": [
+      "/auctions page with badges (VAT, FEATURED, reserve)",
+      "Homepage with featured listing and active auctions",
+      "/sales page renders correctly"
+    ]
+  },
+  "mocked_apis": {
+    "has_mocked_apis": false,
+    "mocked_apis_list": []
+  }
+}

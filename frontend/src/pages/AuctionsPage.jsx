@@ -30,6 +30,34 @@ export default function AuctionsPage() {
   const [open, setOpen] = useState(false);
   const [closing, setClosing] = useState(false);
 
+  // Is this the default query (page 1, status=live, sort=ending_soon, no
+  // other filters, no search)? Default view is what 95% of visitors land
+  // on → worth caching in sessionStorage for instant back-nav + tab revisits.
+  const isDefaultQuery = (
+    page === 1 &&
+    !filters.q &&
+    filters.status === "live" &&
+    filters.sort === "ending_soon" &&
+    !filters.make && !filters.fuel && !filters.transmission && !filters.body_type &&
+    !filters.min_price && !filters.max_price && !filters.year_min && !filters.year_max
+  );
+  const CACHE_KEY = "autobid:auctions_default_v1";
+  const CACHE_TTL = 60 * 1000;
+
+  // Paint instantly from cache on mount if we have fresh data.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(CACHE_KEY);
+      if (!raw) return;
+      const cached = JSON.parse(raw);
+      if (!cached || Date.now() - cached.ts > CACHE_TTL) return;
+      setItems(cached.items || []);
+      setTotal(cached.total || 0);
+      setLoading(false);
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const closeFilters = () => {
     setClosing((prev) => {
       if (prev) return prev;
@@ -62,23 +90,33 @@ export default function AuctionsPage() {
   }, [brand, t]);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    // Don't flip back into "loading" on revalidation — if we already have
+    // items painted (from cache or a prior fetch), keep them on screen.
+    setLoading((prev) => (items.length ? false : prev));
     const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== "" && v != null));
     params.paginated = 1;
     params.limit = PAGE_SIZE;
     params.offset = (page - 1) * PAGE_SIZE;
     params.view = "list";
     const { data } = await api.get("/auctions", { params });
-    setItems(data?.items || []);
-    setTotal(data?.total || 0);
+    const nextItems = data?.items || [];
+    const nextTotal = data?.total || 0;
+    setItems(nextItems);
+    setTotal(nextTotal);
     setLoading(false);
+    // Persist the default view for instant back-nav next time
+    if (isDefaultQuery) {
+      try {
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), items: nextItems, total: nextTotal }));
+      } catch { /* quota etc — ignore */ }
+    }
     // Scroll to grid top after a page change
     if (page > 1) {
       try {
         document.querySelector('[data-testid="auctions-grid"]')?.scrollIntoView({ behavior: "smooth", block: "start" });
       } catch (_) { /* noop */ }
     }
-  }, [filters, page]);
+  }, [filters, page, isDefaultQuery, items.length]);
 
   // Reset to page 1 when filters change
   useEffect(() => { setPage(1); }, [filters]);
