@@ -503,7 +503,13 @@ export default function AuctionDetailPage() {
                 onClick={() => setLightboxIdx(photoIdx)}
                 data-testid="main-gallery-image"
               >
-                <img src={a.images?.[photoIdx]} alt={a.title} className="w-full h-full object-cover transition group-hover:scale-[1.02]" />
+                <img
+                  src={a.thumbnails?.[photoIdx] || a.images?.[photoIdx]}
+                  alt={a.title}
+                  className="w-full h-full object-cover transition group-hover:scale-[1.02]"
+                  decoding="async"
+                  fetchpriority="high"
+                />
                 {a.images?.length > 0 && (
                   <div className="absolute bottom-3 right-3 px-2.5 py-1 rounded-full bg-black/55 text-white text-xs font-mono opacity-0 group-hover:opacity-100 transition pointer-events-none">
                     {photoIdx + 1} / {a.images.length} · {t("common.zoom")}
@@ -531,6 +537,13 @@ export default function AuctionDetailPage() {
                           setPhotoIdx(i);
                         }
                       };
+                      // Small thumbs render at ~100 px — use the 400 px
+                      // pre-generated thumbnail (browser downscales) instead
+                      // of the full 1920 px original. Hidden thumbs past
+                      // position 5 keep `loading="lazy"` so they don't fetch
+                      // unless they scroll into view (they don't on desktop —
+                      // the rest live in the lightbox).
+                      const thumbSrc = a.thumbnails?.[i] || img;
                       return (
                         <button
                           key={i}
@@ -540,7 +553,15 @@ export default function AuctionDetailPage() {
                           } ${hideOnMobile && hideOnDesktop ? "hidden" : hideOnMobile ? "hidden md:block" : hideOnDesktop ? "block md:hidden" : ""}`}
                           data-testid={`thumb-${i}`}
                         >
-                          <img src={img} alt="" className="w-full h-full object-cover" loading="lazy" />
+                          <img
+                            src={thumbSrc}
+                            alt=""
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                            decoding="async"
+                            width="120"
+                            height="90"
+                          />
                           {isMobileLastVisible && (
                             <span
                               className="md:hidden absolute inset-0 bg-black/65 hover:bg-black/75 transition-colors flex items-center justify-center text-white font-serif text-lg cursor-zoom-in"
@@ -620,6 +641,19 @@ export default function AuctionDetailPage() {
                 auctionId={id}
                 description={a.description}
                 interiorImages={a.images_interior || []}
+                interiorThumbnails={(() => {
+                  // Interior lives at the tail of the merged `images` /
+                  // `thumbnails` arrays (order = exterior + bumper + wheels +
+                  // interior). Slice the 400 px thumbnails for cheap
+                  // inline display.
+                  const exteriorLen = (a.images_exterior || []).length;
+                  const bumperLen = (a.images_bumper || []).length;
+                  const wheelsLen = (a.images_wheels || []).length;
+                  const start = exteriorLen + bumperLen + wheelsLen;
+                  return (a.thumbnails || []).slice(start);
+                })()}
+                interiorStartIdx={(a.images_exterior || []).length + (a.images_bumper || []).length + (a.images_wheels || []).length}
+                onOpenLightbox={(idx) => setLightboxIdx(idx)}
                 preTranslated={{ ro: a.description_ro || "", en: a.description_en || "" }}
               />
             </div>
@@ -933,6 +967,7 @@ export default function AuctionDetailPage() {
       {lightboxIdx !== null && (
         <Lightbox
           images={a.images || []}
+          thumbnails={a.thumbnails || []}
           index={lightboxIdx}
           onClose={() => setLightboxIdx(null)}
           onChange={(i) => { setLightboxIdx(i); setPhotoIdx(i); }}
@@ -942,7 +977,7 @@ export default function AuctionDetailPage() {
   );
 }
 
-function DescriptionWithInteriorShots({ auctionId, description, interiorImages, preTranslated = {} }) {
+function DescriptionWithInteriorShots({ auctionId, description, interiorImages, interiorThumbnails = [], interiorStartIdx = 0, onOpenLightbox, preTranslated = {} }) {
   const { t, i18n } = useTranslation();
   const lang = (i18n.language || "bg").slice(0, 2);
   const needsTranslation = lang !== "bg" && !!(description || "").trim();
@@ -1055,18 +1090,32 @@ function DescriptionWithInteriorShots({ auctionId, description, interiorImages, 
     );
     const shot = visibleShots[i];
     if (shot) {
-      blocks.push(
+      // Prefer the 400 px thumbnail version (browser already has it cached
+      // for the main gallery); fall back to the full-res URL if the
+      // thumbnail isn't available for this position. Clicking opens the
+      // lightbox at the matching index in the parent `images` array.
+      const thumbSrc = interiorThumbnails[i] || shot;
+      const lightboxIdxForShot = interiorStartIdx + i;
+      return blocks.push(
         <figure
           key={`s-${i}`}
           className="my-2 rounded-card overflow-hidden border border-[hsl(var(--line))] bg-[hsl(var(--surface))]"
         >
-          <img
-            src={shot}
-            alt="Interior"
-            loading="lazy"
-            className="w-full h-auto object-cover max-h-[480px]"
-            data-testid={`interior-shot-${i}`}
-          />
+          <button
+            type="button"
+            onClick={() => onOpenLightbox && onOpenLightbox(lightboxIdxForShot)}
+            className="block w-full cursor-zoom-in"
+            data-testid={`interior-shot-btn-${i}`}
+          >
+            <img
+              src={thumbSrc}
+              alt="Interior"
+              loading="lazy"
+              decoding="async"
+              className="w-full h-auto object-cover max-h-[480px]"
+              data-testid={`interior-shot-${i}`}
+            />
+          </button>
         </figure>
       );
     }

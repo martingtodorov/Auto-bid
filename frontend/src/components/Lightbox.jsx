@@ -16,12 +16,13 @@ import { X, ChevronLeft, ChevronRight } from "lucide-react";
  * as accidental "next photo" swipes.
  *
  * Props:
- *  - images: string[] (URLs)
+ *  - images: string[] (full-resolution URLs — only the current one is ever loaded)
+ *  - thumbnails?: string[] (optional 400 px tier used for the thumbnail strip)
  *  - index: number (current index)
  *  - onClose: () => void
  *  - onChange: (newIndex: number) => void
  */
-export default function Lightbox({ images, index, onClose, onChange }) {
+export default function Lightbox({ images, thumbnails, index, onClose, onChange }) {
   const total = images?.length || 0;
   const stripRef = useRef(null);
 
@@ -118,6 +119,8 @@ export default function Lightbox({ images, index, onClose, onChange }) {
           className="max-w-full max-h-full object-contain"
           data-testid="lightbox-image"
           draggable={false}
+          decoding="async"
+          fetchpriority="high"
         />
       </div>
 
@@ -166,7 +169,13 @@ export default function Lightbox({ images, index, onClose, onChange }) {
               aria-label={`Снимка ${i + 1}`}
               data-testid={`lightbox-thumb-${i}`}
             >
-              <img src={src} alt="" loading="lazy" className="w-full h-full object-cover" />
+              <img
+                src={(thumbnails && thumbnails[i]) || src}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                className="w-full h-full object-cover"
+              />
             </button>
           ))}
         </div>
