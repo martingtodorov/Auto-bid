@@ -468,7 +468,7 @@
       "colour": "Culoare",
       "region": "Regiune",
       "city": "Oraș",
-      "city_hint": "Doar alfabet latin (de ex. „Sofia\").",
+      "city_hint": "Acceptăm atât alfabetul latin, cât și chirilic.",
       "country": "Țară",
       "starting_bid_eur": "Preț de pornire",
       "reserve_eur": "Preț de rezervă (opțional)",

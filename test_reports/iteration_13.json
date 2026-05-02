@@ -1,0 +1,87 @@
+{
+  "summary": "Iteration 13 testing complete. All 44 backend tests pass. All frontend tests pass. BG locale shows 4 updated benefit phrases. EN/RO locales render without errors. SellPage city input accepts Cyrillic (no Latin-only restriction). City transliteration, country detection, and image dedup logic all working correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration13_translate_import.py",
+    "/app/test_reports/pytest/pytest_iteration13.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_iteration13_translate_import.py"
+  ],
+  "success_rate": {
+    "backend": "100% (44/44 tests passed)",
+    "frontend": "100% (all UI tests passed)"
+  },
+  "test_credentials": "admin@autoandbid.com / Nero08787 (not used - no auth required for these tests)",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 13 focused on: (1) BG translation fixes in landing page benefits section - all 4 phrases updated correctly, (2) Cyrillic city transliteration via curated _CITY_OVERRIDES dict + static ISO-9 fallback - tested Sofia, Plovdiv, Varna, Burgas, Ruse, Veliko Tarnovo, Hisarya, (3) Country auto-fill from host TLD (.bg→Bulgaria, .ro→Romania, .com→Bulgaria), (4) SellPage city input no longer has Latin-only restriction (no pattern attribute, no regex validation, placeholder shows both scripts), (5) Image dedup logic for mobile.bg URLs - _canon strips size folders/suffixes, _score prioritizes big variants. All tests pass.",
+  "tests_executed": {
+    "transliterate_city_to_latin": [
+      "София → Sofia",
+      "Велико Търново → Veliko Tarnovo",
+      "Пловдив → Plovdiv",
+      "Варна → Varna",
+      "Бургас → Burgas",
+      "Русе → Ruse",
+      "Хисаря → Latin output (curated/fallback)",
+      "Sofia → Sofia (no-op)",
+      "'' → '' (empty)"
+    ],
+    "country_from_host": [
+      "auto-bid.bg → Bulgaria",
+      "auto-bid.ro → Romania",
+      "auto-bid.com → Bulgaria",
+      "auction-drive-bg.preview.emergentagent.com → Bulgaria",
+      "'' → Bulgaria (default)",
+      "auto-bid.bg:8080 → Bulgaria (port stripped)",
+      "auto-bid.de → Bulgaria (unknown TLD default)"
+    ],
+    "image_dedup": [
+      "_canon strips /big/, /thumb/, _big suffix, numeric prefix",
+      "_score: big=5, thumb=1, neutral=3",
+      "9 URLs → 5 unique images, all variants are 'big', 0 thumbs"
+    ],
+    "bg_locale_translations": [
+      "s1_desc contains 'наддаване' (not 'наддавка')",
+      "s2_desc does NOT contain 'независим технически доклад'",
+      "s3_desc contains 'наддаване в последните 2 минути удължава търга'",
+      "s4_desc contains 'прехвърляне и регистрация'",
+      "city_hint mentions both scripts"
+    ],
+    "sell_page_city_input": [
+      "No pattern attribute",
+      "No Latin-only title",
+      "No err_city_latin validation",
+      "Placeholder shows 'Sofia, София, Bucharest, Plovdiv…'",
+      "Accepts Cyrillic input without error"
+    ],
+    "regression_endpoints": [
+      "/api/healthz → 200",
+      "/api/auctions → 200",
+      "/api/auctions/featured → 200",
+      "/api/auctions/sold → 200",
+      "/api/makes → 200"
+    ],
+    "frontend_pages": [
+      "Landing page BG locale - all 4 updated phrases visible",
+      "Landing page EN locale - renders without errors",
+      "Landing page RO locale - renders without errors",
+      "SellPage - city input accepts Cyrillic",
+      "/auctions - renders with 3 auction cards",
+      "/sales - renders correctly",
+      "/auctions/{id} - detail page renders with images and bid form"
+    ]
+  }
+}

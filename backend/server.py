@@ -1431,8 +1431,10 @@ async def import_from_mobile_bg(request: Request, payload: MobileBgImport):
         paragraphs = [p.get_text(" ", strip=True) for p in soup.find_all("p") if len(p.get_text(strip=True)) > 40]
         description = "\n\n".join(paragraphs[:3])
 
-    # Images: find all img tags with large photos
-    images = []
+    # Images: collect ALL candidate photo URLs (may include thumbnail + big
+    # variants of the same picture — mobile.bg embeds both in the gallery
+    # markup). We deduplicate below by canonicalizing each URL.
+    candidates: list[str] = []
     for img in soup.find_all("img"):
         src = img.get("src") or img.get("data-src") or ""
         if not src:
@@ -1443,10 +1445,81 @@ async def import_from_mobile_bg(request: Request, payload: MobileBgImport):
             src = "https://www.mobile.bg" + src
         if ("mobile.bg" in src or src.startswith("http")) and any(x in src.lower() for x in ["photo", "pic", "big", "jpg", "jpeg", "png", "webp"]):
             low = src.lower()
-            if src not in images and not any(bad in low for bad in ["logo", "icon", "nophoto", "placeholder", "sprite", "avatar"]):
-                images.append(src)
+            if not any(bad in low for bad in ["logo", "icon", "nophoto", "placeholder", "sprite", "avatar"]):
+                candidates.append(src)
+
+    # ---- Smart thumbnail dedup ----------------------------------------
+    # mobile.bg consistently publishes two variants of the same photo in
+    # the gallery HTML: one in a "big/<id>" (or just "<id>") path and a
+    # second in a thumbnail path such as "thumb/", "small/", or a size
+    # suffix like "8-<id>.jpg" / "<id>_t.jpg". Plain URL equality misses
+    # these — users reported ~7 low-res dupes coming in alongside the
+    # full-size originals.
+    #
+    # Strategy: normalise each URL by stripping any size marker, bucket
+    # URLs that share the same normalised key, then keep the variant
+    # with the highest "resolution score" per bucket. Order is preserved
+    # using the first big/orig URL we see.
+    def _canon(u: str) -> str:
+        lu = u.lower()
+        # 1) Collapse size-folder components: /big/, /small/, /thumb/, /medium/, /orig/, /large/
+        lu = _re.sub(r"/(big|small|thumb|medium|orig|large|preview|tn)/", "/", lu)
+        # 2) Drop size suffixes before the extension: _big, _small, _t, _thumb, _orig, _large
+        lu = _re.sub(r"_(big|small|t|thumb|medium|orig|large|preview|tn)(?=\.[a-z0-9]+(?:\?|$))", "", lu)
+        # 3) Drop a leading numeric "size" prefix on the filename, e.g.
+        #    "/8-abc.jpg", "/15-abc.jpg" — mobile.bg puts a size code there.
+        lu = _re.sub(r"/(?:\d{1,3})-([^/]+\.(?:jpg|jpeg|png|webp))(?:\?|$)", r"/\1", lu)
+        # 4) Strip trailing querystring (cache busters vary per variant)
+        lu = lu.split("?", 1)[0]
+        return lu
+
+    def _score(u: str) -> int:
+        lu = u.lower()
+        # Higher = bigger/better. Prefer explicit big/orig/large markers.
+        if "/big/" in lu or "_big." in lu or "/orig" in lu or "_orig." in lu:
+            return 5
+        if "/large/" in lu or "_large." in lu:
+            return 4
+        if "/medium/" in lu or "_medium." in lu:
+            return 2
+        if ("/small/" in lu or "_small." in lu or "/thumb/" in lu or
+                "_thumb." in lu or "_t." in lu or "/tn/" in lu or "/preview/" in lu):
+            return 1
+        # No explicit marker → assume standard resolution (neutral)
+        return 3
+
+    best_for_key: dict[str, tuple[int, str]] = {}
+    key_first_seen: list[str] = []
+    for u in candidates:
+        k = _canon(u)
+        s = _score(u)
+        prev = best_for_key.get(k)
+        if prev is None:
+            key_first_seen.append(k)
+            best_for_key[k] = (s, u)
+        elif s > prev[0]:
+            best_for_key[k] = (s, u)
+    images: list[str] = []
+    for k in key_first_seen:
+        images.append(best_for_key[k][1])
         if len(images) >= 24:
             break
+
+    # City: mobile.bg serves everything in Cyrillic. Transliterate to Latin
+    # (Gemini → Emergent LLM → deterministic char-map) so the form preset
+    # matches the rest of the UI. Country is inferred from the tenant
+    # domain (.bg → Bulgaria, .ro → Romania, .com → Bulgaria).
+    city_latin = ""
+    if city:
+        try:
+            from translate import transliterate_city_to_latin
+            city_latin = await transliterate_city_to_latin(city)
+        except Exception:  # defensive — never block an import on this
+            from translate import _static_transliterate_bg
+            city_latin = _static_transliterate_bg(city)
+    from translate import country_from_host
+    host_header = (request.headers.get("host") or "").lower()
+    country = country_from_host(host_header)
 
     return {
         "title": title[:120] if title else "",
@@ -1460,7 +1533,8 @@ async def import_from_mobile_bg(request: Request, payload: MobileBgImport):
         "power_hp": power,
         "engine_cc": engine_cc,
         "color": color,
-        "city": city,
+        "city": city_latin or city,
+        "country": country,
         "description": description[:3500] if description else "",
         "images": images,
         "source_url": url or "",

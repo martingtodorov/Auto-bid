@@ -472,7 +472,7 @@
       "colour": "Colour",
       "region": "Region",
       "city": "City",
-      "city_hint": "Latin script only (e.g. \"Sofia\").",
+      "city_hint": "We accept both Latin and Cyrillic script.",
       "country": "Country",
       "starting_bid_eur": "Starting bid",
       "reserve_eur": "Reserve price (optional)",

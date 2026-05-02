@@ -162,15 +162,12 @@ export default function SellPage() {
         return;
       }
       // Градът трябва да е на латиница (Hetzner/международна аудитория).
-      // Кирилица, гръцки и арабски символи не се приемат.
+      // Accept both Cyrillic and Latin city names — the backend
+      // transliterates Cyrillic during mobile.bg import and users on
+      // .bg / .ro domains often type in their native script.
       const cityVal = (form.city || "").trim();
       if (!cityVal) {
-        setErr(t("sell.err_city_required", "Моля, въведете град на латиница."));
-        setLoading(false);
-        return;
-      }
-      if (!/^[A-Za-z\u00C0-\u024F\s'.,-]+$/.test(cityVal)) {
-        setErr(t("sell.err_city_latin", "Градът трябва да е на латиница (например „Sofia“ вместо „София“)."));
+        setErr(t("sell.err_city_required", "Моля, въведете град."));
         setLoading(false);
         return;
       }
@@ -247,6 +244,7 @@ export default function SellPage() {
         engine_cc: data.engine_cc || p.engine_cc,
         color: data.color || p.color,
         city: data.city || p.city,
+        country: data.country || p.country,
         description: data.description || p.description,
         images_exterior: data.images && data.images.length ? data.images : p.images_exterior,
       }));
@@ -363,12 +361,10 @@ export default function SellPage() {
                 value={form.city}
                 onChange={(e) => set("city", e.target.value)}
                 className={inputCls}
-                placeholder="Sofia, Bucharest, Plovdiv…"
-                pattern="[A-Za-z\u00C0-\u024F\s'.,-]+"
-                title={t("sell.err_city_latin", "Градът трябва да е на латиница.")}
+                placeholder="Sofia, София, Bucharest, Plovdiv…"
                 data-testid="sell-city"
               />
-              <p className="mt-1 text-xs text-[hsl(var(--ink-muted))]">{t("sell.form.city_hint", "Само латиница (напр. „Sofia“).")}</p>
+              <p className="mt-1 text-xs text-[hsl(var(--ink-muted))]">{t("sell.form.city_hint", "Приемаме и кирилица, и латиница.")}</p>
             </Field>
             <Field label={t("sell.form.country")}>
               <select value={form.country} onChange={(e) => set("country", e.target.value)} className={inputCls} data-testid="sell-country">
