@@ -465,15 +465,44 @@ export default function AuctionDetailPage() {
               </span>
             </div>
 
-            {/* Gallery: on desktop, main photo locks to 3:2 landscape and the
-                 10-thumb grid hangs off to its right as 2 cols × 5 rows,
-                 filling the same height. On mobile the old stacked layout
-                 (main 4:3 + 5-thumb strip) is untouched.
-                 Outer grid uses `3fr 2fr` so the row auto-sizes to the
-                 main photo's aspect-ratio height, which the thumb grid
-                 then fills exactly via `lg:h-full` + `grid-rows-5`. */}
-            <div className="mt-8 lg:grid lg:grid-cols-[3fr_2fr] lg:gap-3">
-              <div className="aspect-[4/3] lg:aspect-[3/2] border border-[hsl(var(--line))] rounded-card overflow-hidden bg-[hsl(var(--surface))] cursor-zoom-in relative group" onClick={() => setLightboxIdx(photoIdx)} data-testid="main-gallery-image">
+            {/*
+              Gallery layout:
+              - Mobile: main photo 4:3 + 5-thumb strip below (unchanged).
+              - Desktop: outer grid with explicit `aspectRatio: '9/5'` so the
+                container height is deterministic. Main photo (5fr) gets an
+                aspect of 3:2 which naturally fills 9/5 × 5/6 = 3/2 ✓ and
+                the thumb column (1fr) splits that height into 5 equal
+                `flex-1` rows. No circular sizing / no flex-stretch bugs.
+            */}
+            <div
+              className="mt-8 lg:grid lg:grid-cols-[5fr_1fr] lg:gap-3"
+              style={{ aspectRatio: "unset" }}
+              ref={(el) => {
+                // Inline-style aspect-ratio only on desktop. We can't use a
+                // media query inside inline style, so set via JS ref callback.
+                if (el && typeof window !== "undefined") {
+                  const apply = () => {
+                    if (window.matchMedia("(min-width: 1024px)").matches) {
+                      // 5fr main photo × 3:2 aspect → container aspect = 9/5.
+                      el.style.aspectRatio = "9 / 5";
+                    } else {
+                      el.style.aspectRatio = "unset";
+                    }
+                  };
+                  apply();
+                  // Re-apply on resize — lightweight, runs on rAF throttle.
+                  if (!el._abResizeListener) {
+                    el._abResizeListener = () => requestAnimationFrame(apply);
+                    window.addEventListener("resize", el._abResizeListener);
+                  }
+                }
+              }}
+            >
+              <div
+                className="aspect-[4/3] lg:aspect-[3/2] border border-[hsl(var(--line))] rounded-card overflow-hidden bg-[hsl(var(--surface))] cursor-zoom-in relative group"
+                onClick={() => setLightboxIdx(photoIdx)}
+                data-testid="main-gallery-image"
+              >
                 <img src={a.images?.[photoIdx]} alt={a.title} className="w-full h-full object-cover transition group-hover:scale-[1.02]" />
                 {a.images?.length > 0 && (
                   <div className="absolute bottom-3 right-3 px-2.5 py-1 rounded-full bg-black/55 text-white text-xs font-mono opacity-0 group-hover:opacity-100 transition pointer-events-none">
@@ -483,25 +512,18 @@ export default function AuctionDetailPage() {
               </div>
               {a.images?.length > 1 && (() => {
                 const total = a.images.length;
-                // Mobile: at most 5 thumbs in one row (5 cols).
-                // Desktop: at most 10 thumbs in 2 cols × 5 rows, next to main.
-                // The last visible thumb on each viewport gets a "+N more" dark
-                // overlay when there are additional hidden photos.
                 const MOBILE_MAX = 5;
-                const DESKTOP_MAX = 10;
+                const DESKTOP_MAX = 5;
                 const mobileExtra = total - MOBILE_MAX;
                 const desktopExtra = total - DESKTOP_MAX;
                 return (
-                  <div className="mt-3 lg:mt-0 lg:h-full grid grid-cols-5 lg:grid-cols-2 lg:grid-rows-5 gap-2">
+                  <div className="mt-3 lg:mt-0 grid grid-cols-5 gap-2 lg:flex lg:flex-col lg:gap-2 lg:h-full lg:min-h-0">
                     {a.images.map((img, i) => {
                       const hideOnMobile = i >= MOBILE_MAX;
                       const hideOnDesktop = i >= DESKTOP_MAX;
                       const isMobileLastVisible = i === MOBILE_MAX - 1 && mobileExtra > 0;
                       const isDesktopLastVisible = i === DESKTOP_MAX - 1 && desktopExtra > 0;
                       const onThumbClick = () => {
-                        // Open lightbox only when the overlay is actually
-                        // rendered on the active viewport — otherwise it's a
-                        // regular thumbnail click that just changes main photo.
                         const isDesktopVp = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(min-width: 768px)").matches;
                         if (isDesktopVp ? isDesktopLastVisible : isMobileLastVisible) {
                           setLightboxIdx(i);
@@ -513,7 +535,7 @@ export default function AuctionDetailPage() {
                         <button
                           key={i}
                           onClick={onThumbClick}
-                          className={`relative aspect-[4/3] lg:aspect-auto lg:h-full w-full rounded-card border overflow-hidden ${
+                          className={`relative aspect-[4/3] lg:aspect-auto lg:flex-1 lg:min-h-0 w-full rounded-card border overflow-hidden ${
                             photoIdx === i ? "border-[hsl(var(--ink))]" : "border-[hsl(var(--line))]"
                           } ${hideOnMobile && hideOnDesktop ? "hidden" : hideOnMobile ? "hidden md:block" : hideOnDesktop ? "block md:hidden" : ""}`}
                           data-testid={`thumb-${i}`}
