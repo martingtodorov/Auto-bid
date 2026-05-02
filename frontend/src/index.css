@@ -5,6 +5,27 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Disable pinch / double-tap zoom on mobile ────────────────────────────
+   `maximum-scale=1, user-scalable=no` in the viewport meta handles the
+   OS-level zoom gesture. The rules below block the iOS Safari gesture
+   events (which otherwise still trigger a transient zoom even with the
+   meta in place) and stop iOS' "smart zoom" on double-tap of text/images.
+   IMPORTANT: we deliberately keep touch-action `manipulation` (not `none`)
+   on scroll containers so users can still pan/scroll — only the zoom
+   gestures are suppressed. */
+html {
+    touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+@media (pointer: coarse) {
+    html, body {
+        touch-action: pan-x pan-y;
+    }
+}
+
+
 :root {
     --bg: 0 0% 100%;
     --surface: 220 14% 97%;
