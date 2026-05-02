@@ -1240,3 +1240,46 @@ Fix in `/auctions/import-mobile-bg`:
 - Unit: `transliterate_city_to_latin`, `country_from_host`, image dedup
   helpers all verified.
 
+
+---
+
+## 2026-05-02 (iter 14) — Mobile.bg import: real-world photo dedup
+
+### Goal
+User reported: a 17-photo mobile.bg listing was importing 24 photos —
+the last 7 being low-res dupes of the first 7. Sample URL:
+`https://www.mobile.bg/obiava-11772388504582211-bmw-m2-competition-swiss-hk-carplay`.
+
+### Root cause (after scraping the actual page)
+1. Mobile.bg gallery HTML contains **two** img sets with deterministic
+   parallel filenames:
+   - `.owl-carousel` items → `/big1/<id>_<code>.webp` (high-res, 17 items)
+   - `.newAdImages .smallPicturesGallery` → `<id>_<code>.webp` without
+     the `/big1/` segment (~120 px thumbs, 17 items)
+   → 34 candidates total; iter-13 regex `/(big|small|…)/` didn't match
+   `big1` so canonical keys diverged and both variants survived.
+2. The scraper also picked up photos from the **"Още обяви в mobile.bg"**
+   related-listings block at the bottom of the page — unrelated cars
+   sneaking into our import.
+
+### Fix (`/app/backend/server.py` `/auctions/import-mobile-bg`)
+- Restrict image search to the main gallery scope
+  (`#rezon-gallery` → `.owl-carousel` → `.newAdImages` → first
+  `<section>` fallback). Related-listings thumbnails are now outside
+  our scan.
+- Added `focus.bg` to the allowed host list (mobile.bg serves photos
+  from `mobistatic*.focus.bg` / `cdn*.focus.bg`).
+- Added `data-src-gallery` as a fallback attribute when reading URLs.
+- **Canonical dedup key = filename only** — mobile.bg assigns the same
+  deterministic `<listingId>_<code>.webp` name to the big and small
+  variants (only the directory differs). Filename-based keying is also
+  robust to future CDN path renames.
+- Updated `_canon` regex to strip `big\d*` (big1, big2…), and `_score`
+  to match `/big\d*/` as highest-resolution marker.
+
+### Result
+- Real BMW M2 listing (17 photos): **17 returned, all `/big1/`**, in
+  exact page gallery order, zero dupes, zero bleed-through from
+  related listings.
+- iteration_14.json: **16/16 backend tests pass, 0 issues**.
+
