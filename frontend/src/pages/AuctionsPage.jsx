@@ -155,7 +155,7 @@ export default function AuctionsPage() {
           <h1 className="font-serif text-4xl lg:text-5xl tracking-tight mt-3">{t("auctions_page.title")}</h1>
         </div>
 
-        <div className="mt-6 max-w-2xl mx-auto relative">
+        <div className="mt-6 max-w-2xl mx-auto relative lg:hidden">
           <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[hsl(var(--ink-muted))]" />
           <input
             type="text"
