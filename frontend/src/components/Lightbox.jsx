@@ -2,10 +2,18 @@ import React, { useEffect, useCallback, useRef } from "react";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
 
 /**
- * Fullscreen image lightbox with keyboard & touch navigation.
- * Includes a horizontally scrollable thumbnail strip pinned to the
- * bottom — clicking a thumb jumps to that image, the active thumb is
- * auto-scrolled into view as you navigate with arrow keys / swipe.
+ * Fullscreen image lightbox with keyboard navigation + thumbnail strip.
+ *
+ * Zoom behaviour: pinch-to-zoom IS explicitly enabled inside the lightbox
+ * (image container sets `touch-action: pinch-zoom`) — the global
+ * double-tap/pinch block in `index.js` is bypassed via the container's
+ * own gesture handler. Users can zoom photos freely but cannot zoom the
+ * surrounding app UI.
+ *
+ * Navigation: ONLY explicit actions change the image — arrow buttons,
+ * thumbnail clicks, keyboard arrow keys. Swipe-to-advance is intentionally
+ * removed so pinch + pan gestures inside a zoomed image aren't hijacked
+ * as accidental "next photo" swipes.
  *
  * Props:
  *  - images: string[] (URLs)
@@ -53,22 +61,12 @@ export default function Lightbox({ images, index, onClose, onChange }) {
     }
   }, [index]);
 
-  // Swipe support (mobile)
-  const touchStartX = useRef(0);
-  const onTouchStart = (e) => { touchStartX.current = e.touches[0].clientX; };
-  const onTouchEnd = (e) => {
-    const dx = e.changedTouches[0].clientX - touchStartX.current;
-    if (Math.abs(dx) > 50) (dx > 0 ? prev : next)();
-  };
-
   if (!total || index == null) return null;
 
   return (
     <div
       className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-between select-none"
       onClick={onClose}
-      onTouchStart={onTouchStart}
-      onTouchEnd={onTouchEnd}
       data-testid="lightbox"
     >
       {/* Close */}
@@ -86,14 +84,24 @@ export default function Lightbox({ images, index, onClose, onChange }) {
         {index + 1} / {total}
       </div>
 
-      {/* Stage — image */}
-      <div className="flex-1 w-full flex items-center justify-center px-4 pt-14 pb-2 min-h-0">
+      {/*
+        Stage — image. `touch-action: pinch-zoom` re-enables the
+        browser's native pinch gesture inside this container (the global
+        gesture blocker in index.js skips elements with
+        data-allow-pinch-zoom="1" — see the handler).
+      */}
+      <div
+        className="flex-1 w-full flex items-center justify-center px-4 pt-14 pb-2 min-h-0 overflow-auto"
+        data-allow-pinch-zoom="1"
+        style={{ touchAction: "pinch-zoom" }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <img
           src={images[index]}
           alt=""
-          onClick={(e) => e.stopPropagation()}
           className="max-w-full max-h-full object-contain"
           data-testid="lightbox-image"
+          draggable={false}
         />
       </div>
 
