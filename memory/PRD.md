@@ -1080,3 +1080,52 @@ info, contact fields). List cards only need ~30 fields + cover image.
 - Cloudflare preview edge rewrites Cache-Control to `no-store` — expected;
   production Nginx on Hetzner passes our headers intact.
 
+
+---
+
+## 2026-05-02 (later) — /auctions page speed push
+
+### Goal
+User: *"make the /auctions page lightning fast"*. Previous iteration shrank
+payload ~93%. This one shaves server-side Mongo CPU + transfer and adds
+an edge + client cache layer.
+
+### What changed
+
+**Backend — `/app/backend/server.py`**
+- New `_LIST_MONGO_PROJECTION`: MongoDB exclusion projection that drops
+  heavy fields (description, 4× image buckets, specs, documents, VIN,
+  contacts, translations, service_history, rejection_reason, etc.)
+  *before* they leave the DB driver. Wired into `GET /auctions`,
+  `/auctions/featured`, `/auctions/sold` whenever `view=list` is set.
+- `GET /auctions` skips `_has_high_value_preauth(viewer)` when
+  `view=list` — saves one Mongo round-trip for every authenticated
+  user (VIN is stripped anyway).
+- `GET /auctions` anonymous responses now emit
+  `Cache-Control: public, max-age=15, s-maxage=30, stale-while-revalidate=60`
+  + `Vary: Cookie, Accept-Language`. Authenticated users still get
+  dynamic responses. Production Nginx / Cloudflare will cache the hot
+  default view and absorb the vast majority of /auctions traffic before
+  it hits uvicorn.
+
+**Frontend — `/app/frontend/src/pages/AuctionsPage.jsx`**
+- SessionStorage cache (`autobid:auctions_default_v1`, 60 s TTL) for the
+  *default* query only (page 1, `status=live`, `sort=ending_soon`, no
+  filters, no search). On revisit the page paints instantly with cached
+  cards while refetching in background — no loading spinner, no "No
+  results" flash. Any filter / sort / search change bypasses the cache.
+
+### Verified (`/app/test_reports/iteration_11.json`)
+- Backend: 14/14 pytest green
+- Frontend: homepage, /auctions, /sales all render correctly
+- Cache-Control present for anonymous, absent for authenticated
+- No regression in status/reserve computation
+- Payload still ~93% smaller with `view=list`
+
+### Result
+Anonymous visitors on the default /auctions view now get:
+1. First hit: 1.5 KB/card (vs 19 KB) + lean Mongo query with projection
+2. Second hit within 30 s: served from Cloudflare edge (no backend hit)
+3. Second client-side visit within 60 s: served from sessionStorage
+   (no network hit at all, paints in <16 ms)
+
