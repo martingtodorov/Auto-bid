@@ -419,16 +419,18 @@ export default function AuctionDetailPage() {
   };
 
   return (
-    <main className="rule-b pt-[76px] lg:pt-0" data-testid="auction-detail-page">
+    <main className="rule-b pt-[88px] lg:pt-0" data-testid="auction-detail-page">
       {/*
-        Mobile-only sticky header — always visible beneath the main nav.
+        Mobile-only sticky header — always visible beneath the main nav
+        (64 px tall, z-50). We sit right below it at `top-16` with `z-40`
+        so the nav always wins z-ordering while we pin directly underneath.
         The auction <h1> is hidden on mobile since the sticky already
         renders the title. On lg+ the sidebar/h1 takes over and this bar
         is `lg:hidden`.
       */}
       {a && (
         <div
-          className="fixed inset-x-0 top-[56px] z-40 lg:hidden"
+          className="fixed inset-x-0 top-16 z-40 lg:hidden"
           data-testid="mobile-sticky-header"
         >
           <div className="bg-[hsl(var(--bg))]/95 backdrop-blur-md border-b border-[hsl(var(--line))] shadow-lg">
@@ -446,26 +448,26 @@ export default function AuctionDetailPage() {
                   >
                     {a.title}
                   </div>
-                  <div className="mt-1 flex items-center gap-2.5 text-[13px] text-[hsl(var(--ink-muted))]">
+                  <div className="mt-1.5 flex items-center gap-2.5 text-[hsl(var(--ink-muted))]">
                     <span
-                      className="font-mono font-bold tabular-nums whitespace-nowrap text-[15px] text-[hsl(var(--ink))]"
+                      className="font-mono font-bold tabular-nums whitespace-nowrap text-[18px] text-[hsl(var(--ink))]"
                       data-testid="sticky-bid"
                     >
                       {formatEUR(vatRate > 0 ? currentBidGross : a.current_bid_eur)}
                     </span>
                     <span className="text-[hsl(var(--line))]">·</span>
                     <span
-                      className="font-mono tabular-nums whitespace-nowrap"
+                      className="font-mono tabular-nums whitespace-nowrap text-[15px]"
                       data-testid="sticky-time"
                     >
                       {formatTimeLeft(tl, t) || "—"}
                     </span>
                     <span className="text-[hsl(var(--line))]">·</span>
                     <span
-                      className="flex items-center gap-1 whitespace-nowrap"
+                      className="flex items-center gap-1 whitespace-nowrap text-[15px]"
                       data-testid="sticky-bid-count"
                     >
-                      <Gavel size={12} /> {a.bid_count || 0}
+                      <Gavel size={14} /> {a.bid_count || 0}
                     </span>
                   </div>
                 </div>

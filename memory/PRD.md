@@ -1450,3 +1450,34 @@ persists the result. `LandingPage.jsx`:
 - Desktop: both heroes render side-by-side in the hero section, no
   duplicates further down the page.
 
+
+---
+
+## 2026-05-02 (iter 19) — Sticky layering fix + bigger metrics + i18n plural
+
+### Bug: sticky slipping under the main nav
+Root cause: Nav uses `h-16` (64 px) + `z-50`; sticky was at `top-[56px]`
++ `z-40` — the top 8 px of the sticky visually slipped under the nav
+on every scroll. Fixed by:
+- `top-[56px]` → `top-16` (64 px — matches Nav height exactly).
+- `<main>` padding `pt-[76px]` → `pt-[88px]` so nav (64) + sticky (~76)
+  stop overlapping body content.
+
+### Bigger metrics in sticky
+- Current bid: 15 px → **18 px** bold mono
+- Time remaining: 13 px → **15 px**
+- Bid counter: 13 px → **15 px** (gavel icon 12 → 14)
+- Row gap bumped from `mt-1` → `mt-1.5`
+
+### i18n: "избрана обява" → "избрани обяви"
+Now that the hero shows two cars, the label was wrong. Updated across
+all three locales:
+- BG: `Избрани обяви`
+- EN: `Featured listings`
+- RO: `Anunțuri selectate`
+
+### Verified
+- `sticky y=64` directly below `nav y=0 height=65`; no overlap.
+- Computed font sizes: `bid=18px, time=15px, count=15px`.
+- `/auctions/hero` still returns stable pair (30-min cache intact).
+
