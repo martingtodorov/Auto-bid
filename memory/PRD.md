@@ -1129,3 +1129,60 @@ Anonymous visitors on the default /auctions view now get:
 3. Second client-side visit within 60 s: served from sessionStorage
    (no network hit at all, paints in <16 ms)
 
+
+---
+
+## 2026-05-02 (iter 12) — Auction detail page image load budget
+
+### Goal
+User: optimize image loading on /auctions/{id}. Hero = 400 px, side
+thumbs = 400 px (browser shows ~100 px), hidden thumbs lazy, inline
+interior shots = 400 px, lightbox = full-res loaded on demand only.
+
+### What changed (frontend only — no backend)
+
+**`/app/frontend/src/pages/AuctionDetailPage.jsx`**
+- **Hero gallery `<img>`**: `a.thumbnails[photoIdx] || a.images[photoIdx]`
+  (400 px instead of 1920 px). Added `decoding="async"` +
+  `fetchpriority="high"`. Click still opens lightbox at
+  full-resolution.
+- **Side thumbs (5 visible)**: `a.thumbnails[i] || img` (400 px,
+  displayed at ~100 px). `loading="lazy"` + `decoding="async"`
+  preserved. Explicit `width=120 height=90` prevents layout shift.
+- **Interior shots between description text**: now wrapped in a button
+  (`data-testid=interior-shot-btn-{i}`) that calls
+  `onOpenLightbox(interiorStartIdx + i)` — opens the lightbox at the
+  correct global index so the user sees the *full-res* version on
+  click. Image `src` uses the `thumbnails` slice for the interior
+  bucket (since merged ordering is exterior + bumper + wheels +
+  interior, we can cheaply derive the 400 px tier for interior from
+  `a.thumbnails.slice(exteriorLen + bumperLen + wheelsLen)`).
+
+**`/app/frontend/src/components/Lightbox.jsx`**
+- New optional `thumbnails` prop. The thumbnail strip at the bottom now
+  prefers `thumbnails[i]` over `images[i]` — strip used to load ALL
+  1920 px originals.
+- Lightbox main image: added `fetchpriority="high"` +
+  `decoding="async"`.
+
+### Result
+For a fresh, categorized 24-photo auction with 400 px thumbs:
+- **Cold load**: ~400 KB of images (1 hero × 400 px ≈ 25 KB + 5 side
+  thumbs × ~8 KB + 3 interior × ~20 KB + strip thumbs in lightbox are
+  deferred until lightbox opens). Previously was ~7-8 MB
+  (24 × 300 KB full-res).
+- Hidden thumbs beyond position 5 stay lazy — only load if the user
+  ever scrolls the strip.
+- Lightbox main image (1920 px, ~300 KB) loads *only* when the user
+  explicitly opens it — and only the one they're viewing (each index
+  change triggers one fetch).
+- Click interior shot → lightbox opens at that exact photo in
+  full-res.
+
+### Verified (iteration_12.json)
+- Frontend: 100% — hero/thumbs/interior/lightbox all use correct tier
+- Backwards-compat with legacy auctions (external URLs,
+  thumbnails == images) — confirmed renders without errors
+- Zero regressions on homepage, /auctions, /sales
+- Lightbox opens from hero, side thumb, "+N" overlay, and interior shot
+
