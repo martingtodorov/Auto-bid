@@ -45,9 +45,25 @@ export default function Lightbox({ images, index, onClose, onChange }) {
     // Lock scroll while lightbox is open
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+
+    // Re-enable pinch zoom for the duration the lightbox is open.
+    // The app-wide viewport meta locks scale to 1 (see public/index.html)
+    // and CSS `touch-action` alone cannot override it on mobile browsers.
+    // We swap the meta's content attribute while the viewer is mounted,
+    // then restore the locked value on close.
+    const metaEl = document.querySelector('meta[name="viewport"]');
+    const prevViewport = metaEl ? metaEl.getAttribute("content") : null;
+    if (metaEl) {
+      metaEl.setAttribute(
+        "content",
+        "width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover"
+      );
+    }
+
     return () => {
       document.removeEventListener("keydown", handler);
       document.body.style.overflow = prevOverflow;
+      if (metaEl && prevViewport != null) metaEl.setAttribute("content", prevViewport);
     };
   }, [prev, next, onClose]);
 
