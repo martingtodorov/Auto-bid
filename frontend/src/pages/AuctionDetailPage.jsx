@@ -465,73 +465,83 @@ export default function AuctionDetailPage() {
               </span>
             </div>
 
-            <div className="mt-8 border border-[hsl(var(--line))] rounded-card aspect-[4/3] overflow-hidden bg-[hsl(var(--surface))] cursor-zoom-in relative group" onClick={() => setLightboxIdx(photoIdx)} data-testid="main-gallery-image">
-              <img src={a.images?.[photoIdx]} alt={a.title} className="w-full h-full object-cover transition group-hover:scale-[1.02]" />
-              {a.images?.length > 0 && (
-                <div className="absolute bottom-3 right-3 px-2.5 py-1 rounded-full bg-black/55 text-white text-xs font-mono opacity-0 group-hover:opacity-100 transition pointer-events-none">
-                  {photoIdx + 1} / {a.images.length} · {t("common.zoom")}
-                </div>
-              )}
+            {/* Gallery: on desktop, main photo locks to 3:2 landscape and the
+                 10-thumb grid hangs off to its right as 2 cols × 5 rows,
+                 filling the same height. On mobile the old stacked layout
+                 (main 4:3 + 5-thumb strip) is untouched.
+                 Outer grid uses `3fr 2fr` so the row auto-sizes to the
+                 main photo's aspect-ratio height, which the thumb grid
+                 then fills exactly via `lg:h-full` + `grid-rows-5`. */}
+            <div className="mt-8 lg:grid lg:grid-cols-[3fr_2fr] lg:gap-3">
+              <div className="aspect-[4/3] lg:aspect-[3/2] border border-[hsl(var(--line))] rounded-card overflow-hidden bg-[hsl(var(--surface))] cursor-zoom-in relative group" onClick={() => setLightboxIdx(photoIdx)} data-testid="main-gallery-image">
+                <img src={a.images?.[photoIdx]} alt={a.title} className="w-full h-full object-cover transition group-hover:scale-[1.02]" />
+                {a.images?.length > 0 && (
+                  <div className="absolute bottom-3 right-3 px-2.5 py-1 rounded-full bg-black/55 text-white text-xs font-mono opacity-0 group-hover:opacity-100 transition pointer-events-none">
+                    {photoIdx + 1} / {a.images.length} · {t("common.zoom")}
+                  </div>
+                )}
+              </div>
+              {a.images?.length > 1 && (() => {
+                const total = a.images.length;
+                // Mobile: at most 5 thumbs in one row (5 cols).
+                // Desktop: at most 10 thumbs in 2 cols × 5 rows, next to main.
+                // The last visible thumb on each viewport gets a "+N more" dark
+                // overlay when there are additional hidden photos.
+                const MOBILE_MAX = 5;
+                const DESKTOP_MAX = 10;
+                const mobileExtra = total - MOBILE_MAX;
+                const desktopExtra = total - DESKTOP_MAX;
+                return (
+                  <div className="mt-3 lg:mt-0 lg:h-full grid grid-cols-5 lg:grid-cols-2 lg:grid-rows-5 gap-2">
+                    {a.images.map((img, i) => {
+                      const hideOnMobile = i >= MOBILE_MAX;
+                      const hideOnDesktop = i >= DESKTOP_MAX;
+                      const isMobileLastVisible = i === MOBILE_MAX - 1 && mobileExtra > 0;
+                      const isDesktopLastVisible = i === DESKTOP_MAX - 1 && desktopExtra > 0;
+                      const onThumbClick = () => {
+                        // Open lightbox only when the overlay is actually
+                        // rendered on the active viewport — otherwise it's a
+                        // regular thumbnail click that just changes main photo.
+                        const isDesktopVp = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(min-width: 768px)").matches;
+                        if (isDesktopVp ? isDesktopLastVisible : isMobileLastVisible) {
+                          setLightboxIdx(i);
+                        } else {
+                          setPhotoIdx(i);
+                        }
+                      };
+                      return (
+                        <button
+                          key={i}
+                          onClick={onThumbClick}
+                          className={`relative aspect-[4/3] lg:aspect-auto lg:h-full w-full rounded-card border overflow-hidden ${
+                            photoIdx === i ? "border-[hsl(var(--ink))]" : "border-[hsl(var(--line))]"
+                          } ${hideOnMobile && hideOnDesktop ? "hidden" : hideOnMobile ? "hidden md:block" : hideOnDesktop ? "block md:hidden" : ""}`}
+                          data-testid={`thumb-${i}`}
+                        >
+                          <img src={img} alt="" className="w-full h-full object-cover" loading="lazy" />
+                          {isMobileLastVisible && (
+                            <span
+                              className="md:hidden absolute inset-0 bg-black/65 hover:bg-black/75 transition-colors flex items-center justify-center text-white font-serif text-lg cursor-zoom-in"
+                              data-testid="thumb-more-overlay-mobile"
+                            >
+                              +{mobileExtra}
+                            </span>
+                          )}
+                          {isDesktopLastVisible && (
+                            <span
+                              className="hidden md:flex absolute inset-0 bg-black/65 hover:bg-black/75 transition-colors items-center justify-center text-white font-serif text-lg cursor-zoom-in"
+                              data-testid="thumb-more-overlay-desktop"
+                            >
+                              +{desktopExtra}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
-            {a.images?.length > 1 && (() => {
-              const total = a.images.length;
-              // Mobile shows at most 5 thumbnails (1 row).  Desktop shows up to 10 (2 rows).
-              // The last visible thumb on each viewport gets a "+N more" dark
-              // overlay when there are additional hidden photos.
-              const MOBILE_MAX = 5;
-              const DESKTOP_MAX = 10;
-              const mobileExtra = total - MOBILE_MAX;
-              const desktopExtra = total - DESKTOP_MAX;
-              return (
-                <div className="mt-3 grid grid-cols-5 gap-2">
-                  {a.images.map((img, i) => {
-                    const hideOnMobile = i >= MOBILE_MAX;
-                    const hideOnDesktop = i >= DESKTOP_MAX;
-                    const isMobileLastVisible = i === MOBILE_MAX - 1 && mobileExtra > 0;
-                    const isDesktopLastVisible = i === DESKTOP_MAX - 1 && desktopExtra > 0;
-                    const onThumbClick = () => {
-                      // Open lightbox only when the overlay is actually
-                      // rendered on the active viewport — otherwise it's a
-                      // regular thumbnail click that just changes main photo.
-                      const isDesktopVp = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(min-width: 768px)").matches;
-                      if (isDesktopVp ? isDesktopLastVisible : isMobileLastVisible) {
-                        setLightboxIdx(i);
-                      } else {
-                        setPhotoIdx(i);
-                      }
-                    };
-                    return (
-                      <button
-                        key={i}
-                        onClick={onThumbClick}
-                        className={`relative aspect-[4/3] rounded-card border overflow-hidden ${
-                          photoIdx === i ? "border-[hsl(var(--ink))]" : "border-[hsl(var(--line))]"
-                        } ${hideOnMobile && hideOnDesktop ? "hidden" : hideOnMobile ? "hidden md:block" : hideOnDesktop ? "block md:hidden" : ""}`}
-                        data-testid={`thumb-${i}`}
-                      >
-                        <img src={img} alt="" className="w-full h-full object-cover" loading="lazy" />
-                        {isMobileLastVisible && (
-                          <span
-                            className="md:hidden absolute inset-0 bg-black/65 hover:bg-black/75 transition-colors flex items-center justify-center text-white font-serif text-lg cursor-zoom-in"
-                            data-testid="thumb-more-overlay-mobile"
-                          >
-                            +{mobileExtra}
-                          </span>
-                        )}
-                        {isDesktopLastVisible && (
-                          <span
-                            className="hidden md:flex absolute inset-0 bg-black/65 hover:bg-black/75 transition-colors items-center justify-center text-white font-serif text-lg cursor-zoom-in"
-                            data-testid="thumb-more-overlay-desktop"
-                          >
-                            +{desktopExtra}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              );
-            })()}
 
             <div className="mt-10">
               <div className="overline text-[hsl(var(--ink-muted))]">{t("auction.specs_overline")}</div>
