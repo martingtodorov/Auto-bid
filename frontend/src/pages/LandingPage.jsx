@@ -135,25 +135,10 @@ export default function LandingPage() {
 
             <div className="lg:col-span-6 fade-up">
               {hero ? (
-                <Link to={auctionUrl(hero)} className="block group" data-testid="hero-featured-auction">
-                  <div className="aspect-[4/3] lg:aspect-[16/10] overflow-hidden rounded-card border border-[hsl(var(--line))]">
-                    <img src={hero.images?.[0] || HERO_IMAGE} alt={hero.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
-                  </div>
-                  <div className="mt-3 flex items-end justify-between gap-4">
-                    <div>
-                      <div className="overline text-[hsl(var(--accent))]">{t("hero.featured_listing")}</div>
-                      <h2 className="font-serif text-xl lg:text-2xl mt-1.5 tracking-tight">{hero.title}</h2>
-                      <div className="text-sm text-[hsl(var(--ink-muted))] mt-1.5">
-                        {hero.year} · {translateEnum(hero.city, "city", i18n.language)} · {translateEnum(hero.fuel, "fuel", i18n.language)}
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="overline text-[hsl(var(--ink-muted))]">{t("hero.current")}</div>
-                      <div className="font-serif text-xl lg:text-2xl">{formatEUR(hero.current_bid_eur)}</div>
-                      <div className="text-xs font-mono text-[hsl(var(--ink-muted))]">{formatLocal(hero.current_bid_eur, i18n.language)}</div>
-                    </div>
-                  </div>
-                </Link>
+                <div data-testid="hero-featured-auction" className="relative">
+                  <div className="overline text-[hsl(var(--accent))] mb-2">{t("hero.featured_listing")}</div>
+                  <AuctionCard auction={hero} />
+                </div>
               ) : (
                 <div className="aspect-[4/3] lg:aspect-[16/10] border border-[hsl(var(--line))] bg-[hsl(var(--surface))]" />
               )}

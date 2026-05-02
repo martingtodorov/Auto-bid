@@ -1307,3 +1307,43 @@ in the sections below.
   duplicate of the hero car.
 - No backend changes.
 
+
+---
+
+## 2026-05-02 (iter 16) — Hero = full AuctionCard + mobile sticky header
+
+### Task 1: Hero shows full AuctionCard
+`LandingPage.jsx`: replaced the custom hero layout (image + inline title
++ current bid column) with a plain `<AuctionCard auction={hero} />`
+wrapped in the same `data-testid="hero-featured-auction"`. Hero now
+shows: time-remaining overlay, FEATURED badge, title, year, mileage,
+fuel, location, current bid, bid count, and No-reserve / VAT badges —
+identical to every other card on the site.
+
+### Task 2: Mobile sticky header (BaT-style)
+`AuctionDetailPage.jsx`:
+- New `stickyVisible` state + `titleRef` on the `<h1>`.
+- `IntersectionObserver` with `rootMargin: "-56px 0px 0px 0px"` (site
+  header height) watches the `<h1>`. When the title scrolls out of view
+  (`!entry.isIntersecting`), the sticky bar slides into view.
+- Bar is `fixed top-[56px]` (right under the main header), `z-40`,
+  `lg:hidden`, CSS transform `translate-y-0` ↔ `-translate-y-full` with
+  `transition-transform duration-300 ease-out`. Gives the exact
+  slide-down / slide-up behaviour the user requested.
+- Content: title (truncate), time-remaining, current bid (gross when
+  VAT-inclusive), comments count with icon, circular watchlist heart
+  button, primary **Bid** button that smooth-scrolls to the bid input
+  and auto-focuses it 400 ms later. Sold/Ended states swap the Bid
+  button for a small "Продаден"/"Завършил" label.
+- All elements have `data-testid=sticky-{title,time,bid,comments,watch-button,bid-button}`.
+
+### Verified
+- 390×844 viewport: sticky's bounding box `y=-3` before scroll (off
+  screen) → `y=55.6` after scroll (pinned under header). Fields
+  populated: "BMW M240i xdrive M-Performance", "5д 13ч", "5000 €", "1"
+  comment, watch button present, "Наддавай" CTA.
+- 1920 viewport: sticky correctly hidden via `lg:hidden`.
+- Hero card at 1920 shows full AuctionCard with 5D 13H / FEATURED /
+  2017 / 95 000 км / Petrol / Sofia, Bulgaria / 5000 € / 0 bids / No
+  reserve.
+
