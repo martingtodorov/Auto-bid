@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { ArrowRight, Shield, Gavel, FileCheck, Sparkles } from "lucide-react";
 import DOMPurify from "dompurify";
 import { api, formatEUR, formatLocal } from "../lib/apiClient";
+import { readLandingCache, landingCacheIsFresh, fetchLandingData } from "../lib/landingCache";
 import AuctionCard from "../components/AuctionCard";
 import { setPageMeta, resetPageMeta } from "../lib/seo";
 import { useSiteSettings } from "../lib/settings";
@@ -14,9 +15,13 @@ const HERO_IMAGE = "https://images.unsplash.com/photo-1698995339730-86b3dd454001
 
 export default function LandingPage() {
   const { t, i18n } = useTranslation();
-  const [auctions, setAuctions] = useState([]);
-  const [featured, setFeatured] = useState([]);
-  const [sold, setSold] = useState([]);
+  // Seed from sessionStorage so navigating back to `/` shows the last-known
+  // homepage instantly while the background refresh catches up. `null`-safe —
+  // first-ever visit falls through to empty arrays.
+  const cached = typeof window !== "undefined" ? readLandingCache() : null;
+  const [auctions, setAuctions] = useState(cached?.live || []);
+  const [featured, setFeatured] = useState(cached?.featured || []);
+  const [sold, setSold] = useState(cached?.sold || []);
   const settings = useSiteSettings();
 
   // Update SEO from site settings (per-language, fallback to legacy field)
@@ -35,20 +40,49 @@ export default function LandingPage() {
   }, [seoTitle, seoDescription]);
 
   useEffect(() => {
-    (async () => {
+    let cancelled = false;
+
+    const applyPayload = (payload) => {
+      if (cancelled || !payload) return;
+      setAuctions(payload.live || []);
+      setFeatured(payload.featured || []);
+      setSold(payload.sold || []);
+    };
+
+    const refresh = async () => {
       try {
-        const [l, f, s] = await Promise.all([
-          api.get("/auctions", { params: { sort: "ending_soon", status: "live", limit: 6 } }),
-          api.get("/auctions/featured"),
-          api.get("/auctions/sold"),
-        ]);
-        setAuctions(l.data);
-        setFeatured(f.data);
-        setSold(s.data);
+        const payload = await fetchLandingData();
+        applyPayload(payload);
       } catch (e) {
+        // Keep whatever we're already showing (cache or prior fetch).
         console.error(e);
       }
-    })();
+    };
+
+    // First paint: render cache immediately if still fresh, otherwise fetch.
+    const seed = readLandingCache();
+    if (landingCacheIsFresh(seed)) {
+      applyPayload(seed);
+    } else {
+      refresh();
+    }
+
+    // Background refresh every 60s so auctions that end / get pulled drop
+    // off the homepage without requiring a full reload.
+    const intervalId = setInterval(refresh, 60 * 1000);
+
+    // Extra refresh when the tab regains focus after being backgrounded —
+    // Chrome pauses setInterval on hidden tabs.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   const hero = featured[0] || auctions[0];
