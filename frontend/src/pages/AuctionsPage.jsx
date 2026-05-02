@@ -150,10 +150,12 @@ export default function AuctionsPage() {
   return (
     <main className="rule-b" data-testid="auctions-page">
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-12">
-        <div className="overline text-[hsl(var(--accent))]">{t("auctions_page.overline")}</div>
-        <h1 className="font-serif text-4xl lg:text-5xl tracking-tight mt-3">{t("auctions_page.title")}</h1>
+        <div className="text-center">
+          <div className="overline text-[hsl(var(--accent))]">{t("auctions_page.overline")}</div>
+          <h1 className="font-serif text-4xl lg:text-5xl tracking-tight mt-3">{t("auctions_page.title")}</h1>
+        </div>
 
-        <div className="mt-6 max-w-2xl relative">
+        <div className="mt-6 max-w-2xl mx-auto relative">
           <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[hsl(var(--ink-muted))]" />
           <input
             type="text"

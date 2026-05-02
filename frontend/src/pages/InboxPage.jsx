@@ -5,6 +5,7 @@ import { CheckCheck } from "lucide-react";
 import { api } from "../lib/apiClient";
 import { resolveNotification } from "../lib/notifications";
 import UserChatPanel from "../components/UserChatPanel";
+import { auctionUrl } from "../lib/auctionUrl";
 
 /** Full-page inbox listing the user's notifications with pagination. */
 export default function InboxPage() {
@@ -71,7 +72,7 @@ export default function InboxPage() {
       <ul className="rounded-card border border-[hsl(var(--line))] overflow-hidden">
         {items.map((n) => {
           const r = resolveNotification(n, t);
-          const dest = n.link || (n.auction_id ? `/auctions/${n.auction_id}` : null);
+          const dest = n.link || (n.auction_id ? auctionUrl({ id: n.auction_id, title: n.auction_title }) : null);
           const inner = (
             <>
               <span

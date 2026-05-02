@@ -4,6 +4,7 @@ import { api, formatEUR } from "../lib/apiClient";
 import { formatError } from "../lib/auth";
 import AdminBidHistoryModal from "./AdminBidHistoryModal";
 import AdminEditModal from "./AdminEditModal";
+import { auctionUrl } from "../lib/auctionUrl";
 
 const STATUS_LABELS = {
   ended: "Приключил без продажба",
@@ -197,7 +198,7 @@ export default function AdminUnsoldTab() {
                   <RefreshCw size={12} /> Поднови
                 </button>
                 <a
-                  href={`/auctions/${a.id}`}
+                  href={auctionUrl(a)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1"

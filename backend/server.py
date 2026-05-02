@@ -4218,6 +4218,57 @@ async def waf_middleware(request: Request, call_next):
     return await call_next(request)
 
 
+# ---- Slug-suffix URL resolution for /api/auctions/... ----
+# Frontend builds pretty URLs like `/auctions/bmw-m240i-xdrive-a1b2c3d4`.
+# React-Router keeps that whole string as the `id` path param and the
+# frontend API client forwards it to `/api/auctions/<slug-suffix>/...`.
+# This middleware looks up the canonical auction UUID (by the 8-char
+# suffix after the last `-`) and rewrites the path in-place BEFORE the
+# router sees it — so every single `/auctions/{id}` handler (20+) keeps
+# working without per-endpoint changes.
+_UUID_RE = re.compile(r"^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$", re.IGNORECASE)
+_AUCTION_PATH_RE = re.compile(r"^/api/auctions/([^/]+)(/.*)?$")
+
+
+async def _resolve_raw_auction_id(raw: str) -> Optional[str]:
+    """Return the canonical auction UUID for a raw path segment — accepts
+    either a full UUID (fast path, no DB hit) or a `slug-suffix` form where
+    the suffix is the first 6-12 chars of the UUID. None if not found."""
+    if not raw:
+        return None
+    if _UUID_RE.match(raw):
+        return raw
+    # Slug-suffix: last segment after the final '-'
+    parts = raw.rsplit("-", 1)
+    if len(parts) != 2:
+        return None
+    suffix = parts[1]
+    if not re.fullmatch(r"[a-f0-9]{6,12}", suffix, re.IGNORECASE):
+        return None
+    doc = await db.auctions.find_one(
+        {"id": {"$regex": f"^{re.escape(suffix.lower())}"}},
+        {"_id": 0, "id": 1},
+    )
+    return doc["id"] if doc else None
+
+
+@app.middleware("http")
+async def auction_slug_middleware(request: Request, call_next):
+    path = request.scope.get("path", "")
+    m = _AUCTION_PATH_RE.match(path)
+    if m:
+        raw = m.group(1)
+        # Fast path — already a canonical UUID, skip DB roundtrip.
+        if not _UUID_RE.match(raw):
+            canonical = await _resolve_raw_auction_id(raw)
+            if canonical:
+                rest = m.group(2) or ""
+                new_path = f"/api/auctions/{canonical}{rest}"
+                request.scope["path"] = new_path
+                request.scope["raw_path"] = new_path.encode()
+    return await call_next(request)
+
+
 # ---- Deindex mode: stamp X-Robots-Tag on every response when enabled ----
 # Admin can flip this via /admin/settings → Deindex mode. Use case: pre-launch
 # sites that must remain fully testable but must NOT be indexed. We read the

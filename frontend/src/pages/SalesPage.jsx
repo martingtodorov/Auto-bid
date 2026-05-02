@@ -8,6 +8,7 @@ import { setPageMeta, combineJsonLd, buildBreadcrumbs } from "../lib/seo";
 import { useAuth } from "../lib/auth";
 import { translateEnum } from "../lib/carTranslations";
 import { useBrandName } from "../lib/brand";
+import { auctionUrl } from "../lib/auctionUrl";
 
 const WINDOW_OPTIONS = (t) => [
   { days: 30, label: t("sales_list.window_30") },
@@ -121,7 +122,7 @@ export default function SalesPage() {
               {/* Highest sale spotlight */}
               {stats?.highest_sale && (
                 <Link
-                  to={`/auctions/${stats.highest_sale.id}`}
+                  to={auctionUrl(stats.highest_sale)}
                   className="mt-6 flex items-center gap-4 rounded-card border border-[hsl(var(--line))] bg-white p-3 pr-5 group hover:border-[hsl(var(--accent))] transition-colors"
                   data-testid="highest-sale-card"
                 >

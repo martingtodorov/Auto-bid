@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api, formatEUR } from "../lib/apiClient";
+import { auctionUrl } from "../lib/auctionUrl";
 
 /** Top promoted-listings ticker.
  *  - Fetches every featured/live auction so the loop covers them all.

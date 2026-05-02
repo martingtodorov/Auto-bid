@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { api, formatEUR } from "../lib/apiClient";
 import { resolveNotification } from "../lib/notifications";
 import { useAuth } from "../lib/auth";
+import { auctionUrl } from "../lib/auctionUrl";
 
 /** Bell icon + dropdown panel showing the user's recent in-app notifications.
  *  Polls /inbox/unread-count every 60s while authenticated. */
@@ -152,7 +153,7 @@ export default function NotificationBell() {
                   return (
                     <Link
                       key={p.auction_id}
-                      to={`/auctions/${p.auction_id}`}
+                      to={auctionUrl({ id: p.auction_id, title: p.auction_title })}
                       onClick={closePanel}
                       className="block px-4 py-3 hover:bg-emerald-100/70 transition-colors"
                       data-testid={`preauth-row-${p.auction_id}`}

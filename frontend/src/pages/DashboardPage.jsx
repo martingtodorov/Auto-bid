@@ -3,6 +3,7 @@ import { Navigate, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../lib/auth";
 import { api, formatEUR } from "../lib/apiClient";
+import { auctionUrl } from "../lib/auctionUrl";
 
 export default function DashboardPage() {
   const { t, i18n } = useTranslation();
@@ -50,7 +51,7 @@ export default function DashboardPage() {
               bids.map((b) => (
                 <div key={b.id} className="p-4 rule-b last:border-b-0 flex justify-between items-center">
                   <div>
-                    <Link to={`/auctions/${b.auction_id}`} className="text-sm underline">{t("dashboard.auction_link", "Търг #{{id}}", { id: b.auction_id.slice(0, 8) })}</Link>
+                    <Link to={auctionUrl({ id: b.auction_id, title: b.auction_title })} className="text-sm underline">{t("dashboard.auction_link", "Търг #{{id}}", { id: b.auction_id.slice(0, 8) })}</Link>
                     <div className="text-xs text-[hsl(var(--ink-muted))] font-mono mt-1">{new Date(b.created_at).toLocaleString(i18n.language)}</div>
                   </div>
                   <div className="font-serif text-xl">{formatEUR(b.amount_eur)}</div>

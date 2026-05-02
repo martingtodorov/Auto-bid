@@ -8,6 +8,7 @@ import AuctionCard from "../components/AuctionCard";
 import { setPageMeta, resetPageMeta } from "../lib/seo";
 import { useSiteSettings } from "../lib/settings";
 import { translateEnum } from "../lib/carTranslations";
+import { auctionUrl } from "../lib/auctionUrl";
 
 const HERO_IMAGE = "https://images.unsplash.com/photo-1698995339730-86b3dd454001?crop=entropy&cs=srgb&fm=jpg&q=85&w=2000";
 
@@ -96,7 +97,7 @@ export default function LandingPage() {
 
             <div className="lg:col-span-6 fade-up">
               {hero ? (
-                <Link to={`/auctions/${hero.id}`} className="block group" data-testid="hero-featured-auction">
+                <Link to={auctionUrl(hero)} className="block group" data-testid="hero-featured-auction">
                   <div className="aspect-[4/3] lg:aspect-[16/10] overflow-hidden rounded-card border border-[hsl(var(--line))]">
                     <img src={hero.images?.[0] || HERO_IMAGE} alt={hero.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
                   </div>

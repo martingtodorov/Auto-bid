@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Inbox, Check, X, Star, FileEdit, RefreshCw } from "lucide-react";
 import { api } from "../lib/apiClient";
 import { formatError } from "../lib/auth";
+import { auctionUrl } from "../lib/auctionUrl";
 
 const TYPE_META = {
   promotion: { label: "Промотиране", icon: Star, cls: "text-amber-600 border-amber-300 bg-amber-50" },
@@ -121,7 +122,7 @@ export default function AdminSellerRequestsTab() {
                   <span className="text-xs font-mono text-[hsl(var(--ink-muted))]">{r.created_at ? new Date(r.created_at).toLocaleString("bg-BG") : ""}</span>
                 </div>
                 <h3 className="font-serif text-xl mt-3">
-                  <Link to={`/auctions/${r.auction_id}`} className="hover:text-[hsl(var(--accent))]" data-testid={`request-auction-${r.id}`}>
+                  <Link to={auctionUrl({ id: r.auction_id, title: r.auction_title })} className="hover:text-[hsl(var(--accent))]" data-testid={`request-auction-${r.id}`}>
                     {r.auction_title}
                   </Link>
                 </h3>

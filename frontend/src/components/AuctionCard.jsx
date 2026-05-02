@@ -4,6 +4,7 @@ import { MapPin, Gauge, Fuel, Calendar, Users, Shield, Zap } from "lucide-react"
 import { useTranslation } from "react-i18next";
 import { formatEUR, formatLocal, formatKM, timeLeft, formatTimeLeft } from "../lib/apiClient";
 import { translateEnum } from "../lib/carTranslations";
+import { auctionUrl } from "../lib/auctionUrl";
 
 export default function AuctionCard({ auction, compact = false }) {
   const { t, i18n } = useTranslation();

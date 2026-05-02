@@ -661,7 +661,7 @@ export default function AuctionDetailPage() {
           </div>
 
           <aside className="lg:col-span-4">
-            <div className="lg:sticky lg:top-28 space-y-5">
+            <div className="lg:sticky lg:top-[72px] space-y-5">
               <div className="rounded-card border border-[hsl(var(--line))] p-6 bg-white" data-testid="bid-section">
                 {hasPendingCounterForMe && (
                   <div className="mb-5 rounded-card bg-[hsl(var(--accent-soft))] border border-[hsl(var(--accent))]/30 p-4" data-testid="counter-banner">

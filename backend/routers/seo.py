@@ -3,6 +3,7 @@ SEO / social sharing routes — XML sitemaps + OG-rich share pages for crawlers.
 Extracted from server.py to keep auction/bidding logic focused.
 """
 import os
+import re
 import json as _json
 from html import escape as _esc
 
@@ -12,6 +13,39 @@ from fastapi.responses import PlainTextResponse
 from deps import db
 
 router = APIRouter()
+
+
+# Cyrillic → Latin transliteration for slug generation (Bulgarian alphabet).
+# Mirrors the frontend table in `frontend/src/lib/auctionUrl.js` so sitemap
+# URLs match the ones actually rendered in the SPA.
+_CYR_MAP = str.maketrans({
+    "а":"a","б":"b","в":"v","г":"g","д":"d","е":"e","ж":"zh","з":"z","и":"i","й":"y",
+    "к":"k","л":"l","м":"m","н":"n","о":"o","п":"p","р":"r","с":"s","т":"t","у":"u",
+    "ф":"f","х":"h","ц":"ts","ч":"ch","ш":"sh","щ":"sht","ъ":"a","ь":"y","ю":"yu","я":"ya",
+    "А":"A","Б":"B","В":"V","Г":"G","Д":"D","Е":"E","Ж":"Zh","З":"Z","И":"I","Й":"Y",
+    "К":"K","Л":"L","М":"M","Н":"N","О":"O","П":"P","Р":"R","С":"S","Т":"T","У":"U",
+    "Ф":"F","Х":"H","Ц":"Ts","Ч":"Ch","Ш":"Sh","Щ":"Sht","Ъ":"A","Ь":"Y","Ю":"Yu","Я":"Ya",
+})
+
+
+def _auction_slug_url(auction: dict) -> str:
+    """Build the SEO-friendly `/auctions/<slug>-<suffix>` path. The 8-char
+    suffix is the first 8 hex chars of the UUID (dashes stripped) so it
+    stays unique even across identical titles."""
+    aid = str(auction.get("id") or "")
+    if not aid:
+        return "/auctions/"
+    suffix = aid.replace("-", "")[:8]
+    title = auction.get("title") or " ".join(
+        str(auction.get(k) or "") for k in ("year", "make", "model")
+    ).strip()
+    if not title:
+        return f"/auctions/{aid}"
+    slug = title.translate(_CYR_MAP).lower()
+    slug = re.sub(r"[^a-z0-9]+", "-", slug).strip("-")[:80]
+    if not slug:
+        return f"/auctions/{aid}"
+    return f"/auctions/{slug}-{suffix}"
 
 
 async def _deindex_enabled() -> bool:
@@ -211,7 +245,7 @@ async def sitemap_xml(request: Request):
                 + f"<image:title>{caption}</image:title></image:image>"
             )
         xml_parts.append(
-            f"<url><loc>{frontend_base}/auctions/{a['id']}</loc>"
+            f"<url><loc>{frontend_base}{_auction_slug_url(a)}</loc>"
             + lastmod
             + f"<changefreq>{freq}</changefreq><priority>{pr}</priority>"
             + "".join(image_blocks)
@@ -250,7 +284,7 @@ async def sitemap_images_xml(request: Request):
         if not clean:
             continue
         caption = _esc((a.get("title") or "").strip()[:160])
-        parts = [f"<url><loc>{frontend_base}/auctions/{a['id']}</loc>"]
+        parts = [f"<url><loc>{frontend_base}{_auction_slug_url(a)}</loc>"]
         for img in clean:
             parts.append(
                 f"<image:image><image:loc>{_esc(img)}</image:loc>"
@@ -267,7 +301,8 @@ async def sitemap_images_xml(request: Request):
 async def share_auction(auction_id: str, request: Request):
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     frontend_base = request.headers.get("origin") or str(request.base_url).rstrip("/")
-    target = f"{frontend_base}/auctions/{auction_id}"
+    # Redirect crawlers to the SEO-friendly slug URL.
+    target = f"{frontend_base}{_auction_slug_url(a) if a else f'/auctions/{auction_id}'}"
 
     if not a:
         title = "autoandbid.com — Търг"

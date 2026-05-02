@@ -18,6 +18,7 @@ import AdminSellerRequestsTab from "../components/AdminSellerRequestsTab";
 import AdminArchiveTab from "../components/AdminArchiveTab";
 import AdminUnsoldTab from "../components/AdminUnsoldTab";
 import AdminChatPanel from "../components/AdminChatPanel";
+import { auctionUrl } from "../lib/auctionUrl";
 import AdminHealthTab from "../components/AdminHealthTab";
 
 const STATUS_LABELS = {
@@ -473,7 +474,7 @@ export default function AdminPage() {
                       <button onClick={() => setEditingId(a.id)} className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1" data-testid={`edit-${a.id}`}>
                         <Edit3 size={12} /> Редактирай
                       </button>
-                      <a href={`/auctions/${a.id}`} target="_blank" rel="noopener noreferrer" className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1" data-testid={`preview-${a.id}`} title="Отвори обявата в нов раздел">
+                      <a href={auctionUrl(a)} target="_blank" rel="noopener noreferrer" className="btn btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1" data-testid={`preview-${a.id}`} title="Отвори обявата в нов раздел">
                         <Eye size={12} /> Преглед
                       </a>
                       {a.status === "pending" && (

@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth, formatError } from "../lib/auth";
 import { api, formatEUR, timeLeft, formatTimeLeft } from "../lib/apiClient";
 import SellerRequestModal from "../components/SellerRequestModal";
+import { auctionUrl } from "../lib/auctionUrl";
 
 /** i18n-aware status metadata: labels come from locales, icons+colors stay static */
 const STATUS_ICON = {
@@ -264,7 +265,7 @@ export default function MyListingsPage() {
                         <div className="overline text-[hsl(var(--ink-muted))]">Водеща оферта</div>
                         <div className="font-serif text-2xl">{formatEUR(a.current_bid_eur)}</div>
                       </>)}
-                      {(a.status === "live" || a.status === "sold" || isRNM) && <Link to={`/auctions/${a.id}`} className="btn btn-secondary !py-2 !px-4 mt-1">Виж обявата</Link>}
+                      {(a.status === "live" || a.status === "sold" || isRNM) && <Link to={auctionUrl(a)} className="btn btn-secondary !py-2 !px-4 mt-1">Виж обявата</Link>}
                     </div>
                   </div>
                 </div>
