@@ -42,7 +42,6 @@ export default function AuctionDetailPage() {
   const [credit, setCredit] = useState(null);
   const [showCredit, setShowCredit] = useState(false);
   const [nextBid, setNextBid] = useState({ min_next_eur: 0, buyer_fee_eur: 150, step_eur: 100 });
-  const [stickyVisible, setStickyVisible] = useState(false);
   const titleRef = useRef(null);
   const wsRef = useRef(null);
   const settings = useSiteSettings();
@@ -236,21 +235,6 @@ export default function AuctionDetailPage() {
     return () => clearInterval(i);
   }, [a]);
 
-  // Mobile sticky header — show when the <h1> title scrolls out of view.
-  // Uses IntersectionObserver with the site header height (56px) as the
-  // top root-margin so the sticky bar only appears once the title is
-  // actually gone from the screen, not while it's merely behind the nav.
-  useEffect(() => {
-    if (!titleRef.current) return;
-    if (typeof IntersectionObserver === "undefined") return;
-    const obs = new IntersectionObserver(
-      ([entry]) => setStickyVisible(!entry.isIntersecting),
-      { threshold: 0, rootMargin: "-56px 0px 0px 0px" }
-    );
-    obs.observe(titleRef.current);
-    return () => obs.disconnect();
-  }, [a]);
-
   const startBid = () => {
     setError("");
     if (!user) { navigate("/login?next=/auctions/" + id); return; }
@@ -435,24 +419,20 @@ export default function AuctionDetailPage() {
   };
 
   return (
-    <main className="rule-b" data-testid="auction-detail-page">
+    <main className="rule-b pt-[76px] lg:pt-0" data-testid="auction-detail-page">
       {/*
-        Mobile-only sticky header — shows once the <h1> title scrolls out
-        of view. Mirrors BaT's pattern (title, time remaining, current bid,
-        comments count, watch button, primary Bid CTA). Slides down on
-        enter, slides up on exit via CSS transform. Hidden on lg+ screens
-        where the bid sidebar is always visible.
+        Mobile-only sticky header — always visible beneath the main nav.
+        The auction <h1> is hidden on mobile since the sticky already
+        renders the title. On lg+ the sidebar/h1 takes over and this bar
+        is `lg:hidden`.
       */}
       {a && (
         <div
-          className={`fixed inset-x-0 top-[56px] z-40 lg:hidden transition-transform duration-300 ease-out ${
-            stickyVisible ? "translate-y-0" : "-translate-y-full pointer-events-none"
-          }`}
+          className="fixed inset-x-0 top-[56px] z-40 lg:hidden"
           data-testid="mobile-sticky-header"
-          aria-hidden={!stickyVisible}
         >
           <div className="bg-[hsl(var(--bg))]/95 backdrop-blur-md border-b border-[hsl(var(--line))] shadow-lg">
-            <div className="px-3 py-2.5">
+            <div className="px-3 pt-[15px] pb-2.5">
               <div className="flex items-center gap-3">
                 {/*
                   Left: bold current bid + meta row (time + bid count).
@@ -478,7 +458,7 @@ export default function AuctionDetailPage() {
                       className="font-mono tabular-nums whitespace-nowrap"
                       data-testid="sticky-time"
                     >
-                      {tl.label || "—"}
+                      {formatTimeLeft(tl, t) || "—"}
                     </span>
                     <span className="text-[hsl(var(--line))]">·</span>
                     <span
@@ -568,7 +548,7 @@ export default function AuctionDetailPage() {
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
           <div className="lg:col-span-8">
             <div className="overline text-[hsl(var(--accent))]">{a.make} · {translateEnum(a.body_type, "body_type", lng)}</div>
-            <h1 ref={titleRef} className="font-serif text-3xl lg:text-5xl mt-3 tracking-tight leading-tight">{a.title}</h1>
+            <h1 ref={titleRef} className="hidden lg:block font-serif text-3xl lg:text-5xl mt-3 tracking-tight leading-tight">{a.title}</h1>
             <div className="mt-3 text-sm text-[hsl(var(--ink-muted))] flex items-center gap-4 flex-wrap">
               <span>{a.year} · {formatKM(a.mileage_km)} · {translateEnum(a.fuel, "fuel", lng)} · {translateEnum(a.city, "city", lng)}{a.country ? `, ${a.country}` : ""}</span>
               <span className={`flex items-center gap-1.5 text-xs ${wsStatus === "connected" ? "text-[hsl(var(--accent))]" : "text-[hsl(var(--ink-muted))]"}`} data-testid="ws-status">

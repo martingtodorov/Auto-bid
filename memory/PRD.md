@@ -1397,3 +1397,56 @@ Verified frontend: bid input `min=5125, step=125` for 5000€ auction.
 - Bid step `500€ → min €5,125, step €125` (0→1000 bracket is €25, 1k-5k €50,
   5k-10k €125 ✓).
 
+
+---
+
+## 2026-05-02 (iter 18) — Always-on mobile sticky + 2-hero + i18n time
+
+### 1. Mobile sticky header: always visible, pt-15
+`AuctionDetailPage.jsx`:
+- Removed `stickyVisible` state + IntersectionObserver. Bar is now
+  unconditionally pinned at `top-[56px]` — no slide-in/slide-out, no
+  disappearing during scroll.
+- Internal padding: `pt-[15px]` (was `py-2.5`) for the 15 px top margin.
+- `<main>` gets `pt-[76px] lg:pt-0` so the fixed sticky never covers
+  page content.
+- The desktop `<h1>` gets `hidden lg:block` — on mobile, only the
+  sticky's `sticky-title` is rendered, eliminating the duplicate title
+  the user complained about.
+
+### 2. Time-remaining labels translated
+Replaced the hardcoded `{tl.label}` (Bulgarian-only `д / ч / м / с`) in
+the sticky with `formatTimeLeft(tl, t)`, which looks up the i18n keys
+`time.days_hours`, `time.hours_minutes`, `time.minutes_seconds`,
+`time.ended` — already defined in `bg.json / en.json / ro.json`.
+Verified live: BG `5д 12ч`, EN `5d 12h`, RO `5z 12h`.
+
+### 3. Two hero picks with smart auto-selection + 30 min stickiness
+New backend endpoint `GET /api/auctions/hero`:
+- Pulls every live, non-archived auction.
+- Scores each: `score = (featured_flag × 1000) + (bid_count × 10) + comments_count`.
+  Featured flag dominates; bids + comments break ties.
+- Returns the top 2 picks in list-shape, plus
+  `Cache-Control: public, s-maxage=300, stale-while-revalidate=600`.
+- **Stickiness**: picks are cached in module memory (`hero_picks._cache`)
+  for 30 min. On subsequent calls, the two cached ids are re-validated
+  (still live, not archived, `ends_at` still in the future); if valid,
+  the same pair is returned. If either pick has ended/been pulled, a
+  fresh top-2 is chosen immediately.
+
+`landingCache.js` now fetches `/auctions/hero` in parallel and
+persists the result. `LandingPage.jsx`:
+- `heroes = heroPicks.slice(0, 2)` with fallback to featured/auctions.
+- Heroes render in a **responsive 2-col grid** on md+ (stacked on
+  mobile) inside the existing `hero-featured-auction` container.
+- `heroIds` set filters both `featuredEx` and `auctionsEx` so neither
+  hero car appears twice on the page.
+
+### Verified
+- `curl /api/auctions/hero` → 2 picks (featured BMW M240i first, then
+  BMW M2). Second call → identical ids (cache hit).
+- Mobile: sticky pinned at `y=56px` with `pt-[15px]`, H1 hidden, all
+  three locales render time correctly.
+- Desktop: both heroes render side-by-side in the hero section, no
+  duplicates further down the page.
+

@@ -22,6 +22,7 @@ export default function LandingPage() {
   const [auctions, setAuctions] = useState(cached?.live || []);
   const [featured, setFeatured] = useState(cached?.featured || []);
   const [sold, setSold] = useState(cached?.sold || []);
+  const [heroPicks, setHeroPicks] = useState(cached?.hero || []);
   const settings = useSiteSettings();
 
   // Update SEO from site settings (per-language, fallback to legacy field)
@@ -47,6 +48,7 @@ export default function LandingPage() {
       setAuctions(payload.live || []);
       setFeatured(payload.featured || []);
       setSold(payload.sold || []);
+      setHeroPicks(payload.hero || []);
     };
 
     const refresh = async () => {
@@ -85,11 +87,18 @@ export default function LandingPage() {
     };
   }, []);
 
-  const hero = featured[0] || auctions[0];
-  // Filter lists used by the sections below so the hero listing never
-  // appears twice on the same page (hero + its card right below).
-  const featuredEx = featured.filter((a) => !hero || a.id !== hero.id);
-  const auctionsEx = auctions.filter((a) => !hero || a.id !== hero.id);
+  // Two heroes now — backend /auctions/hero returns up to 2 picks with
+  // 30-min stickiness (featured flag + bid/comment activity). Fall back to
+  // featured[0..1] / auctions[0..1] if the endpoint is unavailable.
+  const heroes = heroPicks.length
+    ? heroPicks.slice(0, 2)
+    : (featured.slice(0, 2).length >= 2
+        ? featured.slice(0, 2)
+        : [featured[0], auctions[0]].filter(Boolean).slice(0, 2));
+  const heroIds = new Set(heroes.map((h) => h.id));
+  // Filter the lists below so hero cars never render twice on the page.
+  const featuredEx = featured.filter((a) => !heroIds.has(a.id));
+  const auctionsEx = auctions.filter((a) => !heroIds.has(a.id));
 
   // CMS-editable hero text per language (falls back to static i18n)
   const cmsHeadline = settings?.[`hero_headline_${lang}`];
@@ -100,15 +109,13 @@ export default function LandingPage() {
       {/* Hero */}
       <section className="rule-b hero-ambient">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-3">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-12 items-center">
-            <div className="lg:col-span-7 fade-up">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 items-center">
+            <div className="lg:col-span-5 fade-up">
               {cmsHeadline ? (
                 <h1
                   className="hero-headline text-5xl sm:text-6xl lg:text-[60px] lg:leading-[1.05] mt-0"
                   data-testid="hero-headline-cms"
                   dangerouslySetInnerHTML={{
-                    // M4 (XSS): санитизираме CMS-управления headline.  Позволяваме
-                    // само <br>, <em>, <strong>, <span> — никакви скриптове/handler-и.
                     __html: DOMPurify.sanitize(cmsHeadline.replace(/\n/g, "<br />"), {
                       ALLOWED_TAGS: ["br", "em", "strong", "span", "b", "i"],
                       ALLOWED_ATTR: ["class"],
@@ -133,11 +140,15 @@ export default function LandingPage() {
               </div>
             </div>
 
-            <div className="lg:col-span-5 fade-up lg:justify-self-end w-full lg:max-w-[420px]">
-              {hero ? (
-                <div data-testid="hero-featured-auction" className="relative">
+            <div className="lg:col-span-7 fade-up">
+              {heroes.length > 0 ? (
+                <div data-testid="hero-featured-auction">
                   <div className="overline text-[hsl(var(--accent))] mb-2">{t("hero.featured_listing")}</div>
-                  <AuctionCard auction={hero} />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-5">
+                    {heroes.map((h) => (
+                      <AuctionCard key={h.id} auction={h} />
+                    ))}
+                  </div>
                 </div>
               ) : (
                 <div className="aspect-[4/3] lg:aspect-[16/10] border border-[hsl(var(--line))] bg-[hsl(var(--surface))]" />

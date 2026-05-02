@@ -43,12 +43,18 @@ export function landingCacheIsFresh(entry) {
  * caller decides whether to keep rendering the stale cache.
  */
 export async function fetchLandingData() {
-  const [l, f, s] = await Promise.all([
+  const [l, f, s, h] = await Promise.all([
     api.get("/auctions", { params: { sort: "ending_soon", status: "live", limit: 6, view: "list" } }),
     api.get("/auctions/featured", { params: { view: "list" } }),
     api.get("/auctions/sold", { params: { view: "list" } }),
+    api.get("/auctions/hero"),
   ]);
-  const payload = { live: l.data || [], featured: f.data || [], sold: s.data || [] };
+  const payload = {
+    live: l.data || [],
+    featured: f.data || [],
+    sold: s.data || [],
+    hero: h.data || [],
+  };
   writeLandingCache(payload);
   return payload;
 }

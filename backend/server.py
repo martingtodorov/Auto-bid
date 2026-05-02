@@ -556,6 +556,84 @@ async def list_auctions(
         out = [_list_shape(a) for a in out]
     return out
 
+@api.get("/auctions/hero")
+async def hero_picks(request: Request, response: Response):
+    """Two hero picks for the landing page.
+
+    Selection policy:
+      1. Candidates = live, non-archived auctions.
+      2. Score each = (featured_flag × 1000) + (bid_count × 10) + comments_count.
+         `featured` dominates, activity (bids + comments) is the tie-breaker.
+      3. Keep the choice STABLE for 30 minutes so visitors returning mid-
+         session don't see the hero shuffle.
+      4. Cached picks are invalidated early if any chosen auction has
+         ended / been archived / lost its featured flag — we fall through
+         to a fresh selection.
+
+    Response: list of up to 2 lightweight (list-shape) auction dicts.
+    """
+    now = datetime.now(timezone.utc)
+    cached = getattr(hero_picks, "_cache", None)
+    cache_valid = False
+    if cached:
+        picked_ids, chosen_at = cached
+        if (now - chosen_at).total_seconds() < 1800:  # 30 min
+            # Verify both cached picks are still live, not archived and
+            # not past their `ends_at`. If any is stale, recompute.
+            raws = await db.auctions.find(
+                {"id": {"$in": picked_ids}},
+                _LIST_MONGO_PROJECTION,
+            ).to_list(len(picked_ids))
+            fresh = [_public_auction(a, None) for a in raws]
+            still_good = (
+                len(fresh) == len(picked_ids) and
+                all(
+                    x.get("status") == "live" and
+                    not x.get("is_archived") and
+                    x.get("ends_at") and datetime.fromisoformat(x["ends_at"].replace("Z", "+00:00")) > now
+                    for x in fresh
+                )
+            )
+            if still_good:
+                # Preserve the original cache order (ids)
+                ordered = [next((x for x in fresh if x["id"] == pid), None) for pid in picked_ids]
+                combined = [x for x in ordered if x]
+                cache_valid = True
+
+    if not cache_valid:
+        # Pull live candidates (featured first, then the rest as backup)
+        raw = await db.auctions.find(
+            {"is_archived": {"$ne": True}, "status": "live"},
+            _LIST_MONGO_PROJECTION,
+        ).limit(60).to_list(60)
+        items = [_public_auction(a, None) for a in raw]
+        items = [a for a in items if a.get("status") == "live" and not a.get("is_archived")]
+
+        # Activity counts — one aggregation per collection, indexed by auction id
+        ids = [a["id"] for a in items]
+        comment_counts = {}
+        if ids:
+            agg = await db.comments.aggregate([
+                {"$match": {"auction_id": {"$in": ids}}},
+                {"$group": {"_id": "$auction_id", "n": {"$sum": 1}}},
+            ]).to_list(1000)
+            comment_counts = {x["_id"]: x["n"] for x in agg}
+
+        def _score(a: dict) -> int:
+            f = 1000 if a.get("featured") else 0
+            bids = int(a.get("bid_count") or 0)
+            comments = int(comment_counts.get(a["id"], 0))
+            return f + bids * 10 + comments
+
+        items.sort(key=_score, reverse=True)
+        combined = items[:2]
+        hero_picks._cache = ([a["id"] for a in combined], now)
+
+    await _enrich_dealer_status(combined)
+    response.headers["Cache-Control"] = "public, max-age=60, s-maxage=300, stale-while-revalidate=600"
+    return [_list_shape(a) for a in combined]
+
+
 @api.get("/auctions/featured")
 async def featured(request: Request, response: Response, view: Optional[str] = None):
     viewer = await get_optional_user(request)
