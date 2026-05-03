@@ -50,21 +50,32 @@ def build_inbox_router(db, get_current_user):
         ids = payload.ids or []
         if not ids:
             raise HTTPException(status_code=400, detail="ids[] is required")
-        now = datetime.now(timezone.utc).isoformat()
+        now_dt = datetime.now(timezone.utc)
+        # `read_at_ts` (BSON Date) powers the 30-day TTL index; the ISO
+        # string remains for UI compatibility.
         result = await db.user_notifications.update_many(
             {"user_id": user["id"], "id": {"$in": ids}, "read": False},
-            {"$set": {"read": True, "read_at": now}},
+            {"$set": {"read": True, "read_at": now_dt.isoformat(), "read_at_ts": now_dt}},
         )
         return {"ok": True, "updated": result.modified_count}
 
     @router.post("/inbox/mark-all-read")
     async def mark_all_read(user: dict = Depends(get_current_user)):
-        now = datetime.now(timezone.utc).isoformat()
+        now_dt = datetime.now(timezone.utc)
         result = await db.user_notifications.update_many(
             {"user_id": user["id"], "read": False},
-            {"$set": {"read": True, "read_at": now}},
+            {"$set": {"read": True, "read_at": now_dt.isoformat(), "read_at_ts": now_dt}},
         )
         return {"ok": True, "updated": result.modified_count}
+
+    @router.post("/inbox/clear-all")
+    async def clear_all(user: dict = Depends(get_current_user)):
+        """Delete every notification for this user. Irreversible — used
+        by the "Clear all" button in the drawer. We purge read + unread
+        alike because the UX intent is "empty inbox"; the 30-day
+        auto-cleanup only targets already-read rows."""
+        result = await db.user_notifications.delete_many({"user_id": user["id"]})
+        return {"ok": True, "deleted": result.deleted_count}
 
     return router
 

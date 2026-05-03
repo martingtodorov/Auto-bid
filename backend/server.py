@@ -461,6 +461,47 @@ async def _hydrate_user_slug(rows: list[dict]) -> None:
             r["user_slug"] = slugs[uid]
 
 
+async def _setup_notifications_ttl() -> None:
+    """Configure Mongo to auto-delete READ notifications after 30 days.
+    Uses a TTL index on `read_at_ts` (BSON Date) with a partial filter
+    on `read: True`. The inbox mark-read handlers write `read_at_ts`
+    alongside the ISO `read_at` string — see patch below.
+
+    Idempotent: Mongo treats identical index specs as a no-op. Unread
+    notifications are untouched; they expire only after the user marks
+    them read or clicks "Clear all".
+    """
+    try:
+        await db.user_notifications.create_index(
+            "read_at_ts",
+            expireAfterSeconds=30 * 24 * 3600,
+            partialFilterExpression={"read": True},
+            name="read_at_ts_ttl_30d",
+        )
+        # One-time backfill: older `read: true` rows have ISO `read_at`
+        # but no BSON `read_at_ts`, so Mongo's TTL job skips them. Parse
+        # the string into a real datetime and write it back. Limited to
+        # 5000 docs per boot to avoid blocking startup on huge inboxes.
+        cursor = db.user_notifications.find(
+            {"read": True, "read_at_ts": {"$exists": False}, "read_at": {"$type": "string"}},
+            {"_id": 0, "id": 1, "read_at": 1},
+        ).limit(5000)
+        async for doc in cursor:
+            try:
+                dt = datetime.fromisoformat(doc["read_at"].replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                await db.user_notifications.update_one(
+                    {"id": doc["id"]},
+                    {"$set": {"read_at_ts": dt}},
+                )
+            except Exception:
+                pass
+    except Exception as e:
+        logger.warning("notifications TTL index setup failed: %s", e)
+
+
+
 async def _backfill_profile_slugs() -> None:
     """One-time (idempotent) startup task — every user without a
     `profile_slug` gets one generated from their name. Safe to run on
@@ -4984,6 +5025,7 @@ async def on_startup():
     await seed()
     await _seed_makes()
     await _backfill_profile_slugs()
+    await _setup_notifications_ttl()
     # Start background scheduler for auction finalization
     asyncio.create_task(_auction_finalizer_loop())
     # Start background scheduler for "ending soon" notifications (≈1h before end)

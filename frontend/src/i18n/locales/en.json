@@ -672,6 +672,9 @@
     "preauth_available": "Available",
     "empty": "No notifications",
     "mark_all_read": "Mark all read",
+    "clear_all": "Clear",
+    "clear_all_hint": "Delete all notifications. Read ones expire automatically after 30 days.",
+    "clear_all_confirm": "Delete all notifications? This cannot be undone.",
     "view_all": "View all →",
     "unread_count": "{{count}} unread"
   },

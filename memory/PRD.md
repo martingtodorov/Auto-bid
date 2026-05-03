@@ -2152,3 +2152,33 @@ typed notifications), връщаше `{title:"", body:""}` → празен item
 
 Това означава, че дори ако backend добави нов тип notification в
 бъдеще без съответната i18n entry, няма да имаме празен item.
+
+## 2026-05-03 — Notification cleanup: Mark all read, Clear all, 30-day TTL
+
+**Request**: Add "Clear all / Mark all read" buttons and automatic
+cleanup of read notifications > 30 days.
+
+**Backend**:
+- `routers/inbox.py`:
+  - `mark_read` / `mark_all_read` now write **both** `read_at` (ISO str)
+    AND `read_at_ts` (BSON Date) — the Date powers the TTL index.
+  - New `POST /api/inbox/clear-all` endpoint — deletes every user notification.
+- `server.py`:
+  - `_setup_notifications_ttl()` creates a TTL index on `read_at_ts`
+    with `expireAfterSeconds=30*24*3600` and `partialFilterExpression={"read": True}`.
+    Mongo itself auto-deletes eligible rows — no cron needed.
+  - One-time backfill (5k docs/boot) converts existing ISO `read_at`
+    strings to BSON dates on the existing rows so they also expire.
+  - Called in `on_startup` alongside `_backfill_profile_slugs`.
+
+**Frontend** (`components/NotificationBell.jsx`):
+- "Mark all read" button (already existed) kept in header.
+- New "Изчисти" (Clear) button (red, Trash2 icon) with confirm dialog.
+- i18n keys added in bg/en/ro: `inbox.clear_all`, `inbox.clear_all_hint`,
+  `inbox.clear_all_confirm`.
+
+**Verified**:
+- TTL index created: `read_at_ts_ttl_30d`, 2,592,000 seconds, partial filter ✓
+- Backfill writes BSON Date: `read_at_ts: ISODate('2026-04-27T...')` ✓
+- `POST /inbox/clear-all` → `{"ok":true,"deleted":15}` ✓
+- `mark-all-read`: 9 unread → 0 unread ✓

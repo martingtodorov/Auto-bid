@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Bell, Check, CheckCheck, Shield } from "lucide-react";
+import { Bell, Check, CheckCheck, Shield, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, formatEUR } from "../lib/apiClient";
 import { resolveNotification } from "../lib/notifications";
@@ -92,6 +92,16 @@ export default function NotificationBell() {
     setUnread(0);
   };
 
+  const clearAll = async () => {
+    // Destructive — ask for confirmation. 30-day TTL cleanup happens
+    // automatically for read notifications, but some users want to
+    // empty their drawer manually (e.g. after resolving a backlog).
+    if (!window.confirm(t("inbox.clear_all_confirm", "Изтриване на всички известия? Действието е необратимо."))) return;
+    try { await api.post("/inbox/clear-all"); } catch (e) {}
+    setItems([]);
+    setUnread(0);
+  };
+
   if (!user) return null;
 
   return (
@@ -124,15 +134,27 @@ export default function NotificationBell() {
         >
           <div className="flex items-center justify-between px-4 py-3 border-b border-[hsl(var(--line))]">
             <h3 className="font-serif text-base">{t("inbox.title", "Известия")}</h3>
-            {unread > 0 && (
-              <button
-                onClick={markAllRead}
-                className="text-xs text-[hsl(var(--accent))] hover:underline flex items-center gap-1"
-                data-testid="mark-all-read"
-              >
-                <CheckCheck size={12} /> {t("inbox.mark_all_read", "Маркирай всички")}
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {unread > 0 && (
+                <button
+                  onClick={markAllRead}
+                  className="text-xs text-[hsl(var(--accent))] hover:underline flex items-center gap-1"
+                  data-testid="mark-all-read"
+                >
+                  <CheckCheck size={12} /> {t("inbox.mark_all_read", "Маркирай всички")}
+                </button>
+              )}
+              {items.length > 0 && (
+                <button
+                  onClick={clearAll}
+                  className="text-xs text-red-600 hover:underline flex items-center gap-1"
+                  data-testid="clear-all-notifications"
+                  title={t("inbox.clear_all_hint", "Изчиства всички известия от списъка")}
+                >
+                  <Trash2 size={12} /> {t("inbox.clear_all", "Изчисти")}
+                </button>
+              )}
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto">
             {/* Active pre-authorizations always pinned at the very top.

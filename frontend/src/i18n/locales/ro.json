@@ -668,6 +668,9 @@
     "preauth_available": "Disponibil",
     "empty": "Nu aveți notificări",
     "mark_all_read": "Marchează toate",
+    "clear_all": "Șterge",
+    "clear_all_hint": "Șterge toate notificările. Cele citite expiră automat după 30 de zile.",
+    "clear_all_confirm": "Ștergi toate notificările? Acțiunea nu poate fi anulată.",
     "view_all": "Toate notificările →",
     "unread_count": "{{count}} necitite"
   },
