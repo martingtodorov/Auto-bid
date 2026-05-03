@@ -603,7 +603,7 @@ export default function AuctionDetailPage() {
                 data-testid="main-gallery-image"
               >
                 <img
-                  src={a.thumbnails?.[photoIdx] || a.images?.[photoIdx]}
+                  src={a.images?.[photoIdx] || a.thumbnails?.[photoIdx]}
                   alt={a.title}
                   className="w-full h-full object-cover transition group-hover:scale-[1.02]"
                   decoding="async"
@@ -1189,11 +1189,11 @@ function DescriptionWithInteriorShots({ auctionId, description, interiorImages, 
     );
     const shot = visibleShots[i];
     if (shot) {
-      // Prefer the 400 px thumbnail version (browser already has it cached
-      // for the main gallery); fall back to the full-res URL if the
-      // thumbnail isn't available for this position. Clicking opens the
-      // lightbox at the matching index in the parent `images` array.
-      const thumbSrc = interiorThumbnails[i] || shot;
+      // Interior shots render up to 600-800 px wide on desktop and lazy-load
+      // only when scrolled near. Use the full-resolution image so the photo
+      // stays sharp; the lazy attribute still keeps the network footprint
+      // small on initial paint.
+      const thumbSrc = shot;
       const lightboxIdxForShot = interiorStartIdx + i;
       return blocks.push(
         <figure

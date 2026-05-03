@@ -46,6 +46,32 @@ class ImageProcessingError(Exception):
     """Raised when a single image fails validation or decoding."""
 
 
+def derive_external_thumbnail(url: str) -> str:
+    """Map an external (already-hosted) image URL to its small CDN variant.
+
+    We never download remote images; we only know that several CDNs serve
+    multiple sizes under predictable URL patterns. When we recognise one of
+    those patterns we rewrite the URL to point at the small variant so the
+    gallery thumbnail strip uses ~16 KB previews instead of the 250+ KB
+    full-resolution source.
+
+    Currently handled:
+      • mobile.bg (`mobistatic*.focus.bg/.../big1/<name>.webp`) → drop the
+        `/big1/` segment to get the ~120 px preview the CDN already serves.
+
+    Falls back to the original URL when no rule matches — caller is free
+    to use the same URL for both web and thumb fields in that case.
+    """
+    if not url or not isinstance(url, str):
+        return url
+    lower = url.lower()
+    # mobile.bg / focus.bg CDN: stripping `/big1/` resolves to a ~16 KB
+    # preview that's still hosted on the same origin.
+    if ("focus.bg" in lower or "mobile.bg" in lower) and "/big1/" in url:
+        return url.replace("/big1/", "/", 1)
+    return url
+
+
 def _decode_data_url(url: str) -> tuple[str, bytes]:
     m = _DATA_URL_RE.match(url.strip())
     if not m:
@@ -116,8 +142,10 @@ def optimize_data_url(data_url: str) -> tuple[str, str]:
     if not data_url:
         raise ImageProcessingError("empty image")
     if not data_url.startswith("data:image/"):
-        # Already a hosted URL — pass through unchanged for both fields.
-        return data_url, data_url
+        # Already a hosted URL — pass through for the full-resolution
+        # `web` field. For the thumbnail field, try to derive a smaller
+        # CDN variant when the host advertises one.
+        return data_url, derive_external_thumbnail(data_url)
 
     _ext, raw = _decode_data_url(data_url)
     if len(raw) > IMAGE_MAX_RAW_BYTES:

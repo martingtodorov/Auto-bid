@@ -1743,3 +1743,34 @@ Live preview at 1200×630 shows: **photo + green pill (●4D 22H) + Title
 in Manrope Bold + €5 000 + Auto&Bid wordmark with green &**. Matches
 the user's request 1:1.
 
+
+## 2026-05-03 — Eager image loading fix (mobile.bg thumbnails)
+
+**Bug**: При отваряне на търг страницата зареждаше **8× full-resolution
+`/big1/` снимки от mobile.bg (~270 KB всяка = 2.1 MB)** в thumbnail strip-а,
+защото `optimize_data_url` връщаше идентичен URL за `web` и `thumbnail`,
+когато входът беше вече hosted URL (не data URL). За мобилно
+импортирани обяви това означаваше `thumbnails == images`.
+
+**Fix**:
+- `services/image_processing.py` — нов `derive_external_thumbnail(url)`
+  helper. За mobile.bg/focus.bg URL-и с `/big1/` връща URL без сегмента
+  — CDN-ът сервира ~16 KB preview (280×182 px) на същия път.
+- Промяна на `optimize_data_url` за hosted URLs:
+  `(web=url, thumb=derive_external_thumbnail(url))`.
+- Backfill script: `/app/backend/scripts/backfill_external_thumbnails.py`
+  — обнови 5 съществуващи обяви (всички mobile.bg импорти).
+- `AuctionDetailPage.jsx`:
+  - Hero image сега използва `images[i]` (full-res) вместо thumbnail —
+    1 image само, ~267 KB, sharp на десктоп.
+  - Interior shots в описанието (3 бр) ползват `shot` (full-res), но със
+    `loading="lazy"` — fetch-ват се само при scroll близо до viewport.
+  - Thumbnail strip продължава да ползва `thumbnails` (вече =small variant).
+
+**Резултат** (verified чрез Playwright network tracing на
+`ff615975-a181-4ede-be29-65547901a8a7`):
+- **Before**: 10 image requests, ~2.1 MB total (8× /big1/ full-res)
+- **After**: 11 requests, **708 KB** (1 hero /big1/ + 8 small thumbs +
+  2 interior shots prefetched от IntersectionObserver)
+- **66% намаление** на bandwidth-а при initial page load.
+
