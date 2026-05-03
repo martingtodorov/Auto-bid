@@ -4582,6 +4582,55 @@ async def auction_slug_middleware(request: Request, call_next):
     return await call_next(request)
 
 
+# ---- Social-bot share rewrite ------------------------------------------
+# When a SOCIAL CRAWLER (Facebook, Twitter, Slack, WhatsApp, LinkedIn,
+# Telegram, Discord…) hits the public-facing `/auctions/{slug-or-uuid}`
+# URL, we rewrite the request to `/api/share/auction/{id}` so the bot
+# receives our SSR-rendered HTML with rich Open Graph + Twitter Card +
+# JSON-LD meta tags. Real users see the React SPA exactly as before.
+#
+# Matches the exact bot User-Agents documented at:
+#   • https://developers.facebook.com/docs/sharing/webmasters/crawler/
+#   • https://developer.twitter.com/en/docs/twitter-for-websites/cards/guides/getting-started
+#   • https://api.slack.com/robots
+#   • whatsapp / telegrambot / linkedinbot / discordbot — UA strings are stable
+_SOCIAL_BOTS_RE = re.compile(
+    r"(facebookexternalhit|facebot|twitterbot|slackbot|"
+    r"whatsapp|telegrambot|linkedinbot|discordbot|"
+    r"pinterestbot|skypeuripreview|redditbot|vkshare|"
+    r"applebot|googlebot-image)",
+    re.IGNORECASE,
+)
+_PUBLIC_AUCTION_PATH_RE = re.compile(r"^/auctions/([A-Za-z0-9_-]+)(?:/.*)?$")
+
+
+@app.middleware("http")
+async def social_bot_share_middleware(request: Request, call_next):
+    method = request.method.upper()
+    if method not in ("GET", "HEAD"):
+        return await call_next(request)
+    path = request.scope.get("path", "")
+    m = _PUBLIC_AUCTION_PATH_RE.match(path)
+    if not m:
+        return await call_next(request)
+    ua = (request.headers.get("user-agent") or "").lower()
+    if not _SOCIAL_BOTS_RE.search(ua):
+        return await call_next(request)
+    raw = m.group(1)
+    # Resolve the slug → canonical UUID. If we can't, fall through and let
+    # the SPA render its own error page.
+    if _UUID_RE.match(raw):
+        canonical = raw
+    else:
+        canonical = await _resolve_raw_auction_id(raw)
+    if not canonical:
+        return await call_next(request)
+    new_path = f"/api/share/auction/{canonical}"
+    request.scope["path"] = new_path
+    request.scope["raw_path"] = new_path.encode()
+    return await call_next(request)
+
+
 # ---- Deindex mode: stamp X-Robots-Tag on every response when enabled ----
 # Admin can flip this via /admin/settings → Deindex mode. Use case: pre-launch
 # sites that must remain fully testable but must NOT be indexed. We read the

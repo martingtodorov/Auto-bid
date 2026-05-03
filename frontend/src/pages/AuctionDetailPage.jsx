@@ -14,6 +14,7 @@ import Avatar from "../components/Avatar";
 import { useSiteSettings, computeBuyerFee } from "../lib/settings";
 import { setPageMeta, resetPageMeta, buildVehicleJsonLd, buildBreadcrumbs, combineJsonLd } from "../lib/seo";
 import { brandNameForLang } from "../i18n/index";
+import { auctionUrl } from "../lib/auctionUrl";
 
 export default function AuctionDetailPage() {
   const { id } = useParams();
@@ -1009,7 +1010,7 @@ export default function AuctionDetailPage() {
                 <button onClick={toggleWatch} className={`mt-5 w-full btn flex items-center justify-center gap-2 ${watching ? "btn-primary" : "btn-secondary"}`} data-testid="watch-button">
                   <Heart size={14} className={watching ? "fill-current" : ""} /> {watching ? t("auction.watchlist_remove") : t("auction.watchlist_add")}
                 </button>
-                <ShareButton auctionId={id} title={a?.title} />
+                <ShareButton auction={a} />
               </div>
 
               <div className="rounded-card border border-[hsl(var(--line))] p-6 bg-[hsl(var(--surface))]">
@@ -1321,14 +1322,19 @@ function CommentItem({ c, t, i18nLang, isAdmin, onDelete }) {
   );
 }
 
-function ShareButton({ auctionId, title }) {
+function ShareButton({ auction }) {
   const { t, i18n } = useTranslation();
   const brand = brandNameForLang(i18n.resolvedLanguage || i18n.language);
   const [copied, setCopied] = React.useState(false);
-  const shareUrl = `${window.location.origin}/api/share/auction/${auctionId}`;
+  // Use the canonical SEO-friendly slug URL — `/auctions/<slug>-<short-id>`.
+  // Social crawlers hitting this path are routed by the backend
+  // `social_bot_share_middleware` to the OG-rich `/api/share/auction/{id}`
+  // handler, so they still get the title + description + OG image; real
+  // users get the React SPA. End URL stays clean and shareable.
+  const shareUrl = `${window.location.origin}${auctionUrl(auction)}`;
 
   const share = async () => {
-    const data = { title: title || brand, url: shareUrl };
+    const data = { title: auction?.title || brand, url: shareUrl };
     try {
       if (navigator.share) {
         await navigator.share(data);
