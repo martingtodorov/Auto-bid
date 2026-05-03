@@ -1682,3 +1682,64 @@ shows the car + Auto&Bid wordmark + English countdown + current bid.
 - `/share/auction/{id}` HTML now emits all three image meta tags
   pointing at `/api/og/auction/{id}.png`.
 
+
+---
+
+## 2026-05-02 (iter 25) — OG redesign in AuctionCard style + new favicon
+
+User: "I really don't like the template you made. Can you use the same
+font we use on the website globally for the Auto&Bid logo, make the
+time left in the same pill we use for auction cards and generally make
+it look like the auction card we have. Also here is the new favicon."
+
+### Favicon refresh
+New `Autoandbidfavicon.png` artefact (the green-bar + A&B mark) became
+the source of truth for every icon size:
+
+- `favicon.ico` (multi-size 16/32/48)
+- `icons/favicon-{16,32,48}.png`
+- `icons/apple-touch-icon.png` (180 px)
+- `icons/app-icon-{192,512}.png`
+
+`apple-touch-icon` + manifest icons regenerated via PIL — no HTML
+changes needed (already wired in iter 22).
+
+### OG image v2 — full AuctionCard re-skin
+Old design: dark side-panel, Liberation Serif title. Replaced with a
+faithful copy of `AuctionCard.jsx`:
+
+- **Top 420 px**: cover photo, full bleed, soft black bottom-gradient
+  for legibility.
+- **Pill overlays** (top-left, padded `_PAD - 12`): identical to
+  `.pill-live` (emerald) / `.pill-ending` (danger red, when <2 h
+  left), with a 4 px pulse-dot. Optional `FEATURED` pill follows if
+  `auction.featured`. Real `--accent` / `--accent-soft` /
+  `--danger` / `--danger-soft` colours, copied from CSS vars.
+- **Divider** 1 px at y=420 — matches the card's edge.
+- **Bottom 210 px**: white card body.
+  - Left: title in **Manrope Bold 42** (truncated with ellipsis to
+    one line), then "CURRENT BID" label + `€5 000` in Manrope Bold
+    44, optional `· N bids` muted suffix.
+  - Right (top): **Auto&Bid** wordmark in **Manrope Bold 38** —
+    black `Auto`, emerald `&`, black `Bid` — three draw calls.
+  - Right (under the wordmark): muted `autoandbid.com` domain
+    in Manrope SemiBold 16.
+
+### Typography pipeline
+- Manrope Regular / Bold / SemiBold TTFs downloaded from Google
+  Fonts API (`https://fonts.gstatic.com/.../Manrope-*.ttf`) and
+  shipped at `backend/services/fonts/`. PIL loads them via
+  `ImageFont.truetype`.
+- `_pill()` helper renders each pill as its own RGBA layer with
+  `alpha_composite` so the translucent card-style backdrop
+  (`rgba(255,255,255,0.92)`) reads cleanly over any photo.
+
+### Cache busting
+`_cache_key` version suffix bumped to `:v2`. Old PNGs at
+`/tmp/og_cache/*.png` cleared by hand on deploy.
+
+### Verified
+Live preview at 1200×630 shows: **photo + green pill (●4D 22H) + Title
+in Manrope Bold + €5 000 + Auto&Bid wordmark with green &**. Matches
+the user's request 1:1.
+
