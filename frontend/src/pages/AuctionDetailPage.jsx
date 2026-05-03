@@ -94,20 +94,23 @@ export default function AuctionDetailPage() {
   useEffect(() => { load(); }, [load]);
 
   // Fetch related auctions (same make preferred, fallback to same body_type; excluding self)
+  // All three queries pass `view: "list"` to ensure we get the lightweight
+  // card shape (~1.5 KB / item) instead of the legacy heavy shape that
+  // included full descriptions + every gallery bucket (>9 MB on prod).
   useEffect(() => {
     if (!a) return;
     let cancelled = false;
     (async () => {
       try {
-        const byMake = await api.get("/auctions", { params: { make: a.make, status: "live", limit: 12 } }).catch(() => ({ data: [] }));
+        const byMake = await api.get("/auctions", { params: { make: a.make, status: "live", limit: 12, view: "list" } }).catch(() => ({ data: [] }));
         let items = (byMake.data || []).filter((x) => x.id !== a.id);
         if (items.length < 4) {
-          const byBody = await api.get("/auctions", { params: { body_type: a.body_type, status: "live", limit: 12 } }).catch(() => ({ data: [] }));
+          const byBody = await api.get("/auctions", { params: { body_type: a.body_type, status: "live", limit: 12, view: "list" } }).catch(() => ({ data: [] }));
           const extra = (byBody.data || []).filter((x) => x.id !== a.id && !items.find((y) => y.id === x.id));
           items = [...items, ...extra];
         }
         if (items.length < 4) {
-          const any = await api.get("/auctions", { params: { status: "live", limit: 12 } }).catch(() => ({ data: [] }));
+          const any = await api.get("/auctions", { params: { status: "live", limit: 12, view: "list" } }).catch(() => ({ data: [] }));
           const extra = (any.data || []).filter((x) => x.id !== a.id && !items.find((y) => y.id === x.id));
           items = [...items, ...extra];
         }

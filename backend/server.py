@@ -15,6 +15,7 @@ from typing import List, Optional
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Query, WebSocket, WebSocketDisconnect, Response
 from fastapi.responses import PlainTextResponse
 from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 import re
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import ReturnDocument
@@ -461,11 +462,13 @@ async def list_auctions(
     q: Optional[str] = Query(None, description="Пълнотекстово търсене"),
     status: Optional[str] = Query(None, description="live|ended|sold"),
     sort: Optional[str] = Query("ending_soon"),
-    limit: int = 60,
+    limit: int = 24,
     offset: int = 0,
     paginated: int = 0,
-    view: Optional[str] = Query(None, description="`list` → lightweight card shape"),
+    view: Optional[str] = Query("list", description="`list` (default, lightweight) or `full` for the heavy shape"),
 ):
+    # Cap limit so a single request can never blow up the payload.
+    limit = max(1, min(limit, 50))
     viewer = await get_optional_user(request)
     viewer_is_admin = viewer and viewer.get("role") in ("admin", "moderator")
     use_list_shape = (view == "list")
@@ -4509,6 +4512,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# GZip JSON/HTML responses ≥ 500 B. Cuts auction list payloads ~80%
+# (typical 50 KB JSON → ~10 KB on the wire). The k8s ingress/Cloudflare
+# may add a second layer of compression on top — that's harmless.
+app.add_middleware(GZipMiddleware, minimum_size=500, compresslevel=5)
 
 
 # ---- WAF lite: block obvious SQLi/XSS patterns in query string ----
