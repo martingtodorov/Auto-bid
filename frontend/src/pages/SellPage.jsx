@@ -332,7 +332,7 @@ export default function SellPage() {
       }
       setForm((p) => ({
         ...p,
-        title: data.title || p.title,
+        title: (data.title || p.title || "").slice(0, 30),
         make: data.make || p.make,
         model: data.model || p.model,
         year: data.year || p.year,
@@ -423,10 +423,54 @@ export default function SellPage() {
 
           <form onSubmit={submit} className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-5">
             <Field label={t("sell.form.title")} span={2}>
-              <input required value={form.title} onChange={(e) => set("title", e.target.value)} className={inputCls} placeholder={t("sell.form.title_placeholder")} data-testid="sell-title" />
+              <input
+                required
+                value={form.title}
+                maxLength={30}
+                onChange={(e) => set("title", e.target.value.slice(0, 30))}
+                className={inputCls}
+                placeholder={t("sell.form.title_placeholder")}
+                data-testid="sell-title"
+              />
+              <div
+                className={`mt-1 text-xs text-right font-mono ${
+                  form.title.length >= 30
+                    ? "text-[hsl(var(--danger))]"
+                    : form.title.length >= 25
+                      ? "text-[hsl(var(--warn,var(--accent)))]"
+                      : "text-[hsl(var(--ink-muted))]"
+                }`}
+                data-testid="sell-title-counter"
+              >
+                {form.title.length} / 30
+              </div>
             </Field>
             <Field label={t("sell.form.make")}>
-              <select required value={form.make} onChange={(e) => set("make", e.target.value)} className={inputCls} data-testid="sell-make">
+              <select
+                required
+                value={form.make}
+                onChange={(e) => {
+                  const nextMake = e.target.value;
+                  // Auto-prefill the title with the make when:
+                  //   • the user hasn't typed anything yet, OR
+                  //   • the title currently equals a previously-auto-filled
+                  //     make (so switching brands updates cleanly without
+                  //     overwriting custom text).
+                  setForm((p) => {
+                    const prevAuto = p._titleAutoFromMake;
+                    const trimmed = (p.title || "").trim();
+                    const shouldRewrite = !trimmed || trimmed === (prevAuto || "").trim();
+                    return {
+                      ...p,
+                      make: nextMake,
+                      title: shouldRewrite ? nextMake.slice(0, 30) : p.title,
+                      _titleAutoFromMake: shouldRewrite ? nextMake : p._titleAutoFromMake,
+                    };
+                  });
+                }}
+                className={inputCls}
+                data-testid="sell-make"
+              >
                 <option value="" disabled>{t("sell.form.pick_make")}</option>
                 {makes.map((m) => <option key={m.id || m.name} value={m.name}>{m.name}</option>)}
               </select>
