@@ -325,7 +325,29 @@ async def og_auction_image(auction_id: str):
 
 @router.get("/share/auction/{auction_id}", response_class=PlainTextResponse)
 async def share_auction(auction_id: str, request: Request):
-    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    # Resolve slug-suffix → canonical UUID when the caller passes a
+    # SEO-friendly URL (e.g. nginx rewrites `/auctions/bmw-m240i-...-ff615975`
+    # → `/api/share/auction/bmw-m240i-...-ff615975`). Without this step
+    # `find_one({"id": slug})` finds nothing and we silently fall back to
+    # the static `/og-default.jpg`, which is exactly what users hit when
+    # the SPA's integrated Share button forwards a slug URL to WhatsApp.
+    import re as _re
+    _UUID = _re.compile(r"^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$", _re.IGNORECASE)
+    resolved_id = auction_id
+    a = None
+    if _UUID.match(auction_id):
+        a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    else:
+        # Split once on the final dash to isolate the 6-12 hex suffix.
+        parts = auction_id.rsplit("-", 1)
+        if len(parts) == 2 and _re.fullmatch(r"[a-f0-9]{6,12}", parts[1], _re.IGNORECASE):
+            suffix = parts[1].lower()
+            a = await db.auctions.find_one(
+                {"id": {"$regex": f"^{_re.escape(suffix)}"}},
+                {"_id": 0},
+            )
+            if a:
+                resolved_id = a["id"]
     # Build the public-facing origin from the `Host` header (what the
     # crawler actually typed), NOT `request.base_url` — the latter
     # returns the internal cluster host when we sit behind the ingress
@@ -338,7 +360,7 @@ async def share_auction(auction_id: str, request: Request):
         host = request.headers.get("host") or request.url.hostname or "autoandbid.com"
         frontend_base = f"{proto}://{host}"
     # Redirect crawlers to the SEO-friendly slug URL.
-    target = f"{frontend_base}{_auction_slug_url(a) if a else f'/auctions/{auction_id}'}"
+    target = f"{frontend_base}{_auction_slug_url(a) if a else f'/auctions/{resolved_id}'}"
 
     if not a:
         title = "autoandbid.com — Търг"
@@ -359,7 +381,7 @@ async def share_auction(auction_id: str, request: Request):
             # Stored URL may be absolute (S3) or relative (/api/uploads/...).
             image = stored_og if stored_og.startswith("http") else f"{frontend_base}{stored_og}"
         else:
-            image = f"{frontend_base}/api/og/auction/{auction_id}.png"
+            image = f"{frontend_base}/api/og/auction/{resolved_id}.png"
         json_ld = f'<script type="application/ld+json">{_json_ld_vehicle(a, target)}</script>'
 
     html = f"""<!DOCTYPE html>
