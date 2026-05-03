@@ -96,12 +96,20 @@ const IMG_CATEGORIES = [
 
 export default function SellPage() {
   const { t, i18n } = useTranslation();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState(() => emptyForm(user));
   const [err, setErr] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Auth gate — anonymous visitors must log in / register before they
+  // can fill in any sell-form details. Re-checks once `useAuth` has
+  // hydrated so we don't bounce signed-in users on a refresh.
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) navigate("/login?next=/sell", { replace: true });
+  }, [authLoading, user, navigate]);
 
   // Prefill contact email once user loads
   useEffect(() => {
@@ -188,6 +196,35 @@ export default function SellPage() {
         if (!isVatIncl || !vatRate) return g;
         return Math.round((g / (1 + vatRate / 100)) * 100) / 100;
       };
+      // Pre-flight payload size check. Browsers (and our k8s/Cloudflare
+      // ingress) will silently truncate or 502 on multi-hundred-MB JSON
+      // POSTs and the user just sees a useless 500. Catch it here and
+      // tell them which photos to shrink.
+      const totalDataUrlBytes = (arr) =>
+        (arr || []).reduce((acc, u) => {
+          if (typeof u !== "string" || !u.startsWith("data:image/")) return acc;
+          // base64 → raw byte estimate (3/4 of the body length)
+          const body = u.split(",", 2)[1] || "";
+          return acc + Math.floor((body.length * 3) / 4);
+        }, 0);
+      const totalRaw =
+        totalDataUrlBytes(ext) +
+        totalDataUrlBytes(wh) +
+        totalDataUrlBytes(bp) +
+        totalDataUrlBytes(intr);
+      const MAX_TOTAL = 100 * 1024 * 1024; // 100 MB hard cap (matches backend MAX_TOTAL_PAYLOAD_RAW + ingress limits)
+      if (totalRaw > MAX_TOTAL) {
+        const mb = Math.round(totalRaw / 1024 / 1024);
+        setErr(
+          t(
+            "sell.err_payload_too_big",
+            "Общият размер на снимките е {{mb}} MB и надвишава лимита от 100 MB. Моля изтрийте по-големите снимки или ги намалете преди качване.",
+            { mb }
+          )
+        );
+        setLoading(false);
+        return;
+      }
       const payload = {
         ...form,
         images: [...ext, ...bp, ...wh, ...intr],
@@ -214,7 +251,20 @@ export default function SellPage() {
       };
       await api.post("/auctions", payload);
       setSubmitted(true);
-    } catch (e) { setErr(formatError(e)); }
+    } catch (e) {
+      // 500 from the backend in this flow is almost always a payload-too-large
+      // condition that hit a proxy before reaching our route. Translate it.
+      if (e?.response?.status >= 500 || e?.code === "ERR_NETWORK") {
+        setErr(
+          t(
+            "sell.err_server_or_payload",
+            "Сървърът не успя да приеме обявата. Често се случва когато общият размер на снимките е над 100 MB. Опитайте с по-малко или с по-малки снимки."
+          )
+        );
+      } else {
+        setErr(formatError(e));
+      }
+    }
     finally { setLoading(false); }
   };
 

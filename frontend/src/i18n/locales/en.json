@@ -454,6 +454,8 @@
     "success_home": "Back to home",
     "err_contacts": "Please enter a contact email and phone.",
     "err_phone": "Please enter a valid phone number.",
+    "err_payload_too_big": "Photos total {{mb}} MB which exceeds the 100 MB limit. Please remove or shrink the largest images before uploading.",
+    "err_server_or_payload": "The server couldn't accept the listing. This often happens when the photos exceed 100 MB combined — please try fewer or smaller images.",
     "err_city_required": "Please enter the city using Latin script.",
     "err_city_latin": "City must be entered in Latin script (e.g. \"Sofia\" instead of \"София\").",
     "form": {
