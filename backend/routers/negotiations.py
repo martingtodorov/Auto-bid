@@ -143,16 +143,32 @@ async def _complete_negotiation(auction_id: str, negotiation_id: str, price: flo
                 await _email_won(winner["email"], winner["name"], a["title"], auction_id, float(price))
             except Exception as e:
                 logger.error("email_won (negotiation) failed: %s", e)
-    # Admin push — sale concluded after reserve-not-met negotiation
+    # Admin push — sale concluded after reserve-not-met negotiation.
+    # Uses the same VAT-aware helper as the live-sold flow so the admin
+    # sees gross price + 2 % commission when VAT applies.
     try:
         from routers.inbox import notify_admins as _notify_admins
+        from server import _admin_notif_vat_fields
+        vat = _admin_notif_vat_fields(float(price), a or {})
         await _notify_admins(
             db,
             type="auction_sold_negotiated",
-            data={"title": (a or {}).get("title", ""), "price": float(price)},
+            data={
+                "title": (a or {}).get("title", ""),
+                "price": float(price),
+                "price_gross": vat["gross"],
+                "commission": vat["commission"],
+            },
             auction_id=auction_id,
             push_template_id="admin_auction_sold_negotiated",
-            push_fmt={"title": ((a or {}).get("title") or "")[:80], "price": int(price)},
+            push_fmt={
+                "title": ((a or {}).get("title") or "")[:80],
+                # GROSS price (what the buyer actually pays). Keeps admin's
+                # eyeballed commission figure aligned with Stripe statement.
+                "price": vat["gross"],
+                "vat_suffix": vat["vat_suffix"],
+                "commission": vat["commission"],
+            },
         )
     except Exception:
         pass

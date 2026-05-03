@@ -2045,3 +2045,30 @@ implemented за missing attrs и хвърля `AttributeError: get`.
 - `create-checkout` сега връща 200 с валиден Stripe Checkout URL:
   `{"redirect":true,"id":"cs_test_...","url":"https://checkout.stripe.com/..."}`
 - Bidding flow работи end-to-end — потребителят се редиректва към Stripe.
+
+## 2026-05-03 — Admin notification VAT-aware pricing + 2% commission
+
+**Request**: Когато обява с ДДС (vat_inclusive) е купена, admin
+нотификацията да показва цената с ДДС, защото 2% комисионна се
+пресмята върху общата сума (нето + ДДС).
+
+**Implementation**:
+- `server.py`: добавен `_admin_notif_vat_fields(net_eur, auction)` helper —
+  връща dict с `{gross, net, vat_suffix, commission}` използвайки
+  съществуващите `_gross_amount` и `_buyer_fee_on_auction`.
+- `services/push_templates.py`: 4 admin sale templates (above_reserve,
+  no_reserve, buy_now, sold_negotiated) сега включват
+  `{vat_suffix}` (" с ДДС" / "") и `{commission}` в body-то.
+- Call sites обновени:
+  1. `server.py` buy-now sold (line 2281) → подава gross + commission
+  2. `server.py` auction sold above/no reserve (line 4937) → идем
+  3. `routers/negotiations.py` sold negotiated (line 154) → идем
+
+**Verified** (unit test):
+- VAT-exempt €5,000: `gross=5000, suffix="", commission=150` (clamped min)
+- VAT 20% €5,000 net → €6,000 gross, commission=150
+- VAT 20% €29,000 net → **€34,800 gross, commission=€696** ← user case
+- Rendered BG body: `„BMW M2 Club" — €34800 с ДДС. Комисионна: €696.`
+
+Сега админът веднага вижда реалната сума на плащане и точната
+комисионна при всеки продаден с VAT търг.

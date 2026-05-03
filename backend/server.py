@@ -288,6 +288,29 @@ def _buyer_fee_on_auction(amount_eur: float, auction: dict) -> float:
     return _buyer_fee(_gross_amount(amount_eur, auction))
 
 
+def _admin_notif_vat_fields(net_eur: float, auction: dict) -> dict:
+    """Build the shared `bid` / `amount` / `price`, `vat_suffix` and
+    `commission` fields for admin push notifications. The 2 % commission
+    is always computed on the GROSS price (incl. VAT) because that is
+    what the buyer is actually charged on top of the net price. For
+    VAT-exempt listings `vat_suffix` is an empty string so the
+    notification reads naturally (`"… — €5,000."`) — for listings with
+    VAT it reads `"… — €6,000 с ДДС."`. Call sites still pass their own
+    `title`/`margin` keys; this helper only fills in the VAT-aware
+    pricing triad.
+    """
+    net = round(float(net_eur or 0))
+    gross = round(_gross_amount(net_eur, auction))
+    has_vat = auction.get("vat_status") == "vat_inclusive" and gross > net
+    commission = round(_buyer_fee_on_auction(net_eur, auction))
+    return {
+        "gross": gross,
+        "net": net,
+        "vat_suffix": " с ДДС" if has_vat else "",
+        "commission": commission,
+    }
+
+
 def _auction_status(a: dict) -> str:
     from helpers import auction_status as _as
     return _as(a)
@@ -2273,13 +2296,28 @@ async def buy_now(auction_id: str, request: Request, user: dict = Depends(requir
     # Admin push (in-app + Web Push)
     try:
         from routers.inbox import notify_admins as _notify_admins
+        vat = _admin_notif_vat_fields(bn, a)
         await _notify_admins(
             db,
             type="auction_buy_now",
-            data={"title": a.get("title", ""), "amount": bn, "buyer": user.get("name", "")},
+            data={
+                "title": a.get("title", ""),
+                "amount": bn,
+                "amount_gross": vat["gross"],
+                "commission": vat["commission"],
+                "buyer": user.get("name", ""),
+            },
             auction_id=auction_id,
             push_template_id="admin_auction_buy_now",
-            push_fmt={"title": (a.get("title") or "")[:80], "amount": int(bn)},
+            push_fmt={
+                "title": (a.get("title") or "")[:80],
+                # Show the GROSS price in the notification body — that's the
+                # amount the buyer actually paid, and the basis for the 2 %
+                # commission figure we also include.
+                "amount": vat["gross"],
+                "vat_suffix": vat["vat_suffix"],
+                "commission": vat["commission"],
+            },
         )
     except Exception:
         pass
@@ -4924,9 +4962,12 @@ async def _finalize_expired_auctions_once():
         try:
             from routers.inbox import notify_admins as _notify_admins, notify_user as _notify_user
             margin = current_bid - float(reserve) if has_reserve else 0
+            vat = _admin_notif_vat_fields(current_bid, a)
             payload = {
                 "title": a.get("title", ""),
                 "bid": int(current_bid),
+                "bid_gross": vat["gross"],
+                "commission": vat["commission"],
                 "margin": int(margin) if has_reserve else 0,
                 "has_reserve": has_reserve,
             }
@@ -4935,7 +4976,15 @@ async def _finalize_expired_auctions_once():
                 type="auction_sold_above_reserve" if has_reserve else "auction_sold_no_reserve",
                 data=payload, auction_id=auction_id,
                 push_template_id="admin_auction_sold_above_reserve" if has_reserve else "admin_auction_sold_no_reserve",
-                push_fmt={"title": (a.get("title") or "")[:80], "bid": int(current_bid), "margin": int(margin) if has_reserve else 0},
+                push_fmt={
+                    "title": (a.get("title") or "")[:80],
+                    # GROSS price in the body — see `_admin_notif_vat_fields`
+                    # for why: 2 % commission is based on the gross figure.
+                    "bid": vat["gross"],
+                    "vat_suffix": vat["vat_suffix"],
+                    "commission": vat["commission"],
+                    "margin": int(margin) if has_reserve else 0,
+                },
             )
             if a.get("seller_id") and a["seller_id"] != "platform":
                 await _notify_user(db, user_id=a["seller_id"], type="auction_sold_seller",
