@@ -553,6 +553,7 @@
     "fuel": "Combustibil",
     "transmission": "Transmisie",
     "region": "Regiune",
+    "country": "Țară",
     "year_from": "An de la",
     "year_to": "Până la",
     "price_from_eur": "Preț de la €",

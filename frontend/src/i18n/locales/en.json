@@ -557,6 +557,7 @@
     "fuel": "Fuel",
     "transmission": "Gearbox",
     "region": "Region",
+    "country": "Country",
     "year_from": "Year from",
     "year_to": "To",
     "price_from_eur": "Price from €",

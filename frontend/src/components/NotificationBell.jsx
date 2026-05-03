@@ -105,7 +105,7 @@ export default function NotificationBell() {
         <Bell size={18} />
         {unread > 0 && (
           <span
-            className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[hsl(var(--accent))] text-[10px] font-bold text-black flex items-center justify-center border-2 border-[hsl(var(--bg))]"
+            className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[hsl(var(--accent))] text-[10px] font-bold text-white flex items-center justify-center border-2 border-[hsl(var(--bg))]"
             data-testid="notification-unread-count"
           >
             {unread > 99 ? "99+" : unread}

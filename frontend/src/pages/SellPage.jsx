@@ -6,9 +6,28 @@ import { api } from "../lib/apiClient";
 import { translateEnum } from "../lib/carTranslations";
 import ImageUploader from "../components/ImageUploader";
 
-const FUELS = ["Бензин", "Дизел", "Хибриден", "Електрически", "Газ/Бензин"];
+const FUELS = [
+  "Бензин",
+  "Дизел",
+  "Електрически",
+  "Хибриден",
+  "Plug-in хибрид",
+  "LPG",
+  "Водороден",
+];
 const TRANSMISSIONS = ["Автоматична", "Ръчна"];
-const BODY_TYPES = ["Седан", "Комби", "Хечбек", "Джип", "Купе", "Кабрио", "Ван", "Пикап"];
+const BODY_TYPES = [
+  "Седан",
+  "Купе",
+  "Джип",
+  "Комби",
+  "Ван",
+  "Кабрио",
+  "Пикап",
+  "Миниван",
+  "Хечбек",
+  "Лимузина",
+];
 // Countries stored (and displayed) in English — sorted alphabetically with
 // Bulgaria pinned on top as the default.
 const COUNTRIES = [

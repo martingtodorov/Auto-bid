@@ -453,6 +453,7 @@ async def list_auctions(
     fuel: Optional[str] = None,
     transmission: Optional[str] = None,
     region: Optional[str] = None,
+    country: Optional[str] = None,
     body_type: Optional[str] = None,
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
@@ -480,6 +481,7 @@ async def list_auctions(
     if fuel: query["fuel"] = fuel
     if transmission: query["transmission"] = transmission
     if region: query["region"] = region
+    if country: query["country"] = country
     if body_type: query["body_type"] = body_type
     if year_min or year_max:
         query["year"] = {}
@@ -848,6 +850,7 @@ async def facets():
     transmissions = await db.auctions.distinct("transmission")
     regions = await db.auctions.distinct("region")
     body_types = await db.auctions.distinct("body_type")
+    countries = await db.auctions.distinct("country")
     def _clean(values):
         return sorted(v for v in values if v)
     return {
@@ -856,6 +859,7 @@ async def facets():
         "transmissions": _clean(transmissions),
         "regions": _clean(regions),
         "body_types": _clean(body_types),
+        "countries": _clean(countries),
     }
 
 @api.get("/auctions/{auction_id}")

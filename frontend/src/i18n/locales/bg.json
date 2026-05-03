@@ -557,6 +557,7 @@
     "fuel": "Гориво",
     "transmission": "Скоростна кутия",
     "region": "Регион",
+    "country": "Държава",
     "year_from": "Година от",
     "year_to": "До",
     "price_from_eur": "Цена от €",

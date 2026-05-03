@@ -14,9 +14,9 @@ const STATUS_OPTIONS = [
   { v: "rejected", l: "Отказан" },
 ];
 
-const FUEL_OPTIONS = ["Бензин", "Дизел", "Хибриден", "Електрически", "Газ", "Друг"];
+const FUEL_OPTIONS = ["Бензин", "Дизел", "Електрически", "Хибриден", "Plug-in хибрид", "LPG", "Водороден", "Друг"];
 const TRANSMISSION_OPTIONS = ["Ръчна", "Автоматична"];
-const BODY_TYPE_OPTIONS = ["Седан", "Хечбек", "Комби", "Купе", "Кабрио", "Джип", "Ван", "Пикап"];
+const BODY_TYPE_OPTIONS = ["Седан", "Купе", "Джип", "Комби", "Ван", "Кабрио", "Пикап", "Миниван", "Хечбек", "Лимузина"];
 
 export default function AdminEditModal({ auctionId, onClose, onSaved }) {
   const [loading, setLoading] = useState(true);

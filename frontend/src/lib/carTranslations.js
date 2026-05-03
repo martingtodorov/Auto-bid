@@ -16,6 +16,8 @@ const FUELS = {
   "Електричество": { ro: "Electric",    en: "Electric" },
   "Електрически":  { ro: "Electric",    en: "Electric" },
   "Газ/Бензин":    { ro: "GPL/Benzină", en: "LPG/Petrol" },
+  "LPG":           { ro: "GPL",         en: "LPG" },
+  "Водороден":     { ro: "Hidrogen",    en: "Hydrogen" },
   "Метан":         { ro: "Metan",       en: "CNG" },
 };
 

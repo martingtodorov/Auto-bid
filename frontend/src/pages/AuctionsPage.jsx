@@ -19,11 +19,11 @@ export default function AuctionsPage() {
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
   const [loading, setLoading] = useState(true);
-  const [facets, setFacets] = useState({ makes: [], fuels: [], transmissions: [], body_types: [] });
+  const [facets, setFacets] = useState({ makes: [], fuels: [], transmissions: [], body_types: [], countries: [] });
   const [saveMsg, setSaveMsg] = useState("");
   const [saveErr, setSaveErr] = useState("");
   const [filters, setFilters] = useState({
-    make: "", fuel: "", transmission: "", body_type: "",
+    make: "", fuel: "", transmission: "", body_type: "", country: "",
     min_price: "", max_price: "", year_min: "", year_max: "", status: "live", sort: "ending_soon",
     q: "",
   });
@@ -38,7 +38,7 @@ export default function AuctionsPage() {
     !filters.q &&
     filters.status === "live" &&
     filters.sort === "ending_soon" &&
-    !filters.make && !filters.fuel && !filters.transmission && !filters.body_type &&
+    !filters.make && !filters.fuel && !filters.transmission && !filters.body_type && !filters.country &&
     !filters.min_price && !filters.max_price && !filters.year_min && !filters.year_max
   );
   const CACHE_KEY = "autobid:auctions_default_v1";
@@ -125,7 +125,7 @@ export default function AuctionsPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const reset = () => setFilters({ make: "", fuel: "", transmission: "", body_type: "", min_price: "", max_price: "", year_min: "", year_max: "", status: "live", sort: "ending_soon", q: "" });
+  const reset = () => setFilters({ make: "", fuel: "", transmission: "", body_type: "", country: "", min_price: "", max_price: "", year_min: "", year_max: "", status: "live", sort: "ending_soon", q: "" });
   const set = (k, v) => setFilters((p) => ({ ...p, [k]: v }));
 
   const saveSearch = async () => {
@@ -162,6 +162,13 @@ export default function AuctionsPage() {
       <Select k="body_type" label={t("auctions_page.body_type")} options={facets.body_types} kind="body_type" />
       <Select k="fuel" label={t("auctions_page.fuel")} options={facets.fuels} kind="fuel" />
       <Select k="transmission" label={t("auctions_page.transmission")} options={facets.transmissions} kind="transmission" />
+      {/* Country-level location filter — users most often want to narrow
+          by "Bulgaria vs Romania vs Germany" rather than by specific city. */}
+      <Select
+        k="country"
+        label={t("auctions_page.country", "Държава")}
+        options={facets.countries || []}
+      />
 
       <div className="grid grid-cols-2 gap-3">
         <div>
