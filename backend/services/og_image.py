@@ -326,13 +326,26 @@ def _cache_key(auction_id: str, current_bid: float, ends_at_iso: Optional[str]) 
             minute_bucket = end.strftime("%Y%m%d%H%M")
         except Exception:
             minute_bucket = ends_at_iso
-    raw = f"{auction_id}:{int(current_bid or 0)}:{minute_bucket}:v5"
+    raw = f"{auction_id}:{int(current_bid or 0)}:{minute_bucket}:v6"
     return hashlib.sha1(raw.encode()).hexdigest()[:16]
 
 
 async def build_or_cache(auction: dict) -> bytes:
     aid = str(auction.get("id") or "")
-    current_bid = float(auction.get("current_bid_eur") or auction.get("starting_bid_eur") or 0)
+    # Apply VAT if the listing is `vat_inclusive`. The rest of the app
+    # displays gross prices globally (per the 2026-02 "prices WITH VAT"
+    # policy) and the share card must match — otherwise a buyer sees a
+    # suspiciously-low bid in WhatsApp preview and a higher one after
+    # clicking through.
+    raw_bid = float(auction.get("current_bid_eur") or auction.get("starting_bid_eur") or 0)
+    if auction.get("vat_status") == "vat_inclusive":
+        try:
+            rate = float(auction.get("vat_rate_pct") or 0)
+            current_bid = round(raw_bid * (1 + rate / 100.0), 2)
+        except Exception:
+            current_bid = raw_bid
+    else:
+        current_bid = raw_bid
     ends_at = auction.get("ends_at")
     key = _cache_key(aid, current_bid, ends_at)
     cache_path = os.path.join(_CACHE_DIR, f"{key}.png")
@@ -405,9 +418,21 @@ async def build_and_persist(auction: dict) -> str:
     out_path = os.path.join(og_dir, f"{aid}.png")
     public_base = _uploads_public_base()
 
-    current_bid = float(
+    # VAT-inclusive listings must show the gross price on the share
+    # card (same rule as build_or_cache above — see "prices WITH VAT"
+    # policy). Compute gross once so the Pillow composition gets the
+    # final user-visible figure.
+    raw_bid = float(
         auction.get("current_bid_eur") or auction.get("starting_bid_eur") or 0
     )
+    if auction.get("vat_status") == "vat_inclusive":
+        try:
+            rate = float(auction.get("vat_rate_pct") or 0)
+            current_bid = round(raw_bid * (1 + rate / 100.0), 2)
+        except Exception:
+            current_bid = raw_bid
+    else:
+        current_bid = raw_bid
     cover_url = (auction.get("thumbnails") or auction.get("images") or [None])[0]
     try:
         cover_bytes = await _fetch_image(cover_url) if cover_url else None
