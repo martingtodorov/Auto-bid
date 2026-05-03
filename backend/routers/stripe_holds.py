@@ -126,6 +126,40 @@ def build_stripe_router(db, get_current_user):
     if api_key:
         stripe.api_key = api_key
 
+    # ─── Slug → canonical UUID resolver ──────────────────────────────────
+    # The `/api/auctions/{id}` middleware rewrites slug-suffix URLs on the
+    # path, but endpoints that receive the id via request body or query
+    # param (e.g. `/stripe/authorizations/create-checkout`) bypass that
+    # rewrite. Without this helper, clicking "Оторизирай и наддай" on a
+    # slug-URL (`/auctions/bmw-m2-...-5a476c7a`) would send the raw slug
+    # to Stripe-side endpoints, the Mongo lookup would miss, and the
+    # user would see "Търгът не е намерен".
+    import re as _re
+    _UUID_RE = _re.compile(
+        r"^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$",
+        _re.IGNORECASE,
+    )
+
+    async def _resolve_auction_id(raw: str) -> Optional[str]:
+        """Return the canonical UUID for either a raw UUID or a
+        `slug-<6-12-hex-chars>` string. Falls back to `None` when the
+        suffix matches nothing."""
+        if not raw:
+            return None
+        if _UUID_RE.match(raw):
+            return raw
+        parts = raw.rsplit("-", 1)
+        if len(parts) != 2:
+            return None
+        suffix = parts[1]
+        if not _re.fullmatch(r"[a-f0-9]{6,12}", suffix, _re.IGNORECASE):
+            return None
+        doc = await db.auctions.find_one(
+            {"id": {"$regex": f"^{_re.escape(suffix.lower())}"}},
+            {"_id": 0, "id": 1},
+        )
+        return doc["id"] if doc else None
+
     @router.get("/config")
     async def stripe_config():
         """Returns whether Stripe is wired (test/live indicator)."""
@@ -152,6 +186,13 @@ def build_stripe_router(db, get_current_user):
         """
         if not api_key:
             raise HTTPException(status_code=503, detail="Stripe не е конфигуриран. Свържете се с администратор.")
+        # Accept either canonical UUID or a slug-suffix string (the URL
+        # param passed down from `AuctionDetailPage`). All downstream DB
+        # lookups and Stripe metadata use the canonical id.
+        canonical_id = await _resolve_auction_id(body.auction_id)
+        if not canonical_id:
+            raise HTTPException(status_code=404, detail="Търгът не е намерен")
+        body.auction_id = canonical_id
         # ---- Validate auction ----
         a = await db.auctions.find_one({"id": body.auction_id}, {"_id": 0, "id": 1, "title": 1, "status": 1, "seller_id": 1})
         if not a:
@@ -384,10 +425,15 @@ def build_stripe_router(db, get_current_user):
     async def my_active_authorization(auction_id: str, user: dict = Depends(get_current_user)):
         """Return the user's currently active hold for this auction (if any)."""
         await _expire_stale_authorizations(db)
+        # Mirror `create_checkout`: the frontend may pass either a
+        # canonical UUID or a slug-suffix string. Always resolve first.
+        canonical_id = await _resolve_auction_id(auction_id)
+        if not canonical_id:
+            return {}
         doc = await db.bid_authorizations.find_one(
             {
                 "user_id": user["id"],
-                "auction_id": auction_id,
+                "auction_id": canonical_id,
                 "authorization_status": "active",
             },
             {"_id": 0, "id": 1, "amount_authorized_eur": 1, "bidding_limit_eur": 1,

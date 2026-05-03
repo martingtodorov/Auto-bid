@@ -1956,3 +1956,33 @@ card е `loading="eager" fetchpriority="high"`, останалите lazy.
 (martin@autoandbids.com, Bulgaria). `charges_enabled: False` защото
 акаунтът още не е активиран (business verification в Stripe dashboard).
 Test-mode плащанията работят независимо от това.
+
+## 2026-05-03 — Fix: "Търгът не е намерен" при клик на Оторизирай и наддай
+
+**Bug**: При натискане на "Оторизирай и наддай" от auction detail
+страница (отваряна през slug URL `/auctions/<title>-<suffix>`),
+потребителят получава 404 "Търгът не е намерен".
+
+**Root cause**: `AuctionDetailPage.jsx` извлича `id` от `useParams()`,
+което е SLUG-а от URL-а (напр. `bmw-m2-club-sport-spec-n55-2017-5a476c7a`),
+не canonical UUID. За всички `/api/auctions/{id}/*` endpoint-и FastAPI
+middleware-а `auction_slug_middleware` пренаписва slug → UUID на path-а,
+но endpoint-ите които получават `auction_id` в request body или query
+param (като `/api/stripe/authorizations/create-checkout` и
+`/api/stripe/authorizations/active`) bypass-ват този rewrite. Затова
+`db.auctions.find_one({"id": slug})` не намираше нищо → 404.
+
+**Fix** (`routers/stripe_holds.py`): добавен локален
+`_resolve_auction_id(raw)` helper (identical slug-suffix regex като
+`_resolve_raw_auction_id` в server.py). Извиква се в началото на
+`create_checkout` и `my_active_authorization` за да преобразува input-а
+в canonical UUID ПРЕДИ всякакви DB queries. UUID inputs минават през
+fast path (без DB hit).
+
+**Verified**:
+- `POST /api/stripe/authorizations/create-checkout` с slug → past 404,
+  спира на "seller can't bid on own auction" (очаквано за admin) ✓
+- `GET /api/stripe/authorizations/active?auction_id=<slug>` → `{}` ✓
+- `GET /api/stripe/authorizations/active?auction_id=<uuid>` → `{}` ✓
+  (same result, confirming fast-path работи и не променя поведението
+  за съществуващи UUID-ссилки)
