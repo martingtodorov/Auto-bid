@@ -3621,6 +3621,112 @@ async def public_profile(user_id: str):
     }
 
 
+# ---- Dealer public storefront ----
+# Verified dealers get a vanity URL at `autoandbid.bg/{slug}` (e.g.
+# `autoandbid.bg/MGT`). The slug is admin-assigned, case-insensitive,
+# and stored alphanumeric-only on the user document as `dealer_slug`.
+# React Router resolves it via the catch-all `/:slug` route AFTER all
+# named routes, so reserved paths like `/sell`, `/auctions` always win.
+
+
+_DEALER_SLUG_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{1,29}$")
+
+
+@api.get("/dealers/{slug}")
+async def get_dealer_by_slug(slug: str):
+    """Return dealer profile + up to 60 of their active/recently-sold
+    listings. Used by the `/:slug` frontend route to render a public
+    storefront page without requiring an account."""
+    if not slug or not _DEALER_SLUG_RE.match(slug):
+        raise HTTPException(status_code=404, detail="Дилърът не е намерен")
+    # Case-insensitive match. Stored slugs are always lowercase so we
+    # index on an exact-match field rather than a $regex scan.
+    u = await db.users.find_one(
+        {"dealer_slug": slug.lower(), "is_verified_dealer": True},
+        {"_id": 0, "password_hash": 0, "email": 0, "phone": 0},
+    )
+    if not u:
+        raise HTTPException(status_code=404, detail="Дилърът не е намерен")
+
+    active = await db.auctions.find(
+        {"seller_id": u["id"], "status": "live", "is_archived": {"$ne": True}},
+        {"_id": 0},
+    ).sort("created_at", -1).limit(60).to_list(60)
+    recently_sold = await db.auctions.find(
+        {"seller_id": u["id"], "status": "sold", "is_archived": {"$ne": True}},
+        {"_id": 0},
+    ).sort("finalized_at", -1).limit(12).to_list(12)
+
+    # Aggregate rating (same formula as /users/{id}/profile)
+    rating_vals = [int(r["rating"]) async for r in db.reviews.find(
+        {"seller_id": u["id"]}, {"_id": 0, "rating": 1}
+    )]
+    rating_avg = round(sum(rating_vals) / len(rating_vals), 2) if rating_vals else 0.0
+
+    return {
+        "dealer": {
+            "id": u["id"],
+            "name": u.get("name"),
+            "slug": u.get("dealer_slug"),
+            "avatar_url": u.get("avatar_url"),
+            "bio": u.get("bio"),
+            "city": u.get("city"),
+            "country": u.get("country"),
+            "member_since": u.get("created_at"),
+            "is_verified_dealer": True,
+        },
+        "rating": {"avg": rating_avg, "count": len(rating_vals)},
+        "active_listings": [_list_shape(_public_auction(a)) for a in active],
+        "recently_sold": [_list_shape(_public_auction(a)) for a in recently_sold],
+        "counts": {
+            "active": len(active),
+            "sold_total": await db.auctions.count_documents(
+                {"seller_id": u["id"], "status": "sold", "is_archived": {"$ne": True}}
+            ),
+        },
+    }
+
+
+class DealerSlugPayload(BaseModel):
+    slug: Optional[str] = None  # None/empty clears the slug
+
+
+@api.put("/admin/users/{user_id}/dealer-slug")
+async def admin_set_dealer_slug(
+    user_id: str, payload: DealerSlugPayload, _admin: dict = Depends(require_admin),
+):
+    """Assign or clear a dealer's vanity slug. Only verified dealers may
+    hold a slug — we enforce `is_verified_dealer=True` on the same
+    document to keep the storefront gate consistent."""
+    u = await db.users.find_one({"id": user_id}, {"_id": 0, "is_verified_dealer": 1})
+    if not u:
+        raise HTTPException(status_code=404, detail="Потребителят не е намерен")
+
+    new_slug = (payload.slug or "").strip().lower() or None
+    if new_slug is not None:
+        if not _DEALER_SLUG_RE.match(new_slug):
+            raise HTTPException(
+                status_code=400,
+                detail="Slug-ът трябва да е 2-30 символа: латиница, цифри, тире, долна черта.",
+            )
+        if not u.get("is_verified_dealer"):
+            raise HTTPException(
+                status_code=400,
+                detail="Само проверени дилъри могат да имат публичен slug. Първо маркирайте потребителя като verified dealer.",
+            )
+        # Reject if another user already holds this slug.
+        clash = await db.users.find_one(
+            {"dealer_slug": new_slug, "id": {"$ne": user_id}},
+            {"_id": 0, "id": 1},
+        )
+        if clash:
+            raise HTTPException(status_code=409, detail="Този slug вече е зает от друг дилър.")
+
+    update = {"$set": {"dealer_slug": new_slug}} if new_slug else {"$unset": {"dealer_slug": ""}}
+    await db.users.update_one({"id": user_id}, update)
+    return {"ok": True, "slug": new_slug}
+
+
 # ---- Seed ----
 SEED_AUCTIONS = [
     {
