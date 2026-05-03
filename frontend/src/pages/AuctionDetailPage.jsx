@@ -1002,7 +1002,7 @@ export default function AuctionDetailPage() {
                       data-testid="buy-now-btn"
                     >
                       <Zap size={14} />
-                      {buyingNow ? t("auction.buy_now_processing", "Обработваме…") : !user ? t("auction.login_to_buy", "Влез, за да закупиш") : t("auction.buy_now_action", "Закупи сега за {{price}}", { price: formatEUR(vatRate > 0 ? grossOf(a.buy_now_eur) : a.buy_now_eur) })}
+                      {buyingNow ? t("auction.buy_now_processing", "Обработваме…") : !user ? t("auction.login_to_buy", "Влез, за да купиш") : t("auction.buy_now_action", "Купи сега за {{price}}", { price: formatEUR(vatRate > 0 ? grossOf(a.buy_now_eur) : a.buy_now_eur) })}
                     </button>
                   </div>
                 )}
