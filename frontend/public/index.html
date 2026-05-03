@@ -2,7 +2,24 @@
 <html lang="bg">
     <head>
         <meta charset="utf-8" />
+        <!-- Viewport: locked on touch devices (prevents accidental double-tap
+             zoom and auto-zoom on input focus), but kept zoomable on desktop
+             where pinch/Ctrl+scroll is a standard accessibility affordance.
+             The inline script below swaps the attribute before React mounts
+             so there's no flash of the wrong scale. The `Lightbox` component
+             re-enables pinch zoom globally while it's open on mobile. -->
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover" />
+        <script>
+          (function () {
+            try {
+              var isDesktop = window.matchMedia && window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+              if (isDesktop) {
+                var m = document.querySelector('meta[name="viewport"]');
+                if (m) m.setAttribute("content", "width=device-width, initial-scale=1, viewport-fit=cover");
+              }
+            } catch (e) { /* no-op — touch fallback is fine */ }
+          })();
+        </script>
         <meta name="theme-color" content="#0f4f3a" />
         <title>Auto&Bid — Онлайн търгове за автомобили</title>
         <meta name="description" content="Auto&Bid — най-добрите автомобили на търг. Прозрачно наддаване, редакционен преглед, 60+ снимки и защита на купувача. Регистрирайте се и наддавайте безплатно." />

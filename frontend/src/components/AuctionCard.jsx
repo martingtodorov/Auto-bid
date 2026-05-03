@@ -6,7 +6,7 @@ import { formatEUR, formatLocal, formatKM, timeLeft, formatTimeLeft } from "../l
 import { translateEnum } from "../lib/carTranslations";
 import { auctionUrl } from "../lib/auctionUrl";
 
-export default function AuctionCard({ auction, compact = false }) {
+export default function AuctionCard({ auction, compact = false, priority = false }) {
   const { t, i18n } = useTranslation();
   const [tl, setTl] = useState(() => timeLeft(auction.ends_at));
 
@@ -36,7 +36,10 @@ export default function AuctionCard({ auction, compact = false }) {
           }
           sizes="(min-width: 1024px) 380px, (min-width: 640px) 50vw, 100vw"
           alt={auction.title}
-          loading="lazy"
+          // Top-of-page cards get eager + high priority so Lighthouse can
+          // discover the LCP candidate without waiting on the JS bundle.
+          loading={priority ? "eager" : "lazy"}
+          fetchpriority={priority ? "high" : "auto"}
           decoding="async"
         />
         <div className="absolute top-3 left-3 flex gap-2 flex-wrap max-w-[calc(100%-1.5rem)]">

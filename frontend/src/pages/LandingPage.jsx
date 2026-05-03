@@ -145,8 +145,8 @@ export default function LandingPage() {
                 <div data-testid="hero-featured-auction">
                   <div className="overline text-[hsl(var(--accent))] mb-2">{t("hero.featured_listing")}</div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-5">
-                    {heroes.map((h) => (
-                      <AuctionCard key={h.id} auction={h} />
+                    {heroes.map((h, idx) => (
+                      <AuctionCard key={h.id} auction={h} priority={idx === 0} />
                     ))}
                   </div>
                 </div>
