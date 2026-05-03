@@ -139,7 +139,11 @@ export default function LeaderboardPage() {
       ) : (
         <div className="divide-y divide-[hsl(var(--line))] border border-[hsl(var(--line))] rounded-2xl overflow-hidden">
           {rows.map((r) => {
-            const linkTo = r.dealer_slug ? `/${r.dealer_slug}` : `/profile/${r.user_id}`;
+            const linkTo = r.dealer_slug
+              ? `/${r.dealer_slug}`
+              : r.profile_slug
+                ? `/profile/${r.profile_slug}`
+                : `/profile/${r.user_id}`;
             return (
               <Link
                 key={r.user_id}

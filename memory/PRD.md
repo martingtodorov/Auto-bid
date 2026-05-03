@@ -1797,3 +1797,44 @@ backend `/api/leaderboard` endpoint и `LeaderboardPage.jsx` бяха
 **Verified**: screenshot на `/leaderboard` (данни + табове рендерират),
 screenshot на hover dropdown в Nav, `GET /api/leaderboard` връща 200 с
 очаквана структура.
+
+## 2026-05-03 — Slug-based profile URLs (`/profile/:slug`)
+
+**Request**: Потребителят поиска профилите да се отварят на
+`autoandbid.com/profile/<username>` вместо на UUID.
+
+**Backend changes** (`server.py`, `routers/auth.py`):
+- Нов `profile_slug` field на `users` колекцията (unique sparse index).
+- Slug генератор: `_slugify_profile_name()` + `_ensure_unique_profile_slug()`
+  — използва static BG→Latin transliteration (`_static_transliterate_bg`
+  от `translate.py`), сваля до lowercase, подменя всичко извън `[a-z0-9]`
+  с `-`, капира на 24 chars. Резервирани топ-level пътища
+  (`/admin`, `/auctions`, `/sell`, …) не се разрешават за slug.
+- Startup backfill (`_backfill_profile_slugs`): запълва slug за всеки
+  съществуващ user без такъв. Idempotent — safe за многократен рестарт.
+- Register route (`routers/auth.py`): нов user автоматично получава slug.
+- `GET /api/users/{identifier}/profile` вече приема ID **или** slug
+  (case-insensitive). Отговорът включва `profile_slug` + `is_verified_dealer`.
+- `GET /api/leaderboard`: всеки ред сега съдържа `profile_slug`.
+- `GET /api/auctions/{id}`: включва `seller_slug` при наличие.
+- `GET /api/auctions/{id}/comments` и `/bids`: hydrate-ват `user_slug`
+  чрез единична batch Mongo заявка (без N+1).
+- Live WebSocket broadcast (`add_comment`, `place_bid`): новите обекти
+  също носят `user_slug` / `profile_slug`.
+
+**Frontend changes**:
+- `LeaderboardPage`: `linkTo = dealer_slug ? /{dealer_slug} :
+  profile_slug ? /profile/{profile_slug} : /profile/{user_id}`
+- `AuctionDetailPage`: bidder, commenter и seller линковете ползват
+  `*_slug || *_id` (graceful fallback, нищо не чупи за стари данни).
+- `ProfilePage`: когато URL param е slug, SellerReviews и rating
+  endpoint-ите ползват resolved `data.user.id` (избягва 404 на
+  `/users/<slug>/reviews`).
+
+**Verified**:
+- `curl /api/users/gosho/profile` → 200, връща `Гошо`'s data.
+- `curl /api/users/Gosho/profile` → 200 (case-insensitive).
+- `curl /api/users/nonexistent-slug/profile` → 404.
+- Screenshot `/profile/gosho` рендерира профила правилно.
+- Leaderboard row #1 href = `/profile/gosho` (без UUID).
+- Backfill успешно: `Гошо` → `gosho`.

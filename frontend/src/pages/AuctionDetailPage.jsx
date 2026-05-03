@@ -776,7 +776,7 @@ export default function AuctionDetailPage() {
                     <div key={b.id} className="flex items-center justify-between p-4 border-b border-[hsl(var(--line))] last:border-b-0" data-testid={`bid-row-${b.id}`}>
                       <div>
                         {b.user_id ? (
-                          <Link to={`/profile/${b.user_id}`} className="text-sm font-semibold hover:text-[hsl(var(--accent))]" data-testid={`bidder-link-${b.id}`}>{b.user_name}</Link>
+                          <Link to={`/profile/${b.user_slug || b.user_id}`} className="text-sm font-semibold hover:text-[hsl(var(--accent))]" data-testid={`bidder-link-${b.id}`}>{b.user_name}</Link>
                         ) : (
                           <div className="text-sm font-semibold">{b.user_name}</div>
                         )}
@@ -1028,7 +1028,7 @@ export default function AuctionDetailPage() {
                       testId="seller-avatar"
                     />
                     <h2 className="font-serif text-xl">
-                      <Link to={`/profile/${a.seller_id}`} className="block hover:text-[hsl(var(--accent))]" data-testid="seller-link">{a.seller_name}</Link>
+                      <Link to={`/profile/${a.seller_slug || a.seller_id}`} className="block hover:text-[hsl(var(--accent))]" data-testid="seller-link">{a.seller_name}</Link>
                     </h2>
                   </div>
                 ) : (
@@ -1297,7 +1297,7 @@ function CommentItem({ c, t, i18nLang, isAdmin, onDelete }) {
             <Avatar url={c.user_avatar_url} name={c.user_name} size={28} testId={`comment-avatar-${c.id}`} />
           )}
           {c.user_id && !c.deleted ? (
-            <Link to={`/profile/${c.user_id}`} className="text-sm font-semibold hover:text-[hsl(var(--accent))]">{c.user_name}</Link>
+            <Link to={`/profile/${c.user_slug || c.user_id}`} className="text-sm font-semibold hover:text-[hsl(var(--accent))]">{c.user_name}</Link>
           ) : (
             <div className="text-sm font-semibold">{c.deleted ? "—" : c.user_name}</div>
           )}

@@ -24,12 +24,16 @@ export default function ProfilePage() {
       .catch((e) => setErr(e?.response?.data?.detail || "Грешка"));
   }, [userId]);
 
-  // Fetch review count separately so the tab label stays accurate if the user posts one inline
+  // Fetch review count separately so the tab label stays accurate if the user
+  // posts one inline. The URL param might be a slug, so wait for the profile
+  // response to resolve the real user id before querying review endpoints.
+  const resolvedUserId = data?.user?.id;
   useEffect(() => {
-    api.get(`/users/${userId}/rating`)
+    if (!resolvedUserId) return;
+    api.get(`/users/${resolvedUserId}/rating`)
       .then((r) => setReviewCount(r.data?.count ?? 0))
       .catch(() => setReviewCount(0));
-  }, [userId]);
+  }, [resolvedUserId]);
 
   // SEO + JSON-LD (Person + AggregateRating when reviews exist)
   useEffect(() => {
@@ -150,7 +154,7 @@ export default function ProfilePage() {
 
           <div className="mt-10">
             {tab === "reviews" ? (
-              <SellerReviews sellerId={userId} rating={rating} />
+              <SellerReviews sellerId={user.id} rating={rating} />
             ) : gridList && gridList.length === 0 ? (
               <div className="py-24 text-center rounded-card border border-[hsl(var(--line))]" data-testid="profile-empty">
                 <p className="font-serif text-2xl">

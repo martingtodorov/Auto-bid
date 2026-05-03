@@ -344,6 +344,130 @@ async def _enrich_dealer_status(items: list) -> list:
     return items
 
 
+# ─── Profile slug helpers ────────────────────────────────────────────────
+# Every user gets a URL-friendly `profile_slug` derived from their display
+# name (transliterated + sluggified). The slug is unique, admin-unassigned
+# and auto-generated at registration time; a one-time backfill at startup
+# fills in any pre-existing accounts. `/api/users/{identifier}/profile`
+# accepts either the raw UUID or the slug so old bookmarks keep working.
+
+_PROFILE_SLUG_RE = re.compile(r"[^a-z0-9]+")
+# Reserved top-level URL segments that the frontend router maps to named
+# pages (NOT dealer pages). A slug colliding with any of these would shadow
+# the real route once the user is linked from a leaderboard, so we refuse
+# them during generation and push the user into `-1` suffix territory.
+_RESERVED_SLUGS = {
+    "admin", "api", "auctions", "contacts", "dashboard", "dealer", "dealers",
+    "faq", "fees", "forgot-password", "how-it-works", "inbox", "leaderboard",
+    "login", "logout", "me", "my-listings", "profile", "register",
+    "reviews", "sales", "sell", "settings", "static", "terms", "verify-email",
+    "watchlist",
+}
+
+
+def _slugify_profile_name(name: str) -> str:
+    """Deterministic ASCII slug generator used for both registration and
+    backfill. Uses the static Bulgarian→Latin transliteration fallback so
+    we don't depend on the LLM at registration time. Returns an empty
+    string when the input produces nothing printable — the caller then
+    falls back to `user-{short-id}`.
+    """
+    from translate import _static_transliterate_bg
+    s = _static_transliterate_bg(name or "").lower()
+    s = _PROFILE_SLUG_RE.sub("-", s).strip("-")
+    # Cap at 24 chars so URLs stay short; trailing hyphen trimmed again.
+    return s[:24].strip("-")
+
+
+async def _ensure_unique_profile_slug(base: str, exclude_id: Optional[str] = None) -> str:
+    """Return `base` if free, else append `-2`, `-3`, … until unique.
+    Reserved top-level names are treated as taken.
+    """
+    if not base or base in _RESERVED_SLUGS:
+        base = f"user-{uuid.uuid4().hex[:6]}"
+    slug = base
+    n = 2
+    while True:
+        query = {"profile_slug": slug}
+        if exclude_id:
+            query["id"] = {"$ne": exclude_id}
+        clash = await db.users.find_one(query, {"_id": 1})
+        if not clash:
+            return slug
+        slug = f"{base}-{n}"
+        n += 1
+
+
+async def _resolve_user_by_identifier(identifier: str, projection: Optional[dict] = None) -> Optional[dict]:
+    """Look up a user by id *or* profile_slug. Slugs are stored lowercase,
+    but URLs are case-insensitive for a nicer UX (e.g. `/profile/Gosho`
+    resolves to `gosho`).
+    """
+    if not identifier:
+        return None
+    proj = projection if projection is not None else {"_id": 0, "password_hash": 0}
+    # First: exact id match (UUIDs contain `-` so they never collide with
+    # a pure-ASCII slug).
+    u = await db.users.find_one({"id": identifier}, proj)
+    if u:
+        return u
+    return await db.users.find_one({"profile_slug": identifier.lower()}, proj)
+
+
+async def _hydrate_user_slug(rows: list[dict]) -> None:
+    """Mutate `rows` in place to add `user_slug` (the author's profile_slug)
+    via a single batched Mongo lookup on `user_id`. Used for comments and
+    bids so the UI can link to `/profile/<slug>` without per-row fetches.
+    Rows without a `user_id` or without a matching user are skipped —
+    the frontend falls back to the UUID in that case.
+    """
+    if not rows:
+        return
+    uids = {r.get("user_id") for r in rows if r.get("user_id")}
+    if not uids:
+        return
+    slugs: dict[str, Optional[str]] = {}
+    async for u in db.users.find(
+        {"id": {"$in": list(uids)}},
+        {"_id": 0, "id": 1, "profile_slug": 1},
+    ):
+        slugs[u["id"]] = u.get("profile_slug")
+    for r in rows:
+        uid = r.get("user_id")
+        if uid and slugs.get(uid):
+            r["user_slug"] = slugs[uid]
+
+
+async def _backfill_profile_slugs() -> None:
+    """One-time (idempotent) startup task — every user without a
+    `profile_slug` gets one generated from their name. Safe to run on
+    every boot: users who already have a slug are skipped. Also creates
+    the unique sparse index so new accounts can't collide at write time.
+    """
+    try:
+        await db.users.create_index(
+            "profile_slug",
+            unique=True,
+            sparse=True,
+            name="profile_slug_unique",
+        )
+    except Exception as e:
+        logger.warning("profile_slug index creation failed: %s", e)
+    cursor = db.users.find(
+        {"profile_slug": {"$in": [None, ""]}},
+        {"_id": 0, "id": 1, "name": 1},
+    )
+    async for u in cursor:
+        base = _slugify_profile_name(u.get("name") or "") or f"user-{u['id'][:6]}"
+        slug = await _ensure_unique_profile_slug(base, exclude_id=u["id"])
+        try:
+            await db.users.update_one({"id": u["id"]}, {"$set": {"profile_slug": slug}})
+        except Exception as e:
+            logger.warning("profile_slug backfill failed for %s: %s", u["id"], e)
+
+
+
+
 def _public_auction(a: dict, viewer: Optional[dict] = None, *, unmask_vin: bool = False) -> dict:
     a = {k: v for k, v in a.items() if k != "_id"}
     a["status"] = _auction_status(a)
@@ -892,8 +1016,17 @@ async def get_auction(auction_id: str, request: Request):
     if seller_id == "platform":
         public["seller_is_verified_dealer"] = True
     else:
-        seller = await db.users.find_one({"id": seller_id}, {"_id": 0, "is_verified_dealer": 1}) if seller_id else None
+        seller = (
+            await db.users.find_one(
+                {"id": seller_id},
+                {"_id": 0, "is_verified_dealer": 1, "profile_slug": 1},
+            )
+            if seller_id
+            else None
+        )
         public["seller_is_verified_dealer"] = bool(seller and seller.get("is_verified_dealer"))
+        if seller and seller.get("profile_slug"):
+            public["seller_slug"] = seller["profile_slug"]
     # Reveal full VIN to: seller, admin (always), bidders on live auctions,
     # or any user with a high-value pre-authorization (≥ €10,000) anywhere
     # on the platform. On ended/sold/cancelled auctions the VIN stays masked
@@ -1716,7 +1849,9 @@ async def list_bids(auction_id: str, request: Request):
         if not (viewer and viewer.get("role") in ("admin", "moderator")):
             raise HTTPException(status_code=404, detail="Търгът не е намерен")
     from services import bidding as bidding_svc
-    return await bidding_svc.list_bids(auction_id, limit=50)
+    bids = await bidding_svc.list_bids(auction_id, limit=50)
+    await _hydrate_user_slug(bids)
+    return bids
 
 
 # ---- Bidding Credit (pre-authorization for multiple bids) ----
@@ -1964,7 +2099,10 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
         "high_bidder_name": user["name"],
         "bid_count": result["bid_count"],
         "ends_at": new_ends_at_iso,
-        "bid": {k: public_bid.get(k) for k in ("id", "user_id", "user_name", "amount_eur", "created_at")},
+        "bid": {
+            **{k: public_bid.get(k) for k in ("id", "user_id", "user_name", "amount_eur", "created_at")},
+            "user_slug": user.get("profile_slug"),
+        },
     })
 
     # Refresh the social share card PNG so Facebook/WhatsApp/Telegram
@@ -2233,7 +2371,11 @@ async def list_comments(auction_id: str, request: Request):
     items = await db.comments.find({"auction_id": auction_id}, {"_id": 0}).sort("created_at", -1).limit(200).to_list(200)
     viewer = await get_optional_user(request)
     viewer_id = viewer["id"] if viewer else None
-    return [_public_comment(c, a, viewer_id) for c in items]
+    out = [_public_comment(c, a, viewer_id) for c in items]
+    # Hydrate commenter profile_slug so links can be `/profile/<slug>`
+    # without an extra round-trip per comment.
+    await _hydrate_user_slug(out)
+    return out
 
 @api.post("/auctions/{auction_id}/comments")
 async def add_comment(auction_id: str, payload: CommentCreate, user: dict = Depends(require_verified_email)):
@@ -2245,6 +2387,7 @@ async def add_comment(auction_id: str, payload: CommentCreate, user: dict = Depe
         "auction_id": auction_id,
         "user_id": user["id"],
         "user_name": user["name"],
+        "user_slug": user.get("profile_slug"),
         "user_avatar_url": user.get("avatar_url"),
         "text": payload.text.strip(),
         "deleted": False,
@@ -3274,7 +3417,8 @@ async def leaderboard(
     async for u in db.users.find(
         {"id": {"$in": uids}},
         {"_id": 0, "id": 1, "name": 1, "avatar_url": 1,
-         "is_verified_dealer": 1, "dealer_slug": 1, "role": 1},
+         "is_verified_dealer": 1, "dealer_slug": 1, "role": 1,
+         "profile_slug": 1},
     ):
         users[u["id"]] = u
     out = []
@@ -3287,6 +3431,7 @@ async def leaderboard(
             "avatar_url": u.get("avatar_url"),
             "is_verified_dealer": bool(u.get("is_verified_dealer")),
             "dealer_slug": u.get("dealer_slug"),
+            "profile_slug": u.get("profile_slug"),
             "role": u.get("role"),
             "score": r["score"],
             "metric": r["metric"],
@@ -3946,9 +4091,15 @@ async def respond_counter_offer(auction_id: str, payload: NegotiationRespond, us
 # ---- Public profile ----
 @api.get("/users/{user_id}/profile")
 async def public_profile(user_id: str):
-    u = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0, "email": 0})
+    u = await _resolve_user_by_identifier(
+        user_id,
+        {"_id": 0, "password_hash": 0, "email": 0},
+    )
     if not u:
         raise HTTPException(status_code=404, detail="Потребителят не е намерен")
+    # After slug resolution the actual Mongo `id` may differ from the
+    # path segment — use the resolved one for every follow-up query.
+    user_id = u["id"]
     sold_listings = await db.auctions.find(
         {"seller_id": user_id, "status": "sold", "is_archived": {"$ne": True}},
         {"_id": 0},
@@ -3974,7 +4125,15 @@ async def public_profile(user_id: str):
     rating_avg = round(sum(rating_vals) / rating_count, 2) if rating_count else 0.0
 
     return {
-        "user": {"id": u["id"], "name": u["name"], "role": u.get("role", "user"), "member_since": u["created_at"]},
+        "user": {
+            "id": u["id"],
+            "name": u["name"],
+            "role": u.get("role", "user"),
+            "member_since": u["created_at"],
+            "profile_slug": u.get("profile_slug"),
+            "is_verified_dealer": bool(u.get("is_verified_dealer")),
+            "dealer_slug": u.get("dealer_slug"),
+        },
         "stats": {
             "sales_count": len(listings_sold),
             "sales_total_eur": total_sales,
@@ -4498,6 +4657,7 @@ async def on_startup():
     await seed_admin()
     await seed()
     await _seed_makes()
+    await _backfill_profile_slugs()
     # Start background scheduler for auction finalization
     asyncio.create_task(_auction_finalizer_loop())
     # Start background scheduler for "ending soon" notifications (≈1h before end)

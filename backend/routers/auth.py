@@ -317,10 +317,18 @@ def register_routes():
                 initial_lang = code
                 break
         now_iso = datetime.now(timezone.utc).isoformat()
+        # Auto-generate a URL-friendly profile slug from the display name.
+        # The helper lives in server.py (single source of truth — same
+        # slugifier is used for the one-time backfill at boot). We import
+        # lazily here to avoid a circular import at module load.
+        from server import _slugify_profile_name, _ensure_unique_profile_slug
+        slug_base = _slugify_profile_name(payload.name.strip()) or f"user-{user_id[:6]}"
+        profile_slug = await _ensure_unique_profile_slug(slug_base)
         doc = {
             "id": user_id,
             "email": payload.email.lower(),
             "name": payload.name.strip(),
+            "profile_slug": profile_slug,
             "password_hash": _hash_password(payload.password),
             "role": "user",
             "lang": initial_lang,
