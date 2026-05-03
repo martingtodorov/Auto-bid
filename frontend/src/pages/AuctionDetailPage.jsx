@@ -1001,7 +1001,7 @@ export default function AuctionDetailPage() {
                     <button
                       onClick={onBuyNow}
                       disabled={!user || buyingNow}
-                      className="mt-3 w-full btn btn-primary !bg-[hsl(var(--accent))] !text-black hover:!bg-[hsl(var(--accent))]/85 disabled:opacity-50 flex items-center justify-center gap-2"
+                      className="mt-3 w-full btn btn-primary !bg-[hsl(var(--accent))] !text-white !border-transparent hover:!bg-[hsl(var(--accent))]/85 disabled:opacity-50 flex items-center justify-center gap-2"
                       data-testid="buy-now-btn"
                     >
                       <Zap size={14} />
