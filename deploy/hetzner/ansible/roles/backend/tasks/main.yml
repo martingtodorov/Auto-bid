@@ -208,7 +208,7 @@
     - "{{ log_dir }}"
     - "{{ backup_dir }}"
     - "/var/lib/autobids"
-    - "/app/uploads"   # disk storage backend writes content-addressed images here; nginx aliases /api/uploads/ to this path
+    - "{{ upload_dir }}"   # disk storage backend writes content-addressed images here; nginx aliases /api/uploads/ to this path. Default: /opt/autobids/uploads
   become: yes
 
 - name: Enable & start backend

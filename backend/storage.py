@@ -24,6 +24,12 @@ import os
 import re
 from typing import Optional
 
+# Re-export `ImageProcessingError` from the sibling image service so the
+# disk backend can raise the same error type as the image optimizer.
+# Keeping a single exception class means route handlers can map both
+# "bad input" and "filesystem not writable" to 400s with one `except`.
+from services.image_processing import ImageProcessingError
+
 logger = logging.getLogger("storage")
 
 _DATA_URL_RE = re.compile(r"^data:image/(?P<ext>[a-z0-9+.-]+);base64,(?P<body>.+)$", re.IGNORECASE)
@@ -66,13 +72,27 @@ class DiskStorage:
     name = "disk"
 
     def __init__(self) -> None:
-        self.root = os.path.abspath(os.environ.get("UPLOAD_DIR", "/app/uploads"))
+        # Persistent storage root. Production VPS has `/app` mounted
+        # read-only, so we default to `/opt/autobids/uploads` which is
+        # owned by the `www-data` service user (see Ansible backend role).
+        # Preview/containerised environments can override this via the
+        # `UPLOAD_DIR` env var to keep files co-located with the code.
+        self.root = os.path.abspath(os.environ.get("UPLOAD_DIR", "/opt/autobids/uploads"))
         # Default `/api/uploads` is the only path the k8s preview ingress
         # routes to the backend. On a Hetzner box nginx can short-circuit
         # the same path via `alias`, so the public URL is identical
         # everywhere.
         self.public_base = os.environ.get("PUBLIC_UPLOAD_BASE", "/api/uploads").rstrip("/")
-        os.makedirs(self.root, exist_ok=True)
+        # Soft-create the directory. If the filesystem is read-only (e.g.
+        # /app on the production VPS) we don't crash the process here —
+        # `store()` will raise a clear ImageProcessingError per upload so
+        # unrelated endpoints keep working and only the Sell flow surfaces
+        # the misconfiguration.
+        try:
+            os.makedirs(self.root, exist_ok=True)
+        except OSError:
+            # Logged at mount time in server.py; don't spam on every init.
+            pass
 
     def store(self, data_url: str) -> str:
         if not data_url:
@@ -91,11 +111,21 @@ class DiskStorage:
         rel = f"auctions/{sub}/{digest}.{ext}"
         abs_path = os.path.join(self.root, rel)
         if not os.path.exists(abs_path):
-            os.makedirs(os.path.dirname(abs_path), exist_ok=True)
-            tmp = abs_path + ".tmp"
-            with open(tmp, "wb") as f:
-                f.write(body)
-            os.replace(tmp, abs_path)  # atomic
+            try:
+                os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+                tmp = abs_path + ".tmp"
+                with open(tmp, "wb") as f:
+                    f.write(body)
+                os.replace(tmp, abs_path)  # atomic
+            except OSError as e:
+                # Most common: `/app` is read-only on prod, `UPLOAD_DIR`
+                # not set in systemd env, or /opt/autobids/uploads not
+                # yet created by Ansible. Surface a clear 400 instead of
+                # a noisy 500 traceback.
+                raise ImageProcessingError(
+                    f"Image storage is not writable at {self.root!r} "
+                    f"({e.strerror}). Проверете UPLOAD_DIR и правата на директорията."
+                ) from e
         return f"{self.public_base}/{rel}"
 
 

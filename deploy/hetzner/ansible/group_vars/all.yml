@@ -10,6 +10,10 @@ venv_dir:           "{{ app_dir }}/venv"
 secrets_dir:        "/etc/autobids"
 log_dir:            "/var/log/autobids"
 backup_dir:         "/var/backups/autobids"
+# Persistent disk storage for user-uploaded images (auctions, avatars).
+# Served by nginx via `alias` at `/api/uploads/` and by the backend's
+# `DiskStorage` via `UPLOAD_DIR`. Must match on both sides.
+upload_dir:         "/opt/autobids/uploads"
 
 # ─── Versions ────────────────────────────────────────────────────────────────
 # We intentionally use the OS default Python now (`python3`) rather than

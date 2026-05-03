@@ -1034,8 +1034,19 @@ async def create_auction(request: Request, payload: AuctionCreate, user: dict = 
     # Persist optimized JPEGs (and thumbnails) to the configured storage
     # backend. Runs off the event loop because S3 uploads can be slow.
     from storage import store_images
-    web_urls = await asyncio.to_thread(store_images, web_urls)
-    thumb_urls = await asyncio.to_thread(store_images, thumb_urls)
+    try:
+        web_urls = await asyncio.to_thread(store_images, web_urls)
+        thumb_urls = await asyncio.to_thread(store_images, thumb_urls)
+    except imgproc.ImageProcessingError as e:
+        # Disk storage couldn't write — most common cause is the upload
+        # directory missing or /app being read-only on production. Surface
+        # as 500 with the real error text so ops can fix it, rather than
+        # a generic tracebacked 500 from OSError.
+        logging.getLogger("storage").error("Image storage failed: %s", e)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Съхраняването на снимките не успя: {e}. Обърнете се към администратора.",
+        )
     doc["images"] = web_urls
     doc["thumbnails"] = thumb_urls
 
@@ -4529,12 +4540,25 @@ app.add_middleware(
 # that work behind the k8s preview ingress (which only routes `/api/*` to
 # the backend) AND on a Hetzner deploy where nginx can short-circuit the
 # same path. Both backend and reverse proxy share a single canonical
-# directory configured via UPLOAD_DIR (default `/app/uploads`).
+# directory configured via UPLOAD_DIR (default `/opt/autobids/uploads`;
+# preview overrides via .env to keep files next to the code).
 try:
     from fastapi.staticfiles import StaticFiles
-    _UPLOAD_DIR = os.path.abspath(os.environ.get("UPLOAD_DIR", "/app/uploads"))
-    os.makedirs(_UPLOAD_DIR, exist_ok=True)
-    app.mount("/api/uploads", StaticFiles(directory=_UPLOAD_DIR), name="uploads")
+    _UPLOAD_DIR = os.path.abspath(os.environ.get("UPLOAD_DIR", "/opt/autobids/uploads"))
+    # Fail soft: if the target isn't creatable (e.g. read-only /app),
+    # fall back to a temp dir so the app still boots. Disk storage will
+    # attempt the same path again per-request and surface a 500 only on
+    # the offending upload, never on unrelated routes.
+    try:
+        os.makedirs(_UPLOAD_DIR, exist_ok=True)
+    except OSError as _e:
+        logging.getLogger(__name__).warning(
+            "UPLOAD_DIR %s is not writable (%s). Uploads will fail — "
+            "check Ansible backend role + /opt/autobids/uploads permissions.",
+            _UPLOAD_DIR, _e,
+        )
+    if os.path.isdir(_UPLOAD_DIR):
+        app.mount("/api/uploads", StaticFiles(directory=_UPLOAD_DIR), name="uploads")
 except Exception as _e:  # pragma: no cover — never block boot on this
     logging.getLogger(__name__).warning("Could not mount /api/uploads: %s", _e)
 
