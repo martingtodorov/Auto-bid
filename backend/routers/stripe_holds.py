@@ -67,6 +67,51 @@ def _hold_amount_eur(bidding_limit_eur: float) -> float:
     return float(round(min(HOLD_MAX_EUR, max(HOLD_MIN_EUR, raw)), 2))
 
 
+# ─── Stripe redirect origin resolver ─────────────────────────────────────
+# autoandbid.bg and autoandbid.com intentionally do not share cookies
+# (separate public suffixes), so returning a user from Stripe to the
+# wrong host silently logs them out and loses the session/JWT. We must
+# pick the *same* host the request came from. Priority:
+#   1. Explicit `origin` from the request body (frontend passes
+#      `window.location.origin`). Trustworthy — same-origin request.
+#   2. `Origin` header — set by browsers on CORS/preflighted requests.
+#   3. Scheme+host parsed from `Referer` — set on normal navigations.
+#   4. `FRONTEND_URL` env var — last-resort static fallback.
+#   5. `request.base_url` — catches internal health-check / bot traffic.
+# The resolver is shared between holds, buy-now, save-card and promote
+# checkout code paths; DO NOT inline this logic per-route (history has
+# shown that copies drift and the `.com` fallback sneaks back in).
+def resolve_stripe_redirect_origin(body_origin: Optional[str], request) -> str:
+    from urllib.parse import urlparse
+    candidates = []
+    if body_origin:
+        candidates.append(body_origin)
+    try:
+        candidates.append(request.headers.get("origin"))
+        ref = request.headers.get("referer")
+        if ref:
+            parsed = urlparse(ref)
+            if parsed.scheme and parsed.netloc:
+                candidates.append(f"{parsed.scheme}://{parsed.netloc}")
+    except Exception:
+        pass
+    candidates.append(os.environ.get("FRONTEND_URL", ""))
+    try:
+        candidates.append(str(request.base_url))
+    except Exception:
+        pass
+    for c in candidates:
+        if not c:
+            continue
+        c = str(c).strip().rstrip("/")
+        if c.startswith("http://") or c.startswith("https://"):
+            return c
+    return ""
+
+
+
+
+
 class CreateAuthBody(BaseModel):
     auction_id: str
     bidding_limit_eur: float
@@ -261,7 +306,7 @@ def build_stripe_router(db, get_current_user):
                 }
 
         # ---- Build URLs ----
-        origin = (body.origin or "").rstrip("/") or str(request.base_url).rstrip("/")
+        origin = resolve_stripe_redirect_origin(body.origin, request)
         success_override = os.environ.get("STRIPE_SUCCESS_URL", "").strip()
         cancel_override = os.environ.get("STRIPE_CANCEL_URL", "").strip()
         success_url = success_override or f"{origin}/auctions/{body.auction_id}?stripe_session_id={{CHECKOUT_SESSION_ID}}"
@@ -339,7 +384,7 @@ def build_stripe_router(db, get_current_user):
         if not api_key:
             raise HTTPException(status_code=503, detail="Stripe не е конфигуриран.")
         customer_id = await _get_or_create_stripe_customer(db, user)
-        origin = (body.origin or "").rstrip("/") or str(request.base_url).rstrip("/")
+        origin = resolve_stripe_redirect_origin(body.origin, request)
         success_url = f"{origin}/settings?stripe_setup_session_id={{CHECKOUT_SESSION_ID}}"
         cancel_url = f"{origin}/settings?stripe_setup_cancelled=1"
         try:

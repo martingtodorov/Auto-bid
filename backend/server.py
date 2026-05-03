@@ -2297,11 +2297,12 @@ async def promote_checkout(auction_id: str, request: Request, body: dict = None,
     stripe.api_key = api_key
 
     # Preserve the seller's current domain (.bg/.com) on the return URL.
-    origin = ""
-    if isinstance(body, dict):
-        origin = str(body.get("origin") or "").rstrip("/")
-    if not origin:
-        origin = str(request.base_url).rstrip("/")
+    # Shared resolver checks body.origin → Origin header → Referer → env.
+    from routers.stripe_holds import resolve_stripe_redirect_origin
+    origin = resolve_stripe_redirect_origin(
+        (body or {}).get("origin") if isinstance(body, dict) else None,
+        request,
+    )
 
     success_url = f"{origin}/my-listings?promote_session={{CHECKOUT_SESSION_ID}}"
     cancel_url = f"{origin}/my-listings?promote_cancelled=1"
@@ -2441,12 +2442,14 @@ async def buy_now(auction_id: str, request: Request, body: dict = None, user: di
     # Preserve the original domain the user came from (.bg vs .com) — the
     # frontend passes `window.location.origin` in the request body, and
     # the Stripe success_url echoes it back so we return to the right
-    # place. Fall back to request base_url if the client didn't send one.
-    origin = ""
-    if isinstance(body, dict):
-        origin = str(body.get("origin") or "").rstrip("/")
-    if not origin:
-        origin = str(request.base_url).rstrip("/")
+    # place. Falls through Origin → Referer → FRONTEND_URL → base_url so
+    # .bg users return to .bg (cookies aren't shared across public-suffix
+    # siblings, so the wrong host would log them out after checkout).
+    from routers.stripe_holds import resolve_stripe_redirect_origin
+    origin = resolve_stripe_redirect_origin(
+        (body or {}).get("origin") if isinstance(body, dict) else None,
+        request,
+    )
 
     success_url = f"{origin}/auctions/{auction_id}?buy_now_session={{CHECKOUT_SESSION_ID}}"
     cancel_url = f"{origin}/auctions/{auction_id}?buy_now_cancelled=1"
