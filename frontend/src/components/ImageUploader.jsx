@@ -64,38 +64,58 @@ export default function ImageUploader({
   // originals over the wire. The server still re-optimizes everything for
   // a single source of truth, but trimming here cuts upload time on slow
   // connections (notably mobile uploads).
-  const compress = (file) =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement("canvas");
-          const maxDim = 1920;
-          let w = img.width, h = img.height;
-          if (w > maxDim || h > maxDim) {
-            if (w > h) { h = (h / w) * maxDim; w = maxDim; }
-            else { w = (w / h) * maxDim; h = maxDim; }
-          }
-          canvas.width = w; canvas.height = h;
-          const ctx = canvas.getContext("2d");
-          ctx.drawImage(img, 0, 0, w, h);
-          resolve(canvas.toDataURL("image/jpeg", 0.85));
-        };
-        img.onerror = reject;
-        img.src = e.target.result;
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
+  //
+  // We aim for ≤ 600 KB per photo at JPEG q=0.82, max 1600 px on the
+  // long edge — this is plenty for a 4:3 gallery card up to 2× retina,
+  // and lets users submit 24 photos in well under 20 MB total.
+  // If the encoded result is still > 1.5 MB (e.g. very high-detail
+  // shot), we recompress at q=0.7 and 1280 px as a safety net.
+  const TARGET_BYTES = 1.5 * 1024 * 1024; // 1.5 MB upper bound per photo
 
-  // Approximate raw bytes inside a `data:image/...;base64,...` URL.
+  const encodeAtQuality = (img, longEdge, quality) => {
+    const canvas = document.createElement("canvas");
+    let w = img.width, h = img.height;
+    if (w > longEdge || h > longEdge) {
+      if (w > h) { h = Math.round((h / w) * longEdge); w = longEdge; }
+      else { w = Math.round((w / h) * longEdge); h = longEdge; }
+    }
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    // White background so transparent PNGs don't show black after JPEG
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+    return canvas.toDataURL("image/jpeg", quality);
+  };
+
   const dataUrlBytes = (url) => {
     if (!url || typeof url !== "string") return 0;
     const i = url.indexOf(",");
     if (i < 0) return 0;
     return Math.floor((url.length - i - 1) * 0.75);
   };
+
+  const compress = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          let dataUrl = encodeAtQuality(img, 1600, 0.82);
+          // Hot pictures (lots of foliage / texture) can still come out
+          // > 1.5 MB after the first pass — recompress more aggressively.
+          if (dataUrlBytes(dataUrl) > TARGET_BYTES) {
+            dataUrl = encodeAtQuality(img, 1280, 0.7);
+          }
+          resolve(dataUrl);
+        };
+        img.onerror = () =>
+          reject(new Error("decode-failed"));
+        img.src = e.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
 
   const handleFiles = async (files) => {
     const fmt = (n) => `${(n / 1024 / 1024).toFixed(1)} MB`;
@@ -138,8 +158,21 @@ export default function ImageUploader({
         }
         runningTotal += compressedBytes;
         accepted.push(dataUrl);
-      } catch {
-        toast.error(t("uploader.decode_failed", { name: f.name }));
+      } catch (e) {
+        // HEIC (default iPhone format) cannot be decoded by canvas in
+        // non-Safari browsers; the user needs to switch their iOS camera
+        // setting to "Most Compatible" or convert. Surface that hint
+        // when the file extension hints at HEIC/HEIF.
+        const isHeic = /\.heic$|\.heif$/i.test(f.name) || /heic|heif/i.test(f.type);
+        toast.error(
+          isHeic
+            ? t(
+                "uploader.heic_unsupported",
+                "{{name}} е HEIC формат, който браузърът ви не може да обработи. На iPhone превключете Settings → Camera → Formats → Most Compatible или конвертирайте към JPG.",
+                { name: f.name }
+              )
+            : t("uploader.decode_failed", { name: f.name })
+        );
       }
     }
     if (accepted.length) onChange([...images, ...accepted]);

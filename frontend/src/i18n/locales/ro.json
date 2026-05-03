@@ -671,6 +671,7 @@
     "image_too_large": "{{name}} are {{size}} — max {{max}} per fotografie.",
     "total_too_large": "Total {{current}}, această fotografie adaugă {{incoming}} — limita este {{max}}.",
     "decode_failed": "Nu s-a putut citi {{name}}.",
+    "heic_unsupported": "{{name}} este un fișier HEIC pe care browserul nu îl poate decoda. Pe iPhone activează Settings → Camera → Formats → Most Compatible, sau convertește în JPG.",
     "too_many": "Poți încărca maxim {{max}} fotografii în această categorie."
   },
   "chat": {

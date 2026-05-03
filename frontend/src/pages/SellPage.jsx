@@ -227,7 +227,12 @@ export default function SellPage() {
       }
       const payload = {
         ...form,
-        images: [...ext, ...bp, ...wh, ...intr],
+        // Backend rebuilds the canonical merged gallery from the four
+        // categorised buckets (`exterior + bumper + wheels + interior`)
+        // when any of them is non-empty. We deliberately omit the
+        // duplicate top-level `images` field so each photo travels the
+        // wire exactly once — halves the JSON payload on multi-photo
+        // submissions.
         images_exterior: ext,
         images_wheels: wh,
         images_bumper: bp,
