@@ -34,8 +34,8 @@ _CACHE_TTL_SEC = 24 * 3600
 
 # Canvas — Facebook / Twitter recommend 1200×630 (1.91:1).
 _W, _H = 1200, 630
-_PHOTO_H = 420        # top image band
-_FOOTER_H = _H - _PHOTO_H   # 210 px body
+_PHOTO_W = 720        # left photo column (full height)
+_PANEL_W = _W - _PHOTO_W  # 480 px white card on the right
 _PAD = 44
 
 # Palette — hand-converted from the :root CSS variables in `index.css`
@@ -123,26 +123,24 @@ def _pill(
     """Draw a card-style pill (rounded, semi-translucent bg). Returns x-offset
     of the pill's right edge for laying out subsequent pills."""
     text = text.upper()
-    pad_x, pad_y = 18, 10
+    pad_x, pad_y = 24, 14
     tw = int(draw.textlength(text, font=font))
     th = font.size
-    dot_w = 10 + 8 if icon_dot else 0
+    dot_r = 6
+    dot_w = (dot_r * 2 + 12) if icon_dot else 0
     pill_w = pad_x * 2 + dot_w + tw
     pill_h = pad_y * 2 + th
 
     x, y = xy
-    # Per-pill translucent layer so we keep true alpha over the photo
     layer = Image.new("RGBA", (pill_w, pill_h), (0, 0, 0, 0))
     ld = ImageDraw.Draw(layer)
-    ld.rounded_rectangle([0, 0, pill_w - 1, pill_h - 1], radius=pill_h // 2, fill=bg, outline=border, width=1)
+    ld.rounded_rectangle([0, 0, pill_w - 1, pill_h - 1], radius=pill_h // 2, fill=bg, outline=border, width=2)
 
     text_x = pad_x
     if icon_dot:
         cy = pill_h // 2
-        dot_r = 4
         ld.ellipse([pad_x, cy - dot_r, pad_x + dot_r * 2, cy + dot_r], fill=icon_dot)
-        text_x = pad_x + dot_r * 2 + 8
-    # Baseline tweak: slightly lift text so it looks optically centred
+        text_x = pad_x + dot_r * 2 + 12
     ld.text((text_x, pad_y - 2), text, font=font, fill=fg)
 
     canvas.alpha_composite(layer, dest=(x, y))
@@ -160,63 +158,53 @@ def _compose_image(
 ) -> bytes:
     canvas = Image.new("RGBA", (_W, _H), _BG + (255,))
 
-    # --- Top: photo -----------------------------------------------------
-    photo_box = (0, 0, _W, _PHOTO_H)
+    # --- LEFT: photo (full height) -------------------------------------
     if cover_bytes:
         try:
             src = Image.open(io.BytesIO(cover_bytes)).convert("RGB")
-            # Cover-crop at _W × _PHOTO_H
             src_ratio = src.width / src.height
-            tgt_ratio = _W / _PHOTO_H
+            tgt_ratio = _PHOTO_W / _H
             if src_ratio > tgt_ratio:
-                new_h = _PHOTO_H
-                new_w = int(_PHOTO_H * src_ratio)
+                new_h = _H
+                new_w = int(_H * src_ratio)
             else:
-                new_w = _W
-                new_h = int(_W / src_ratio)
+                new_w = _PHOTO_W
+                new_h = int(_PHOTO_W / src_ratio)
             src = src.resize((new_w, new_h), Image.LANCZOS)
-            left = (new_w - _W) // 2
-            top = (new_h - _PHOTO_H) // 2
-            cropped = src.crop((left, top, left + _W, top + _PHOTO_H)).convert("RGBA")
+            left = (new_w - _PHOTO_W) // 2
+            top = (new_h - _H) // 2
+            cropped = src.crop((left, top, left + _PHOTO_W, top + _H)).convert("RGBA")
             canvas.paste(cropped, (0, 0))
         except Exception as e:
             logger.warning("og: cover decode failed: %s", e)
-            canvas.paste(Image.new("RGBA", (_W, _PHOTO_H), _INK_MUTED + (255,)), (0, 0))
+            canvas.paste(Image.new("RGBA", (_PHOTO_W, _H), _INK_MUTED + (255,)), (0, 0))
     else:
-        canvas.paste(Image.new("RGBA", (_W, _PHOTO_H), _INK_MUTED + (255,)), (0, 0))
+        canvas.paste(Image.new("RGBA", (_PHOTO_W, _H), _INK_MUTED + (255,)), (0, 0))
 
-    # Subtle bottom gradient so the divider line reads cleanly
-    grad = Image.new("RGBA", (_W, 80), (0, 0, 0, 0))
-    gd = ImageDraw.Draw(grad)
-    for i in range(80):
-        a = int(i / 80 * 55)
-        gd.rectangle([0, i, _W, i + 1], fill=(0, 0, 0, a))
-    canvas.alpha_composite(grad, dest=(0, _PHOTO_H - 80))
-
+    # White card divider — vertical 1px line where photo meets panel
     draw = ImageDraw.Draw(canvas)
+    draw.rectangle([_PHOTO_W, 0, _PHOTO_W + 1, _H], fill=_LINE + (255,))
 
-    # --- Pill overlays (top-left) --------------------------------------
-    pill_font = _font("Manrope-Bold.ttf", 20)
-    px, py = _PAD - 12, _PAD - 12
-    # Time pill — match AuctionCard .pill-live / .pill-ending styling
+    # --- Pill overlays on the photo (top-left, BIG) --------------------
+    pill_font = _font("Manrope-Bold.ttf", 32)
+    px, py = _PAD - 8, _PAD - 8
     if time_urgent or time_label == "ENDED":
         time_fg = _DANGER
         time_bg = _DANGER_SOFT + (235,)
-        time_border = _DANGER + (100,)
+        time_border = _DANGER + (110,)
         dot = _DANGER
     else:
         time_fg = _ACCENT
         time_bg = _ACCENT_SOFT + (235,)
-        time_border = _ACCENT + (100,)
+        time_border = _ACCENT + (110,)
         dot = _ACCENT
     px = _pill(
         draw, canvas, (px, py),
         time_label,
         fg=time_fg, bg=time_bg, border=time_border,
         font=pill_font, icon_dot=dot,
-    ) + 10
+    ) + 12
     if featured:
-        # Featured — neutral white glass pill like the site default
         _pill(
             draw, canvas, (px, py),
             "FEATURED",
@@ -226,78 +214,115 @@ def _compose_image(
             font=pill_font,
         )
 
-    # --- Divider ------------------------------------------------------
-    draw.rectangle([0, _PHOTO_H, _W, _PHOTO_H + 1], fill=_LINE + (255,))
+    # --- RIGHT: white card panel ---------------------------------------
+    panel_x = _PHOTO_W + 1
+    inner_pad = 36
+    cur_y = _PAD - 4
 
-    # --- Bottom: card body ---------------------------------------------
-    body_top = _PHOTO_H
-    body_y = body_top + _PAD - 8
-    # Left column — title + subline
-    title_font = _font("Manrope-Bold.ttf", 42)
-    # Wrap to max 1 line + ellipsis (we only have 210 px vertical for body
-    # so keep it tight and let the image do the heavy lifting).
-    title_max_w = _W - _PAD * 2 - 320  # reserve space on the right for the wordmark + bid
-    title_line = _fit_single_line(draw, title, title_font, title_max_w)
-    draw.text((_PAD, body_y), title_line, font=title_font, fill=_INK)
-
-    # Subline under title: current bid label
-    sub_font = _font("Manrope-SemiBold.ttf", 22)
-    muted_font = _font("Manrope-Regular.ttf", 18)
-    sub_y = body_y + 58
-    if bid_label:
-        draw.text((_PAD, sub_y), "CURRENT BID", font=muted_font, fill=_INK_MUTED)
-        bid_font = _font("Manrope-Bold.ttf", 44)
-        draw.text((_PAD, sub_y + 24), bid_label, font=bid_font, fill=_INK)
-        if bid_sub_label:
-            draw.text(
-                (_PAD + int(draw.textlength(bid_label, font=bid_font)) + 14, sub_y + 40),
-                bid_sub_label,
-                font=sub_font, fill=_INK_MUTED,
-            )
-    else:
-        draw.text((_PAD, sub_y), "Live auction · No bids yet", font=sub_font, fill=_INK_MUTED)
-
-    # Right column — wordmark (top) + sparse details (bottom)
-    # Wordmark "A&B" lockup — same as the new favicon: black A, emerald &, black B.
-    # We render "Auto&Bid" for horizontal displays since we have the room.
-    logo_font = _font("Manrope-Bold.ttf", 38)
-    left_text = "Auto"
-    amp_text = "&"
-    right_text = "Bid"
+    # Auto&Bid wordmark — TOP of the panel, BIG (Manrope Bold 64)
+    logo_font = _font("Manrope-Bold.ttf", 64)
+    left_text, amp_text, right_text = "Auto", "&", "Bid"
     lw = draw.textlength(left_text, font=logo_font)
     aw = draw.textlength(amp_text, font=logo_font)
     rw = draw.textlength(right_text, font=logo_font)
     total_logo_w = lw + aw + rw
-    logo_x = _W - _PAD - int(total_logo_w)
-    logo_y = body_top + _PAD - 6
-    draw.text((logo_x, logo_y), left_text, font=logo_font, fill=_INK)
-    draw.text((logo_x + lw, logo_y), amp_text, font=logo_font, fill=_AMP_GREEN)
-    draw.text((logo_x + lw + aw, logo_y), right_text, font=logo_font, fill=_INK)
+    logo_x = panel_x + (_PANEL_W - int(total_logo_w)) // 2
+    draw.text((logo_x, cur_y), left_text, font=logo_font, fill=_INK)
+    draw.text((logo_x + lw, cur_y), amp_text, font=logo_font, fill=_AMP_GREEN)
+    draw.text((logo_x + lw + aw, cur_y), right_text, font=logo_font, fill=_INK)
+    cur_y += 78
 
-    # Domain hint under the wordmark — tiny, muted
-    domain_font = _font("Manrope-SemiBold.ttf", 16)
+    # Domain hint, centered
+    domain_font = _font("Manrope-SemiBold.ttf", 18)
     domain_text = "autoandbid.com"
     dw = draw.textlength(domain_text, font=domain_font)
-    draw.text((_W - _PAD - int(dw), logo_y + 48), domain_text, font=domain_font, fill=_INK_MUTED)
+    draw.text(
+        (panel_x + (_PANEL_W - int(dw)) // 2, cur_y),
+        domain_text,
+        font=domain_font, fill=_INK_MUTED,
+    )
+    cur_y += 50
+
+    # Subtle horizontal rule under the wordmark block
+    draw.rectangle(
+        [panel_x + inner_pad, cur_y, panel_x + _PANEL_W - inner_pad, cur_y + 1],
+        fill=_LINE + (255,),
+    )
+    cur_y += 32
+
+    # Title (Manrope Bold 30, up to 3 lines, ellipsis)
+    title_font = _font("Manrope-Bold.ttf", 30)
+    title_max_w = _PANEL_W - inner_pad * 2
+    title_lines = _wrap(draw, title, title_font, title_max_w, max_lines=3)
+    for line in title_lines:
+        draw.text((panel_x + inner_pad, cur_y), line, font=title_font, fill=_INK)
+        cur_y += 38
+
+    # --- Bottom: BIG current bid block ---------------------------------
+    bottom_y = _H - _PAD - 4
+    if bid_label:
+        muted_font = _font("Manrope-SemiBold.ttf", 20)
+        bid_font = _font("Manrope-Bold.ttf", 80)
+        sub_font = _font("Manrope-SemiBold.ttf", 22)
+        # "CURRENT BID" tiny label — draw word-by-word so the space is
+        # visually correct (Manrope SemiBold collapses ASCII space too tight)
+        draw.text(
+            (panel_x + inner_pad, bottom_y - 130),
+            "CURRENT",
+            font=muted_font, fill=_INK_MUTED,
+        )
+        cur_w = draw.textlength("CURRENT", font=muted_font)
+        draw.text(
+            (panel_x + inner_pad + int(cur_w) + 8, bottom_y - 130),
+            "BID",
+            font=muted_font, fill=_INK_MUTED,
+        )
+        # The big number
+        draw.text(
+            (panel_x + inner_pad, bottom_y - 100),
+            bid_label,
+            font=bid_font, fill=_INK,
+        )
+        if bid_sub_label:
+            draw.text(
+                (panel_x + inner_pad, bottom_y - 12),
+                bid_sub_label,
+                font=sub_font, fill=_INK_MUTED,
+            )
+    else:
+        no_bid_font = _font("Manrope-Bold.ttf", 36)
+        draw.text(
+            (panel_x + inner_pad, bottom_y - 60),
+            "No bids yet",
+            font=no_bid_font, fill=_ACCENT,
+        )
 
     buf = io.BytesIO()
     canvas.convert("RGB").save(buf, "PNG", optimize=True)
     return buf.getvalue()
 
 
-def _fit_single_line(draw, text, font, max_width):
-    text = (text or "").strip()
-    if draw.textlength(text, font=font) <= max_width:
-        return text
-    # Binary-trim and append an ellipsis
-    lo, hi = 0, len(text)
-    while lo < hi:
-        mid = (lo + hi + 1) // 2
-        if draw.textlength(text[:mid] + "…", font=font) <= max_width:
-            lo = mid
+def _wrap(draw, text, font, max_width, max_lines=3):
+    words = (text or "").split()
+    lines: list[str] = []
+    cur = ""
+    for w in words:
+        test = f"{cur} {w}".strip()
+        if draw.textlength(test, font=font) <= max_width:
+            cur = test
         else:
-            hi = mid - 1
-    return text[:lo].rstrip() + "…"
+            if cur:
+                lines.append(cur)
+            cur = w
+            if len(lines) == max_lines - 1:
+                while cur and draw.textlength(cur + "…", font=font) > max_width:
+                    cur = cur[:-1]
+                if cur:
+                    lines.append(cur + "…")
+                return lines
+    if cur and len(lines) < max_lines:
+        lines.append(cur)
+    return lines
 
 
 def _cache_key(auction_id: str, current_bid: float, ends_at_iso: Optional[str]) -> str:
@@ -308,7 +333,7 @@ def _cache_key(auction_id: str, current_bid: float, ends_at_iso: Optional[str]) 
             minute_bucket = end.strftime("%Y%m%d%H%M")
         except Exception:
             minute_bucket = ends_at_iso
-    raw = f"{auction_id}:{int(current_bid or 0)}:{minute_bucket}:v2"
+    raw = f"{auction_id}:{int(current_bid or 0)}:{minute_bucket}:v4"
     return hashlib.sha1(raw.encode()).hexdigest()[:16]
 
 
