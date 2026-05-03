@@ -5,6 +5,7 @@ import { BadgeCheck, MapPin, Star } from "lucide-react";
 
 import { api } from "../lib/apiClient";
 import AuctionCard from "../components/AuctionCard";
+import FollowButton from "../components/FollowButton";
 
 // Reserved top-level paths must NOT resolve against /api/dealers — they
 // are real pages owned by the SPA. If a visitor types /login we want
@@ -85,6 +86,7 @@ export default function DealerPage() {
             >
               <BadgeCheck size={14} /> {t("dealer.verified", "Проверен дилър")}
             </span>
+            <FollowButton userId={dealer.id} className="ml-auto" />
           </div>
           <div className="mt-2 flex items-center gap-4 text-sm text-[hsl(var(--ink-muted))] flex-wrap">
             {dealer.city && (

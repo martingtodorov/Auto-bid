@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { Calendar, Gauge, Fuel, Settings, MapPin, Palette, Zap, Cog, MessageCircle, Heart, ArrowLeft, Shield, Wifi, Share2, Languages, Gavel } from "lucide-react";
+import { toast } from "sonner";
+import { Calendar, Gauge, Fuel, Settings, MapPin, Palette, Zap, Cog, MessageCircle, Heart, ArrowLeft, Shield, Wifi, Share2, Languages, Gavel, ChevronUp, ChevronDown } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, API_BASE, formatEUR, formatLocal, formatKM, timeLeft, formatTimeLeft, intlLocale } from "../lib/apiClient";
 import { translateEnum } from "../lib/carTranslations";
@@ -1240,6 +1241,30 @@ function CommentItem({ c, t, i18nLang, isAdmin, onDelete }) {
   const [showOriginal, setShowOriginal] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [err, setErr] = React.useState("");
+  // Vote state: seed from server + update optimistically on click.
+  // `viewerVote` tri-state: 1 upvoted, -1 downvoted, 0 no vote.
+  const [vote, setVote] = React.useState({
+    score: c.score ?? 0,
+    viewerVote: c.viewer_vote ?? 0,
+  });
+
+  const castVote = async (dir) => {
+    // Clicking an already-active button clears the vote, matching
+    // Reddit's muscle memory and avoiding a dedicated "unvote" button.
+    const next = vote.viewerVote === dir ? 0 : dir;
+    const delta = next - vote.viewerVote;
+    setVote((p) => ({ score: p.score + delta, viewerVote: next }));
+    try {
+      const { data } = await api.post(`/comments/${c.id}/vote`, { vote: next });
+      setVote({ score: data.score, viewerVote: data.viewer_vote });
+    } catch (e) {
+      // Rollback on error
+      setVote((p) => ({ score: p.score - delta, viewerVote: vote.viewerVote }));
+      if (e?.response?.status === 401) {
+        toast.error(t("comments.login_to_vote", "Влезте, за да гласувате."));
+      }
+    }
+  };
 
   const source = c.text || "";
   // Heuristic: offer translation when viewer's UI language is not BG and the
@@ -1296,6 +1321,46 @@ function CommentItem({ c, t, i18nLang, isAdmin, onDelete }) {
       <p className={`mt-3 text-sm leading-relaxed ${c.deleted ? "italic text-[hsl(var(--ink-muted))]" : ""}`}>
         {c.deleted ? t("auction.comment_removed") : displayText}
       </p>
+      {!c.deleted && (
+        <div className="mt-3 flex items-center gap-1" data-testid={`comment-votes-${c.id}`}>
+          <button
+            onClick={() => castVote(1)}
+            aria-label={t("comments.upvote", "Upvote")}
+            className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+              vote.viewerVote === 1
+                ? "bg-[hsl(var(--accent))]/15 text-[hsl(var(--accent))]"
+                : "text-[hsl(var(--ink-muted))] hover:bg-[hsl(var(--surface))] hover:text-[hsl(var(--ink))]"
+            }`}
+            data-testid={`comment-upvote-${c.id}`}
+          >
+            <ChevronUp size={18} strokeWidth={2.5} />
+          </button>
+          <span
+            className={`min-w-[2ch] text-center text-sm font-semibold tabular-nums ${
+              vote.score > 0
+                ? "text-[hsl(var(--accent))]"
+                : vote.score < 0
+                  ? "text-[hsl(var(--danger))]"
+                  : "text-[hsl(var(--ink-muted))]"
+            }`}
+            data-testid={`comment-score-${c.id}`}
+          >
+            {vote.score}
+          </span>
+          <button
+            onClick={() => castVote(-1)}
+            aria-label={t("comments.downvote", "Downvote")}
+            className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+              vote.viewerVote === -1
+                ? "bg-[hsl(var(--danger))]/15 text-[hsl(var(--danger))]"
+                : "text-[hsl(var(--ink-muted))] hover:bg-[hsl(var(--surface))] hover:text-[hsl(var(--ink))]"
+            }`}
+            data-testid={`comment-downvote-${c.id}`}
+          >
+            <ChevronDown size={18} strokeWidth={2.5} />
+          </button>
+        </div>
+      )}
       {needsTranslation && (
         <div className="mt-3 flex items-center gap-2 flex-wrap text-xs" data-testid={`comment-translate-controls-${c.id}`}>
           {translated ? (

@@ -2174,12 +2174,27 @@ async def next_bid_info(auction_id: str):
 DELETED_COMMENT_TEXT = "Коментарът е премахнат поради неконструктивно съдържание."
 
 
-def _public_comment(c: dict, auction: dict) -> dict:
-    """Mark owner badge + replace text on deleted comments."""
+def _public_comment(c: dict, auction: dict, viewer_id: Optional[str] = None) -> dict:
+    """Mark owner badge + replace text on deleted comments.
+
+    Adds the vote-score fields so the frontend can render Reddit-style
+    up/down arrows without another round-trip. We don't leak the raw
+    upvotes/downvotes user_id lists — the viewer_vote flag is enough.
+    """
     d = {k: v for k, v in c.items() if k != "_id"}
     d["is_owner"] = bool(auction.get("seller_id") and d.get("user_id") == auction.get("seller_id"))
     if d.get("deleted"):
         d["text"] = DELETED_COMMENT_TEXT
+    up = d.pop("upvotes", None) or []
+    down = d.pop("downvotes", None) or []
+    d["upvote_count"] = len(up)
+    d["downvote_count"] = len(down)
+    d["score"] = len(up) - len(down)
+    d["viewer_vote"] = (
+        1 if viewer_id and viewer_id in up
+        else -1 if viewer_id and viewer_id in down
+        else 0
+    )
     return d
 
 
@@ -2215,7 +2230,9 @@ async def list_comments(auction_id: str, request: Request):
         if not (viewer and viewer.get("role") in ("admin", "moderator")):
             raise HTTPException(status_code=404, detail="Търгът не е намерен")
     items = await db.comments.find({"auction_id": auction_id}, {"_id": 0}).sort("created_at", -1).limit(200).to_list(200)
-    return [_public_comment(c, a) for c in items]
+    viewer = await get_optional_user(request)
+    viewer_id = viewer["id"] if viewer else None
+    return [_public_comment(c, a, viewer_id) for c in items]
 
 @api.post("/auctions/{auction_id}/comments")
 async def add_comment(auction_id: str, payload: CommentCreate, user: dict = Depends(require_verified_email)):
@@ -2441,6 +2458,14 @@ async def admin_approve(auction_id: str, _admin: dict = Depends(require_admin)):
             await notify_matching_saved_searches(fresh)
     except Exception as e:
         logger.error("saved search notification failed: %s", e)
+    # Notify users who follow the seller — separate from saved-search
+    # fan-out so one outage doesn't starve the other.
+    try:
+        fresh_for_follow = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+        if fresh_for_follow:
+            await _notify_followers_new_listing(fresh_for_follow)
+    except Exception as e:
+        logger.error("follower notification failed: %s", e)
     # Eager OG image generation — fire before any social crawler can
     # possibly scrape the URL. If the asynchronous generator fails
     # (cover fetch timeout, Pillow decode error, disk full) we retry
@@ -2930,6 +2955,180 @@ async def notify_matching_saved_searches(auction: dict):
                     )
                 except Exception as e:
                     logger.error("push saved_search failed: %s", e)
+
+
+# ---- User follows (reputation/leaderboard prerequisite) ----
+# Collection shape: { follower_id, followee_id, created_at }.
+# A unique compound index prevents duplicate rows; deletes are straight
+# `delete_one` so unfollow is idempotent.
+
+@api.post("/users/{user_id}/follow")
+async def follow_user(user_id: str, user: dict = Depends(get_current_user)):
+    if user_id == user["id"]:
+        raise HTTPException(status_code=400, detail="Не можете да следвате собствения си профил.")
+    target = await db.users.find_one({"id": user_id}, {"_id": 0, "id": 1, "name": 1, "email": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="Потребителят не е намерен")
+    # Idempotent: upsert so double-clicking the button is harmless.
+    await db.user_follows.update_one(
+        {"follower_id": user["id"], "followee_id": user_id},
+        {"$setOnInsert": {
+            "follower_id": user["id"],
+            "followee_id": user_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }},
+        upsert=True,
+    )
+    count = await db.user_follows.count_documents({"followee_id": user_id})
+    return {"ok": True, "followers_count": count}
+
+
+@api.delete("/users/{user_id}/follow")
+async def unfollow_user(user_id: str, user: dict = Depends(get_current_user)):
+    await db.user_follows.delete_one({"follower_id": user["id"], "followee_id": user_id})
+    count = await db.user_follows.count_documents({"followee_id": user_id})
+    return {"ok": True, "followers_count": count}
+
+
+@api.get("/users/{user_id}/follow-status")
+async def follow_status(user_id: str, request: Request):
+    """Returns followers_count + whether the current viewer is already
+    following. Anonymous viewers get `following: false`. Kept cheap so
+    it can be called on every profile/dealer render."""
+    viewer = await get_optional_user(request)
+    following = False
+    if viewer and viewer["id"] != user_id:
+        following = bool(await db.user_follows.find_one(
+            {"follower_id": viewer["id"], "followee_id": user_id},
+            {"_id": 1},
+        ))
+    count = await db.user_follows.count_documents({"followee_id": user_id})
+    return {"following": following, "followers_count": count}
+
+
+@api.get("/users/me/following")
+async def list_my_following(user: dict = Depends(get_current_user)):
+    rows = await db.user_follows.find(
+        {"follower_id": user["id"]},
+        {"_id": 0, "followee_id": 1, "created_at": 1},
+    ).to_list(500)
+    if not rows:
+        return []
+    ids = [r["followee_id"] for r in rows]
+    users = await db.users.find(
+        {"id": {"$in": ids}},
+        {"_id": 0, "id": 1, "name": 1, "avatar_url": 1, "is_verified_dealer": 1, "dealer_slug": 1},
+    ).to_list(500)
+    return users
+
+
+async def _notify_followers_new_listing(auction: dict) -> None:
+    """Fan-out notification when a user they follow publishes a new
+    listing. Runs after the auction is live so the link is reachable.
+
+    Kept best-effort: email + push are each wrapped so a mail-server
+    outage doesn't starve the push broadcast (or vice versa). There's
+    no retry queue yet — follow-ups are a nice-to-have, not a
+    money-critical path like bids.
+    """
+    seller_id = auction.get("seller_id")
+    if not seller_id or seller_id == "platform":
+        return
+    follow_rows = await db.user_follows.find(
+        {"followee_id": seller_id},
+        {"_id": 0, "follower_id": 1},
+    ).to_list(2000)
+    if not follow_rows:
+        return
+
+    seller = await db.users.find_one({"id": seller_id}, {"_id": 0, "name": 1})
+    seller_name = (seller or {}).get("name") or "A seller"
+    auction_url = f"/auctions/{auction['id']}"
+
+    for row in follow_rows:
+        uid = row["follower_id"]
+        u = await db.users.find_one(
+            {"id": uid},
+            {"_id": 0, "id": 1, "email": 1, "name": 1, "notification_prefs": 1},
+        )
+        if not u:
+            continue
+        # Email
+        if u.get("email"):
+            from services import notif_prefs as _nprefs
+            if _nprefs.is_enabled(u, "email", "followed_listing"):
+                try:
+                    from emails import send_email, _shell, APP_URL
+                    html = _shell(
+                        f"{seller_name} публикува нова обява",
+                        f"""
+                        <p>Здравейте, {u.get('name', '')},</p>
+                        <p><strong>{seller_name}</strong>, когото следвате, пусна нова обява:</p>
+                        <p style="font-size:18px;margin:16px 0;">
+                          <strong>{auction.get('title', '')}</strong>
+                        </p>
+                        <p>{auction.get('year', '')} г. · {auction.get('city', '')} · начална цена
+                           €{int(auction.get('starting_bid_eur', 0)):,}</p>
+                        <p><a href="{APP_URL}{auction_url}"
+                              style="display:inline-block;background:#1B4D3E;color:#fff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:600;">
+                          Виж обявата
+                        </a></p>
+                        """,
+                    )
+                    await send_email(u["email"], f"Нова обява от {seller_name}", html)
+                except Exception as e:
+                    logger.error("follow email failed: %s", e)
+        # Web Push
+        try:
+            from services import notif_prefs as _nprefs
+            if _nprefs.is_enabled(u, "push", "followed_listing"):
+                from services import push_templates
+                await push_templates.send_template(
+                    uid,
+                    "followed_listing",
+                    fmt_args={
+                        "seller_name": seller_name,
+                        "title": auction.get("title", ""),
+                    },
+                    url=auction_url,
+                    tag=f"follow-{seller_id}-{auction['id']}",
+                )
+        except Exception as e:
+            logger.error("push follow failed: %s", e)
+
+
+# ---- Comment votes (Reddit-style up/down) ----
+class CommentVote(BaseModel):
+    vote: int  # 1 | -1 | 0 (clear)
+
+
+@api.post("/comments/{comment_id}/vote")
+async def vote_comment(
+    comment_id: str, payload: CommentVote, user: dict = Depends(get_current_user),
+):
+    if payload.vote not in (-1, 0, 1):
+        raise HTTPException(status_code=400, detail="vote must be 1, -1 or 0")
+    c = await db.comments.find_one({"id": comment_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if c.get("deleted"):
+        raise HTTPException(status_code=400, detail="Не можете да гласувате на изтрит коментар.")
+    # Enforce one vote per user by pulling them off BOTH arrays first,
+    # then pushing onto the correct one (if vote != 0). Net effect is
+    # idempotent and matches Reddit's voting semantics.
+    uid = user["id"]
+    await db.comments.update_one(
+        {"id": comment_id},
+        {"$pull": {"upvotes": uid, "downvotes": uid}},
+    )
+    if payload.vote == 1:
+        await db.comments.update_one({"id": comment_id}, {"$addToSet": {"upvotes": uid}})
+    elif payload.vote == -1:
+        await db.comments.update_one({"id": comment_id}, {"$addToSet": {"downvotes": uid}})
+    fresh = await db.comments.find_one({"id": comment_id}, {"_id": 0, "upvotes": 1, "downvotes": 1})
+    up = len(fresh.get("upvotes") or [])
+    down = len(fresh.get("downvotes") or [])
+    return {"ok": True, "score": up - down, "upvotes": up, "downvotes": down, "viewer_vote": payload.vote}
 
 
 # ---- Seller listing management ----
@@ -4083,6 +4282,9 @@ async def on_startup():
     await db.push_subscriptions.create_index("endpoint", unique=True)
     await db.push_subscriptions.create_index("user_id")
     await db.comments.create_index("auction_id")
+    # Leaderboard/reputation: fast lookups by follower or followee.
+    await db.user_follows.create_index([("follower_id", 1), ("followee_id", 1)], unique=True)
+    await db.user_follows.create_index("followee_id")
     await db.watches.create_index([("user_id", 1), ("auction_id", 1)])
     await db.bidding_credits.create_index([("auction_id", 1), ("user_id", 1)])
     await db.makes.create_index("name", unique=True)

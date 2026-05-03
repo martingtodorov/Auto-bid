@@ -5,6 +5,7 @@ import { Award, ShoppingBag, Calendar, TrendingUp, AlertCircle, Star } from "luc
 import { api, formatEUR } from "../lib/apiClient";
 import AuctionCard from "../components/AuctionCard";
 import SellerReviews, { StarRating } from "../components/SellerReviews";
+import FollowButton from "../components/FollowButton";
 import { setPageMeta, combineJsonLd, buildBreadcrumbs } from "../lib/seo";
 import { useBrandName } from "../lib/brand";
 
@@ -92,7 +93,10 @@ export default function ProfilePage() {
             </div>
             <div className="flex-1 min-w-[260px]">
               <div className="overline text-[hsl(var(--accent))]">{user.role === "admin" ? `${brand} екип` : "Член на общността"}</div>
-              <h1 className="font-serif text-4xl lg:text-5xl tracking-tight mt-3">{user.name}</h1>
+              <div className="flex items-center gap-3 flex-wrap mt-3">
+                <h1 className="font-serif text-4xl lg:text-5xl tracking-tight">{user.name}</h1>
+                <FollowButton userId={user.id} />
+              </div>
               <div className="mt-3 text-sm text-[hsl(var(--ink-muted))] flex items-center gap-4 flex-wrap">
                 <span className="flex items-center gap-1.5"><Calendar size={13} /> Член от {memberYear}</span>
                 {stats.sales_count > 0 && <span className="flex items-center gap-1.5"><Award size={13} /> {stats.sales_count} продажби</span>}

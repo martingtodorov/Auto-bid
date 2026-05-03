@@ -39,6 +39,12 @@ TEMPLATES: dict[str, dict[str, dict[str, str]]] = {
         "en": {"title": "New listing · {name}", "body": "{title} · from €{price}"},
         "ro": {"title": "Anunț nou · {name}", "body": "{title} · de la €{price}"},
     },
+    # Followed user published a new listing
+    "followed_listing": {
+        "bg": {"title": "{seller_name} пусна нова обява", "body": "{title}"},
+        "en": {"title": "{seller_name} posted a new listing", "body": "{title}"},
+        "ro": {"title": "{seller_name} a publicat un anunț nou", "body": "{title}"},
+    },
     # Chat — admin → user
     "chat_admin_message": {
         "bg": {"title": "Поддръжка ви пише", "body": "{preview}"},
