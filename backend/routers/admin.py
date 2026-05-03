@@ -346,18 +346,47 @@ def register_routes():
         total_bids = await bidding_svc.count_bids()
         bids_this_week = await bidding_svc.count_bids(since=datetime.fromisoformat(week_ago) if isinstance(week_ago, str) else week_ago)
 
+        # Commission = sum(`premium_amount_eur`) when admin captured it via
+        # /capture-premium, else fall back to 2 % of the winning bid so that
+        # auctions finalized via the "release-only" path (admin_finalize)
+        # still contribute to the expected-revenue line. Without the
+        # fallback, any sale before capture-premium was wired up reads as
+        # 0 € commission and the dashboard looks broken.
         gmv_cursor = db.auctions.aggregate([
             {"$match": {"status": "sold"}},
-            {"$group": {"_id": None, "gmv": {"$sum": "$current_bid_eur"}, "commission": {"$sum": "$premium_amount_eur"}, "count": {"$sum": 1}}},
+            {"$group": {
+                "_id": None,
+                "gmv": {"$sum": "$current_bid_eur"},
+                "commission": {"$sum": {
+                    "$ifNull": [
+                        "$premium_amount_eur",
+                        {"$multiply": [{"$ifNull": ["$current_bid_eur", 0]}, 0.02]},
+                    ],
+                }},
+                "count": {"$sum": 1},
+            }},
         ])
         gmv_docs = await gmv_cursor.to_list(1)
         gmv = float(gmv_docs[0]["gmv"]) if gmv_docs else 0.0
         commission = float(gmv_docs[0]["commission"]) if gmv_docs else 0.0
         sold_count = int(gmv_docs[0]["count"]) if gmv_docs else 0
 
+        # Same fallback for the 30-day window. `finalized_at` may be NULL
+        # on legacy rows sold before that column was always written — those
+        # are intentionally excluded from the recent bucket (otherwise a
+        # missing timestamp would make every sale "recent").
         gmv_month_cursor = db.auctions.aggregate([
             {"$match": {"status": "sold", "finalized_at": {"$gte": month_ago}}},
-            {"$group": {"_id": None, "gmv": {"$sum": "$current_bid_eur"}, "commission": {"$sum": "$premium_amount_eur"}}},
+            {"$group": {
+                "_id": None,
+                "gmv": {"$sum": "$current_bid_eur"},
+                "commission": {"$sum": {
+                    "$ifNull": [
+                        "$premium_amount_eur",
+                        {"$multiply": [{"$ifNull": ["$current_bid_eur", 0]}, 0.02]},
+                    ],
+                }},
+            }},
         ])
         gmv_month_docs = await gmv_month_cursor.to_list(1)
         gmv_month = float(gmv_month_docs[0]["gmv"]) if gmv_month_docs else 0.0

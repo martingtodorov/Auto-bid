@@ -1986,3 +1986,38 @@ fast path (без DB hit).
 - `GET /api/stripe/authorizations/active?auction_id=<uuid>` → `{}` ✓
   (same result, confirming fast-path работи и не променя поведението
   за съществуващи UUID-ссилки)
+
+## 2026-05-03 — Fix: Admin revenue dashboard shows 0 € commission / 0 € GMV 30d
+
+**Bug**: Dashboard показва `GMV = 29 000 € (1 продажба)`, но
+`Приходи комисионна = 0 €`, `GMV · 30d = 0 €`, `Комисионна · 30d = 0 €`.
+
+**Root cause 1**: `admin_finalize` (server.py:2759) маркира auction като
+`status: sold` без да запише `finalized_at`. 30-day aggregate pipeline
+филтрира по `finalized_at >= month_ago` → липсващите timestamps не
+попадат в bucket-а → 0 € за 30-day и GMV, и commission.
+
+**Root cause 2**: `/admin/stats` aggregate pipeline (admin.py:349)
+сумира ТОЛКОВА `premium_amount_eur`. Но `admin_finalize` не записва
+това поле (by design — "release only, no capture"). Затова
+`commission_all_time = 0 €` дори когато има продадени търгове с
+известен current_bid.
+
+**Fix 1** (`server.py:admin_finalize`): добавен `"finalized_at": now_iso`
+към `$set`. Стари записи без timestamp остават неизвестни за 30-day
+bucket (интенционално — иначе missing timestamp би показал всеки sale
+като "recent").
+
+**Fix 2** (`admin.py:stats` — всичко-time и 30-day aggregations):
+`commission` сега използва `$ifNull[premium_amount_eur, current_bid_eur * 0.02]`.
+Това означава:
+- Ако admin е capture-нал премията → използва действителния `premium_amount_eur` (exact)
+- Ако admin е finalize-нал без capture → fallback 2% от `current_bid_eur` (expected)
+Така дашборд-ът винаги показва очакваната/реална commission без 0 €
+halo-effect.
+
+**Verified** (с injected test data):
+- 1× `premium_captured=true, premium_amount_eur=300, current_bid=15 000`
+- 1× `premium_captured=false, current_bid=29 000` (release-only)
+- Stats: GMV = 44 000 € ✓ · Commission = 880 € (300 + 580) ✓ · sold_count = 2 ✓
+- 30-day bucket: същите стойности, защото `finalized_at` се пише сега.

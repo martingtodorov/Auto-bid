@@ -2769,7 +2769,10 @@ async def admin_finalize(auction_id: str, _admin: dict = Depends(require_admin))
         {"auction_id": auction_id, "status": "authorized"},
         {"$set": {"status": "released", "released_at": now_iso}},
     )
-    await db.auctions.update_one({"id": auction_id}, {"$set": {"status": "sold", "premium_captured": False}})
+    await db.auctions.update_one(
+        {"id": auction_id},
+        {"$set": {"status": "sold", "premium_captured": False, "finalized_at": now_iso}},
+    )
     winner_id = a.get("high_bidder_id")
     if winner_id:
         u = await db.users.find_one({"id": winner_id}, {"_id": 0})
