@@ -60,32 +60,89 @@ let webpackConfig = {
   },
 };
 
-webpackConfig.devServer = (devServerConfig) => {
-  // Add health check endpoints if enabled
-  if (config.enableHealthCheck && setupHealthEndpoints && healthPluginInstance) {
-    const originalSetupMiddlewares = devServerConfig.setupMiddlewares;
+// Define the bot-share dev middleware separately so we can re-apply it
+// AFTER withVisualEdits wraps the config — otherwise visual-edits'
+// `setupDevServer` clobbers the `setupMiddlewares` hook we set here.
+const applySocialBotMiddleware = (devServerConfig) => {
+  // Social-bot share middleware — mirrors the production nginx rule so the
+  // preview environment (which has no nginx in front of the dev server)
+  // also serves our Open Graph template to Facebook/WhatsApp/Telegram.
+  // Matches `/auctions/<slug-or-id>` GET requests with a known bot UA and
+  // proxies them to the backend's `/api/share/auction/<id>` renderer.
+  const SOCIAL_BOTS_RE = /(facebookexternalhit|facebot|twitterbot|slackbot|whatsapp|telegrambot|linkedinbot|discordbot|pinterestbot|skypeuripreview|redditbot|vkshare|applebot|googlebot-image)/i;
+  const AUCTION_PATH_RE = /^\/auctions\/([^/?#]+)\/?$/;
 
-    devServerConfig.setupMiddlewares = (middlewares, devServer) => {
-      // Call original setup if exists
-      if (originalSetupMiddlewares) {
-        middlewares = originalSetupMiddlewares(middlewares, devServer);
-      }
+  const botShareMiddleware = (req, res, next) => {
+    if (req.method !== "GET") return next();
+    const m = AUCTION_PATH_RE.exec((req.url || "").split("?")[0] || "");
+    if (!m) return next();
+    const ua = req.headers["user-agent"] || "";
+    if (!SOCIAL_BOTS_RE.test(ua)) return next();
+    const slug = m[1];
+    const http = require("http");
+    const proxyReq = http.request(
+      {
+        host: "127.0.0.1",
+        port: 8001,
+        path: `/api/share/auction/${encodeURIComponent(slug)}`,
+        method: "GET",
+        headers: {
+          Host: req.headers.host || "localhost",
+          "User-Agent": ua,
+          "X-Forwarded-Proto": req.headers["x-forwarded-proto"] || "https",
+          "X-Forwarded-For": req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "",
+        },
+      },
+      (upstream) => {
+        res.statusCode = upstream.statusCode || 502;
+        Object.entries(upstream.headers).forEach(([k, v]) => {
+          if (k.toLowerCase() === "transfer-encoding") return;
+          res.setHeader(k, v);
+        });
+        upstream.pipe(res);
+      },
+    );
+    proxyReq.on("error", () => next());
+    proxyReq.end();
+  };
 
-      // Setup health endpoints
+  const originalSetupMiddlewares = devServerConfig.setupMiddlewares;
+  devServerConfig.setupMiddlewares = (middlewares, devServer) => {
+    if (originalSetupMiddlewares) {
+      middlewares = originalSetupMiddlewares(middlewares, devServer);
+    }
+    // `unshift` so the bot proxy runs BEFORE the SPA fallback / history-
+    // api-fallback middleware (which would otherwise serve index.html).
+    middlewares.unshift({
+      name: "social-bot-share-proxy",
+      middleware: botShareMiddleware,
+    });
+    if (config.enableHealthCheck && setupHealthEndpoints && healthPluginInstance) {
       setupHealthEndpoints(devServer, healthPluginInstance);
-
-      return middlewares;
-    };
-  }
+    }
+    return middlewares;
+  };
 
   return devServerConfig;
 };
+
+webpackConfig.devServer = applySocialBotMiddleware;
 
 // Wrap with visual edits (automatically adds babel plugin, dev server, and overlay in dev mode)
 if (isDevServer) {
   try {
     const { withVisualEdits } = require("@emergentbase/visual-edits/craco");
     webpackConfig = withVisualEdits(webpackConfig);
+    // withVisualEdits injects its own `setupDevServer` that OVERWRITES
+    // our `setupMiddlewares`. Re-wrap the final devServer function so
+    // our bot middleware is registered *after* their setup runs.
+    const wrappedDevServer = webpackConfig.devServer;
+    webpackConfig.devServer = (config) => {
+      if (typeof wrappedDevServer === "function") {
+        config = wrappedDevServer(config);
+      }
+      return applySocialBotMiddleware(config);
+    };
   } catch (err) {
     if (err.code === 'MODULE_NOT_FOUND' && err.message.includes('@emergentbase/visual-edits/craco')) {
       console.warn(

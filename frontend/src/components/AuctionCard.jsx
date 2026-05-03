@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { MapPin, Gauge, Fuel, Calendar, Users, Shield, Zap } from "lucide-react";
+import { MapPin, Gauge, Fuel, Calendar, Users, Shield, Zap, Star } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { formatEUR, formatLocal, formatKM, timeLeft, formatTimeLeft } from "../lib/apiClient";
 import { translateEnum } from "../lib/carTranslations";
@@ -49,7 +49,16 @@ export default function AuctionCard({ auction, compact = false }) {
           ) : (
             <span className="pill pill-live">{formatTimeLeft(tl, t)}</span>
           )}
-          {auction.featured && !isSold && <span className="pill" data-testid={`featured-badge-${auction.id}`}>{t("auction.featured_badge")}</span>}
+          {auction.featured && !isSold && (
+            <span
+              className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[hsl(var(--accent))] text-white shadow-sm"
+              data-testid={`featured-badge-${auction.id}`}
+              title={t("auction.featured_badge")}
+              aria-label={t("auction.featured_badge")}
+            >
+              <Star size={12} fill="currentColor" strokeWidth={0} />
+            </span>
+          )}
           {auction.vat_status === "vat_inclusive" && (
             <span
               className="pill pill-vat"

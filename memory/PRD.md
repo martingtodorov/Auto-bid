@@ -1838,3 +1838,37 @@ screenshot на hover dropdown в Nav, `GET /api/leaderboard` връща 200 с
 - Screenshot `/profile/gosho` рендерира профила правилно.
 - Leaderboard row #1 href = `/profile/gosho` (без UUID).
 - Backfill успешно: `Гошо` → `gosho`.
+
+## 2026-05-03 — Share button OG template fix + Featured pill → green star
+
+**Request 1**: Споделянето на търг през integrated share button не
+зарежда специалния OG template в preview env.
+
+**Root cause**: Production nginx (`deploy/hetzner/nginx/autoandbid.conf`)
+прави rewrite на `/auctions/<slug-suffix>` → `/api/share/auction/<id>`
+когато UA-то е на социален бот. Препрегледът обаче няма nginx — Kubernetes
+ingress директно маршрутизира всяко `/auctions/*` към frontend dev server
+(port 3000), а FastAPI middleware-а (`social_bot_share_middleware`) никога
+не получава заявката.
+
+**Fix**: Добавен custom webpack-dev-server middleware в `craco.config.js`
+(`applySocialBotMiddleware`). За GET заявки към `/auctions/<slug-or-id>`
+с известно бот UA (facebookexternalhit / WhatsApp / TelegramBot / Twitterbot
+/ Slackbot / LinkedInBot / Discordbot / Pinterest / Skype / Reddit / VK
+/ Applebot), middleware-а прокси-ва заявката към `http://127.0.0.1:8001/api/share/auction/<slug>`
+и стриймва отговора. Важно: re-apply-ва се СЛЕД `withVisualEdits`
+защото visual-edits плъгинът презаписва `setupMiddlewares`.
+
+**Verified**:
+- Facebook UA → `<title>BMW M2 Club sport spec N55 2017 — autoandbid.com</title>` ✓
+- WhatsApp / TelegramBot / Twitterbot / LinkedInBot / Discordbot → същия резултат ✓
+- Обикновен Chrome UA → React SPA (непроменено) ✓
+
+**Request 2**: Пилът "Промотирана" на AuctionCard да стане зелена звезда
+(липсва място когато всички pill-ове са активни).
+
+**Fix**: `AuctionCard.jsx` — `<span class="pill">FEATURED</span>` замени
+с кръгъл 24×24px зелен бадж, ★ иконка (`lucide-react` Star, filled
+bright currentColor). `title` + `aria-label` остават за достъпност.
+Бадж е много по-компактен → всички останали pill-ове (LIVE, VAT,
+VERIFIED DEALER) се вместват без overflow.
