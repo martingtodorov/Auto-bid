@@ -109,6 +109,24 @@ html[data-theme="dark"] .text-gray-600,
 html[data-theme="dark"] .text-gray-700 { color: hsl(var(--ink-muted)) !important; }
 html[data-theme="dark"] .text-gray-800,
 html[data-theme="dark"] .text-gray-900 { color: hsl(var(--ink)) !important; }
+
+/* ---- Cookie consent banner — dark-mode override -------------------- */
+/* Light mode keeps the original near-black bg + white text. Dark mode  */
+/* would otherwise render `bg-[hsl(var(--ink))]` as near-WHITE (since   */
+/* --ink swaps to 0% 0% 98%), making the white text invisible. We       */
+/* repaint the banner with the elevated surface + ink colours.          */
+html[data-theme="dark"] .cookie-banner-root {
+    background-color: hsl(var(--surface)) !important;
+    color: hsl(var(--ink)) !important;
+}
+html[data-theme="dark"] .cookie-banner-body { color: hsl(var(--ink-muted)) !important; }
+html[data-theme="dark"] .cookie-banner-reject {
+    border-color: hsl(var(--line)) !important;
+    color: hsl(var(--ink)) !important;
+}
+html[data-theme="dark"] .cookie-banner-reject:hover { background-color: hsl(var(--surface-2)) !important; }
+html[data-theme="dark"] .cookie-banner-close { color: hsl(var(--ink)) !important; }
+html[data-theme="dark"] .cookie-banner-close:hover { background-color: hsl(var(--surface-2)) !important; }
 html[data-theme="dark"] .border-gray-100,
 html[data-theme="dark"] .border-gray-200,
 html[data-theme="dark"] .border-gray-300 { border-color: hsl(var(--line)) !important; }
