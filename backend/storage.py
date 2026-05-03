@@ -51,6 +51,54 @@ class InlineStorage:
         return data_url
 
 
+class DiskStorage:
+    """Local filesystem backend: write data URLs to disk, return public URL.
+
+    Files are content-addressed (sha256 of bytes) so the same image
+    uploaded twice gets stored once. The directory layout matches S3:
+
+        <UPLOAD_DIR>/auctions/<aa>/<full-sha>.<ext>
+
+    Public URL is built from `PUBLIC_UPLOAD_BASE` (e.g. `/uploads`) so a
+    reverse proxy (nginx) or FastAPI's StaticFiles can serve the path
+    without further routing logic.
+    """
+    name = "disk"
+
+    def __init__(self) -> None:
+        self.root = os.path.abspath(os.environ.get("UPLOAD_DIR", "/app/uploads"))
+        # Default `/api/uploads` is the only path the k8s preview ingress
+        # routes to the backend. On a Hetzner box nginx can short-circuit
+        # the same path via `alias`, so the public URL is identical
+        # everywhere.
+        self.public_base = os.environ.get("PUBLIC_UPLOAD_BASE", "/api/uploads").rstrip("/")
+        os.makedirs(self.root, exist_ok=True)
+
+    def store(self, data_url: str) -> str:
+        if not data_url:
+            return data_url
+        # Already a URL — passthrough
+        if data_url.startswith(("http://", "https://", "/uploads/", "/api/uploads/")):
+            return data_url
+        if data_url.startswith(self.public_base + "/"):
+            return data_url
+        parsed = _extract_data_url(data_url)
+        if not parsed:
+            return data_url
+        ext, body = parsed
+        digest = hashlib.sha256(body).hexdigest()
+        sub = digest[:2]
+        rel = f"auctions/{sub}/{digest}.{ext}"
+        abs_path = os.path.join(self.root, rel)
+        if not os.path.exists(abs_path):
+            os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+            tmp = abs_path + ".tmp"
+            with open(tmp, "wb") as f:
+                f.write(body)
+            os.replace(tmp, abs_path)  # atomic
+        return f"{self.public_base}/{rel}"
+
+
 class S3Storage:
     """S3-compatible bucket backend."""
     name = "s3"
@@ -111,11 +159,13 @@ def _get_backend():
     global _backend
     if _backend is not None:
         return _backend
-    choice = os.environ.get("STORAGE_BACKEND", "inline").lower()
+    choice = os.environ.get("STORAGE_BACKEND", "disk").lower()
     if choice == "s3":
         _backend = S3Storage()
-    else:
+    elif choice == "inline":
         _backend = InlineStorage()
+    else:
+        _backend = DiskStorage()
     logger.info("Storage backend initialised: %s", _backend.name)
     return _backend
 

@@ -4519,6 +4519,21 @@ app.add_middleware(
 app.add_middleware(GZipMiddleware, minimum_size=500, compresslevel=5)
 
 
+# Serve uploaded images from disk when STORAGE_BACKEND=disk (default).
+# This lets the disk storage backend return relative `/api/uploads/...` URLs
+# that work behind the k8s preview ingress (which only routes `/api/*` to
+# the backend) AND on a Hetzner deploy where nginx can short-circuit the
+# same path. Both backend and reverse proxy share a single canonical
+# directory configured via UPLOAD_DIR (default `/app/uploads`).
+try:
+    from fastapi.staticfiles import StaticFiles
+    _UPLOAD_DIR = os.path.abspath(os.environ.get("UPLOAD_DIR", "/app/uploads"))
+    os.makedirs(_UPLOAD_DIR, exist_ok=True)
+    app.mount("/api/uploads", StaticFiles(directory=_UPLOAD_DIR), name="uploads")
+except Exception as _e:  # pragma: no cover — never block boot on this
+    logging.getLogger(__name__).warning("Could not mount /api/uploads: %s", _e)
+
+
 # ---- WAF lite: block obvious SQLi/XSS patterns in query string ----
 _WAF_PATTERNS = re.compile(
     r"(\bunion\s+select\b|\bor\s+1\s*=\s*1\b|';\s*drop\s+table|<script\b|javascript:|onerror\s*=|onload\s*=|%3Cscript)",
