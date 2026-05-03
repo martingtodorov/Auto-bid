@@ -452,6 +452,7 @@
     "err_phone": "Te rugăm să introduci un număr de telefon valid.",
     "err_payload_too_big": "Mărimea totală a fotografiilor este {{mb}} MB și depășește limita de 100 MB. Te rugăm să ștergi sau să micșorezi cele mai mari poze înainte de încărcare.",
     "err_server_or_payload": "Serverul nu a putut accepta anunțul. Se întâmplă des când fotografiile depășesc 100 MB combinate — încearcă cu mai puține sau imagini mai mici.",
+    "err_server": "Serverul nu a putut procesa anunțul (eroare {{status}}). Încearcă din nou peste un minut sau contactează-ne dacă problema persistă.",
     "err_city_required": "Te rugăm să introduci orașul în alfabet latin.",
     "err_city_latin": "Orașul trebuie introdus în alfabet latin (de ex. „Sofia\" în loc de „София\").",
     "form": {

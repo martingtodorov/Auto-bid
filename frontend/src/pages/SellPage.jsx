@@ -257,15 +257,40 @@ export default function SellPage() {
       await api.post("/auctions", payload);
       setSubmitted(true);
     } catch (e) {
-      // 500 from the backend in this flow is almost always a payload-too-large
-      // condition that hit a proxy before reaching our route. Translate it.
-      if (e?.response?.status >= 500 || e?.code === "ERR_NETWORK") {
+      const status = e?.response?.status;
+      const detail = e?.response?.data?.detail;
+      const detailStr = typeof detail === "string"
+        ? detail
+        : Array.isArray(detail) && detail[0]?.msg
+          ? detail.map((d) => d.msg).join("; ")
+          : "";
+      // Estimate the actual payload weight so we can reliably tell the
+      // "photos exceeded the proxy limit" case from any other 5xx (CSRF,
+      // database hiccup, gateway timeout, etc). On a mobile.bg-only
+      // import the payload is a few KB so the 100 MB hint is wildly
+      // misleading — fall through to a generic server-error message
+      // instead.
+      const approxPayloadMB = Math.round(
+        (totalRaw + (form.description || "").length + 4096) / 1024 / 1024
+      );
+      const looksTooBig = status === 413 || (status >= 500 && approxPayloadMB > 20);
+      if (looksTooBig) {
         setErr(
           t(
             "sell.err_server_or_payload",
             "Сървърът не успя да приеме обявата. Често се случва когато общият размер на снимките е над 100 MB. Опитайте с по-малко или с по-малки снимки."
           )
         );
+      } else if (status >= 500 || e?.code === "ERR_NETWORK") {
+        const base = t(
+          "sell.err_server",
+          "Сървърът не успя да обработи обявата (грешка {{status}}). Моля опитайте отново след минута или се свържете с нас, ако проблемът продължава.",
+          { status: status || "?" }
+        );
+        // Surface backend's actual reason when it sent one — gives users
+        // (and us in support) something concrete to act on instead of
+        // generic "try again" guidance.
+        setErr(detailStr ? `${base} (${detailStr})` : base);
       } else {
         setErr(formatError(e));
       }
