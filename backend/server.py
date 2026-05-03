@@ -1962,6 +1962,16 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
         "bid": {k: public_bid.get(k) for k in ("id", "user_id", "user_name", "amount_eur", "created_at")},
     })
 
+    # Refresh the social share card PNG so Facebook/WhatsApp/Telegram
+    # see the new price on the next scrape. Fire-and-forget — the
+    # `_retry_og_image` helper swallows errors and bumps `og_image_url`
+    # with a fresh `?v={updated_at}` cache buster for the crawlers to
+    # invalidate their cache on.
+    try:
+        asyncio.create_task(_retry_og_image(auction_id, delay_sec=0))
+    except Exception as e:
+        logger.warning("og:bid-refresh schedule failed for %s: %s", auction_id, e)
+
     # Notify seller on new bid
     seller_id = a.get("seller_id")
     if seller_id and seller_id != "platform":

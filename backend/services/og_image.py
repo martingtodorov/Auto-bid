@@ -150,8 +150,6 @@ def _pill(
 def _compose_image(
     cover_bytes: Optional[bytes],
     title: str,
-    time_label: str,
-    time_urgent: bool,
     featured: bool,
     bid_label: Optional[str],
     bid_sub_label: Optional[str],
@@ -185,28 +183,16 @@ def _compose_image(
     draw = ImageDraw.Draw(canvas)
     draw.rectangle([_PHOTO_W, 0, _PHOTO_W + 1, _H], fill=_LINE + (255,))
 
-    # --- Pill overlays on the photo (top-left, BIG) --------------------
-    pill_font = _font("Manrope-Bold.ttf", 32)
-    px, py = _PAD - 8, _PAD - 8
-    if time_urgent or time_label == "ENDED":
-        time_fg = _DANGER
-        time_bg = _DANGER_SOFT + (235,)
-        time_border = _DANGER + (110,)
-        dot = _DANGER
-    else:
-        time_fg = _ACCENT
-        time_bg = _ACCENT_SOFT + (235,)
-        time_border = _ACCENT + (110,)
-        dot = _ACCENT
-    px = _pill(
-        draw, canvas, (px, py),
-        time_label,
-        fg=time_fg, bg=time_bg, border=time_border,
-        font=pill_font, icon_dot=dot,
-    ) + 12
+    # --- Pill overlay on the photo (top-left, BIG) ---------------------
+    # Countdown removed intentionally — a time pill forces every-minute
+    # regeneration of the PNG, which the social crawler cache never
+    # respects anyway. We now refresh the share card only when the user
+    # sees a materially different number (new bid, new title, cover
+    # swap). FEATURED still shows when the admin flags the listing.
     if featured:
+        pill_font = _font("Manrope-Bold.ttf", 32)
         _pill(
-            draw, canvas, (px, py),
+            draw, canvas, (_PAD - 8, _PAD - 8),
             "FEATURED",
             fg=_INK,
             bg=(255, 255, 255, 235),
@@ -318,15 +304,12 @@ def _wrap(draw, text, font, max_width, max_lines=3):
     return lines
 
 
-def _cache_key(auction_id: str, current_bid: float, ends_at_iso: Optional[str]) -> str:
-    minute_bucket = ""
-    if ends_at_iso:
-        try:
-            end = datetime.fromisoformat(ends_at_iso.replace("Z", "+00:00"))
-            minute_bucket = end.strftime("%Y%m%d%H%M")
-        except Exception:
-            minute_bucket = ends_at_iso
-    raw = f"{auction_id}:{int(current_bid or 0)}:{minute_bucket}:v6"
+def _cache_key(auction_id: str, current_bid: float) -> str:
+    # Cache key derives only from the fields that now appear on the
+    # card (id + gross bid). No minute bucket → a live auction whose
+    # price hasn't changed returns the same PNG for hours, which is
+    # exactly what social crawlers cache anyway.
+    raw = f"{auction_id}:{int(current_bid or 0)}:v7"
     return hashlib.sha1(raw.encode()).hexdigest()[:16]
 
 
@@ -346,8 +329,7 @@ async def build_or_cache(auction: dict) -> bytes:
             current_bid = raw_bid
     else:
         current_bid = raw_bid
-    ends_at = auction.get("ends_at")
-    key = _cache_key(aid, current_bid, ends_at)
+    key = _cache_key(aid, current_bid)
     cache_path = os.path.join(_CACHE_DIR, f"{key}.png")
     if os.path.exists(cache_path) and (time.time() - os.path.getmtime(cache_path) < _CACHE_TTL_SEC):
         try:
@@ -362,7 +344,6 @@ async def build_or_cache(auction: dict) -> bytes:
     title = auction.get("title") or " ".join(
         str(auction.get(k) or "") for k in ("year", "make", "model")
     ).strip() or "Auto&Bid auction"
-    time_label, time_urgent = _english_time_left(ends_at)
     featured = bool(auction.get("featured"))
     bid_label = f"€{int(current_bid):,}".replace(",", "\u202f") if current_bid > 0 else None
     bid_count = int(auction.get("bid_count") or 0)
@@ -370,7 +351,7 @@ async def build_or_cache(auction: dict) -> bytes:
 
     png = await asyncio.to_thread(
         _compose_image,
-        cover_bytes, title, time_label, time_urgent, featured, bid_label, bid_sub,
+        cover_bytes, title, featured, bid_label, bid_sub,
     )
     try:
         with open(cache_path, "wb") as f:
@@ -439,7 +420,6 @@ async def build_and_persist(auction: dict) -> str:
         title = auction.get("title") or " ".join(
             str(auction.get(k) or "") for k in ("year", "make", "model")
         ).strip() or "Auto&Bid auction"
-        time_label, time_urgent = _english_time_left(auction.get("ends_at"))
         featured = bool(auction.get("featured"))
         bid_label = (
             f"€{int(current_bid):,}".replace(",", "\u202f") if current_bid > 0 else None
@@ -449,7 +429,7 @@ async def build_and_persist(auction: dict) -> str:
 
         png = await asyncio.to_thread(
             _compose_image,
-            cover_bytes, title, time_label, time_urgent, featured, bid_label, bid_sub,
+            cover_bytes, title, featured, bid_label, bid_sub,
         )
         os.makedirs(og_dir, exist_ok=True)
         tmp = out_path + ".tmp"
