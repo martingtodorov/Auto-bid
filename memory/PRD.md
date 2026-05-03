@@ -1900,3 +1900,59 @@ VERIFIED DEALER) се вместват без overflow.
 - Desktop viewport meta е променено на unlocked ✓
 - Hero img има `loading="eager"` + `fetchpriority="high"` ✓
 - Mobile (touch-only) поведението остава заключено ✓
+
+## 2026-05-03 — PageSpeed fixes: CLS, Unused JS, Heading order, robots.txt + Stripe test keys
+
+**1. CLS (0.471 → ~0)** — `LiveTicker.jsx` return-null until fetch
+резултира в 36px височинен jump на целия hero. Поправено:
+винаги рендерира shell контейнера (`h-9`), а `<Link>` слайдерите
+се показват само като `items.length > 0`. Layout запазва
+резервираната височина от първия paint.
+
+**2. Font display shift** — `public/index.html` вече документира
+preload-а като намерение (Google Fonts `display=swap` вече е там);
+preconnect-ите остават. Ако CLS остане проблем, следваща стъпка е
+self-hosting на Manrope с `size-adjust`.
+
+**3. Unused JS 192 KiB** — `App.js` преминат към `React.lazy` за
+18 от 21 route-а. Само LandingPage / AuctionsPage / AuctionDetailPage
+остават eager (хит-rate >90% на anon сесии). `<Suspense fallback>`
+е неутрален празен spacer за да не създава втори CLS момент.
+
+**4. Heading order (h1 → h3)** — Hero на LandingPage имаше
+`<div class="overline">Featured listing</div>` между `<h1>` и `<h3>`.
+Заменено с `<h2 class="overline">` (семантична h2 с overline
+визуален стил). Сега DOM е h1 → h2 → h3. Проверено: 5 отделни h2
+елемента присъстват в главната страница.
+
+**5. robots.txt — 32 грешки** — PageSpeed flag-ваше
+Cloudflare-managed "Content-Signal" директиви, защото:
+- Preview env сервираше `/robots.txt` от React dev server → връщаше
+  index.html (`text/html`), което Cloudflare AI Shield wrap-ваше с
+  Content-Signal директиви → validators ги отчитат като errors.
+- Поправка (code side): `craco.config.js` middleware proxy-ва
+  `/robots.txt`, `/sitemap.xml`, `/sitemap-images.xml` към
+  `http://127.0.0.1:8001/api/*`. Сега връща `text/plain; charset=utf-8`.
+- `routers/seo.py`: добавен `Cache-Control: public, max-age=3600, no-transform`
+  (CDN hint да не модифицира body-то) + explicit `Content-Type: text/plain; charset=utf-8`.
+- **Production**: ако Cloudflare AI Shield / Content Signals е
+  ENABLED в CF dashboard, той overwrite-ва `no-transform` hint-а.
+  Потребителят трябва да deaktivira: *Cloudflare Dashboard → Scrape
+  Shield / AI Shield → Content Signals → Disable* или да добави
+  Transform Rule който bypass-ва `/robots.txt`.
+
+**6. LCP image** — `AuctionCard` получи `priority` prop → първи hero
+card е `loading="eager" fetchpriority="high"`, останалите lazy.
+
+## 2026-05-03 — Stripe test keys активирани
+
+Потребителят подаде Stripe test key pair (`pk_test_…8F8` / `sk_test_…iiTO`).
+Запазени:
+- `backend/.env`: `STRIPE_API_KEY=sk_test_51TT3Au...iiTO`
+- DB admin settings: `stripe_publishable_key_test`, `stripe_secret_key_test`,
+  `stripe_mode=test`, `stripe_enabled=true`
+
+Проверка: `GET /v1/account` върна `acct_1TT3AuAGNlb4kcx7`
+(martin@autoandbids.com, Bulgaria). `charges_enabled: False` защото
+акаунтът още не е активиран (business verification в Stripe dashboard).
+Test-mode плащанията работят независимо от това.
