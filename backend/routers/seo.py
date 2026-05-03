@@ -348,11 +348,18 @@ async def share_auction(auction_id: str, request: Request):
     else:
         title = f"{a.get('title','')} — autoandbid.com"
         description = (a.get("description") or "")[:280]
-        # Dynamic per-auction OG image (car photo + Auto&Bid wordmark +
-        # English countdown + current bid). Falls back to the static
-        # `/og-default.jpg` if the generator endpoint ever errors — the
-        # HTML still renders valid meta tags regardless.
-        image = f"{frontend_base}/api/og/auction/{auction_id}.png"
+        # Prefer the eagerly-generated OG image stored on the auction doc
+        # (populated at publish time — see `admin_approve` in server.py).
+        # This guarantees Facebook / WhatsApp / Telegram see the custom
+        # car-card image on the *first* share, not after 3-4 attempts
+        # while the lazy generator warmed up. Fall back to the live
+        # generator endpoint only if the stored URL is missing.
+        stored_og = a.get("og_image_url")
+        if stored_og:
+            # Stored URL may be absolute (S3) or relative (/api/uploads/...).
+            image = stored_og if stored_og.startswith("http") else f"{frontend_base}{stored_og}"
+        else:
+            image = f"{frontend_base}/api/og/auction/{auction_id}.png"
         json_ld = f'<script type="application/ld+json">{_json_ld_vehicle(a, target)}</script>'
 
     html = f"""<!DOCTYPE html>

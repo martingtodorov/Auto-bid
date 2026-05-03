@@ -2427,7 +2427,70 @@ async def admin_approve(auction_id: str, _admin: dict = Depends(require_admin)):
             await notify_matching_saved_searches(fresh)
     except Exception as e:
         logger.error("saved search notification failed: %s", e)
+    # Eager OG image generation — fire before any social crawler can
+    # possibly scrape the URL. If the asynchronous generator fails
+    # (cover fetch timeout, Pillow decode error, disk full) we retry
+    # once in the background; the share route falls back to the static
+    # `/og-default.jpg` until the retry succeeds.
+    try:
+        fresh_for_og = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+        if fresh_for_og:
+            from services.og_image import build_and_persist
+            og_url = await build_and_persist(fresh_for_og)
+            await db.auctions.update_one(
+                {"id": auction_id},
+                {"$set": {"og_image_url": og_url, "og_image_updated_at": now.isoformat()}},
+            )
+    except Exception as e:
+        logger.warning("og:publish: eager build failed for %s: %s — scheduling retry", auction_id, e)
+        asyncio.create_task(_retry_og_image(auction_id, delay_sec=30))
     return {"ok": True}
+
+
+async def _retry_og_image(auction_id: str, delay_sec: int = 30) -> None:
+    """Background retry for OG image generation. Runs once after a delay.
+
+    We intentionally don't loop — the admin panel exposes a manual
+    "Regenerate social image" button for the pathological cases where
+    both the initial generation and the retry fail (rare; usually means
+    the upstream photo CDN is down).
+    """
+    await asyncio.sleep(delay_sec)
+    try:
+        a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+        if not a:
+            return
+        from services.og_image import build_and_persist
+        og_url = await build_and_persist(a)
+        await db.auctions.update_one(
+            {"id": auction_id},
+            {"$set": {
+                "og_image_url": og_url,
+                "og_image_updated_at": datetime.now(timezone.utc).isoformat(),
+            }},
+        )
+        logger.info("og:retry succeeded for %s → %s", auction_id, og_url)
+    except Exception as e:
+        logger.warning("og:retry still failing for %s: %s", auction_id, e)
+
+
+@api.post("/admin/auctions/{auction_id}/regenerate-og-image")
+async def admin_regenerate_og(auction_id: str, _admin: dict = Depends(require_admin)):
+    """Manually rebuild an auction's OG image — used from the admin
+    panel when the eager generation at publish time failed or when the
+    editorial team changes the cover photo. Returns the new URL so the
+    UI can swap its preview immediately."""
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Обявата не е намерена")
+    from services.og_image import build_and_persist
+    og_url = await build_and_persist(a)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    await db.auctions.update_one(
+        {"id": auction_id},
+        {"$set": {"og_image_url": og_url, "og_image_updated_at": now_iso}},
+    )
+    return {"ok": True, "og_image_url": og_url}
 
 
 # ---- Admin counters (tab badges) ----
@@ -3164,6 +3227,18 @@ async def admin_update_auction(auction_id: str, payload: AdminAuctionUpdate, _ad
 
     if update:
         await db.auctions.update_one({"id": auction_id}, {"$set": update})
+
+    # Regenerate OG image in the background when any field that
+    # actually appears on the share card changes. We fire-and-forget so
+    # the admin UI stays snappy — the retry helper handles transient
+    # failures.
+    _og_relevant = {
+        "title", "make", "model", "year",
+        "current_bid_eur", "starting_bid_eur", "bid_count",
+        "ends_at", "images", "thumbnails", "featured",
+    }
+    if any(k in update for k in _og_relevant):
+        asyncio.create_task(_retry_og_image(auction_id, delay_sec=0))
 
     # Broadcast bid-like change if current_bid_eur or ends_at changed, so open pages refresh
     if "current_bid_eur" in update or "ends_at" in update:

@@ -230,33 +230,26 @@ def _compose_image(
     draw.text((logo_x, cur_y), left_text, font=logo_font, fill=_INK)
     draw.text((logo_x + lw, cur_y), amp_text, font=logo_font, fill=_AMP_GREEN)
     draw.text((logo_x + lw + aw, cur_y), right_text, font=logo_font, fill=_INK)
-    cur_y += 78
+    cur_y += 84
 
-    # Domain hint, centered
-    domain_font = _font("Manrope-SemiBold.ttf", 18)
-    domain_text = "autoandbid.com"
-    dw = draw.textlength(domain_text, font=domain_font)
-    draw.text(
-        (panel_x + (_PANEL_W - int(dw)) // 2, cur_y),
-        domain_text,
-        font=domain_font, fill=_INK_MUTED,
-    )
-    cur_y += 50
-
-    # Subtle horizontal rule under the wordmark block
+    # Subtle horizontal rule under the wordmark
     draw.rectangle(
         [panel_x + inner_pad, cur_y, panel_x + _PANEL_W - inner_pad, cur_y + 1],
         fill=_LINE + (255,),
     )
-    cur_y += 32
+    cur_y += 36
 
-    # Title (Manrope Bold 30, up to 3 lines, ellipsis)
-    title_font = _font("Manrope-Bold.ttf", 30)
+    # Title (Manrope Bold 42, up to 3 lines, ellipsis) — the primary
+    # content of the share card. Sized so a typical "BMW M2 Competition
+    # 2020" fits on one or two lines and stays readable in WhatsApp /
+    # Telegram previews at 80 % scale.
+    title_font = _font("Manrope-Bold.ttf", 42)
+    line_h = 52
     title_max_w = _PANEL_W - inner_pad * 2
     title_lines = _wrap(draw, title, title_font, title_max_w, max_lines=3)
     for line in title_lines:
         draw.text((panel_x + inner_pad, cur_y), line, font=title_font, fill=_INK)
-        cur_y += 38
+        cur_y += line_h
 
     # --- Bottom: BIG current bid block ---------------------------------
     bottom_y = _H - _PAD - 4
@@ -333,7 +326,7 @@ def _cache_key(auction_id: str, current_bid: float, ends_at_iso: Optional[str]) 
             minute_bucket = end.strftime("%Y%m%d%H%M")
         except Exception:
             minute_bucket = ends_at_iso
-    raw = f"{auction_id}:{int(current_bid or 0)}:{minute_bucket}:v4"
+    raw = f"{auction_id}:{int(current_bid or 0)}:{minute_bucket}:v5"
     return hashlib.sha1(raw.encode()).hexdigest()[:16]
 
 
@@ -372,3 +365,95 @@ async def build_or_cache(auction: dict) -> bytes:
     except Exception as e:
         logger.debug("og: cache write failed: %s", e)
     return png
+
+
+# ---------------------------------------------------------------------------
+# Eager generation — called at publish time so the file exists before any
+# social crawler hits the listing. Writes to the shared uploads directory
+# (so nginx serves the PNG directly) and returns the public URL that gets
+# persisted on the auction document as `og_image_url`.
+# ---------------------------------------------------------------------------
+def _uploads_root() -> str:
+    return os.path.abspath(os.environ.get("UPLOAD_DIR", "/opt/autobids/uploads"))
+
+
+def _uploads_public_base() -> str:
+    return (os.environ.get("PUBLIC_UPLOAD_BASE") or "/api/uploads").rstrip("/")
+
+
+async def build_and_persist(auction: dict) -> str:
+    """Generate the OG PNG and store it in the uploads directory.
+
+    Returns the public URL including a `?v={updated_at_epoch}` cache
+    buster so Facebook/WhatsApp/Telegram refetch the image whenever the
+    auction changes (new bid, new title, etc.) even though the path
+    itself stays stable for SEO.
+
+    Path layout: `<UPLOAD_DIR>/og/<auction_id>.png`
+    Public URL:  `<PUBLIC_UPLOAD_BASE>/og/<auction_id>.png?v=<epoch>`
+
+    Raises no exceptions — on any failure we log and return the
+    auction's existing `og_image_url` (if any) or the static fallback
+    (`/og-default.jpg`). Callers can rely on always getting a string.
+    """
+    aid = str(auction.get("id") or "")
+    if not aid:
+        return auction.get("og_image_url") or "/og-default.jpg"
+
+    root = _uploads_root()
+    og_dir = os.path.join(root, "og")
+    out_path = os.path.join(og_dir, f"{aid}.png")
+    public_base = _uploads_public_base()
+
+    current_bid = float(
+        auction.get("current_bid_eur") or auction.get("starting_bid_eur") or 0
+    )
+    cover_url = (auction.get("thumbnails") or auction.get("images") or [None])[0]
+    try:
+        cover_bytes = await _fetch_image(cover_url) if cover_url else None
+        title = auction.get("title") or " ".join(
+            str(auction.get(k) or "") for k in ("year", "make", "model")
+        ).strip() or "Auto&Bid auction"
+        time_label, time_urgent = _english_time_left(auction.get("ends_at"))
+        featured = bool(auction.get("featured"))
+        bid_label = (
+            f"€{int(current_bid):,}".replace(",", "\u202f") if current_bid > 0 else None
+        )
+        bid_count = int(auction.get("bid_count") or 0)
+        bid_sub = f"· {bid_count} bids" if bid_count and bid_label else None
+
+        png = await asyncio.to_thread(
+            _compose_image,
+            cover_bytes, title, time_label, time_urgent, featured, bid_label, bid_sub,
+        )
+        os.makedirs(og_dir, exist_ok=True)
+        tmp = out_path + ".tmp"
+        with open(tmp, "wb") as f:
+            f.write(png)
+        os.replace(tmp, out_path)
+    except Exception as e:
+        logger.warning("og: persist failed for %s: %s", aid, e)
+        # Surface the existing URL if we already had one; otherwise the
+        # static fallback. The route still renders valid meta tags.
+        return auction.get("og_image_url") or "/og-default.jpg"
+
+    # Cache-buster from updated_at (fallback to file mtime). Social
+    # platforms like Facebook are aggressive about caching og:image by
+    # URL, so we never reuse the same querystring after a republish.
+    ver = auction.get("updated_at") or auction.get("created_at")
+    if hasattr(ver, "timestamp"):
+        ver_int = int(ver.timestamp())
+    elif isinstance(ver, str):
+        try:
+            ver_int = int(
+                datetime.fromisoformat(ver.replace("Z", "+00:00")).timestamp()
+            )
+        except Exception:
+            ver_int = int(os.path.getmtime(out_path))
+    else:
+        try:
+            ver_int = int(os.path.getmtime(out_path))
+        except Exception:
+            ver_int = int(time.time())
+
+    return f"{public_base}/og/{aid}.png?v={ver_int}"
