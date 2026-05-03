@@ -311,7 +311,7 @@ def build_stripe_router(db, get_current_user):
         doc = {
             "id": session["id"],  # stripe_checkout_session_id is the canonical id
             "stripe_checkout_session_id": session["id"],
-            "stripe_payment_intent_id": session.get("payment_intent"),
+            "stripe_payment_intent_id": getattr(session, "payment_intent", None),
             "user_id": user["id"],
             "auction_id": body.auction_id,
             "bidding_limit_eur": float(body.bidding_limit_eur),
@@ -370,10 +370,19 @@ def build_stripe_router(db, get_current_user):
         except stripe.error.StripeError as e:
             raise HTTPException(status_code=502, detail=f"Stripe retrieve: {e}")
         # Сигурност: session трябва да е на този потребител.
-        if (session.get("metadata") or {}).get("user_id") != user["id"]:
+        # Stripe's `StripeObject` raises AttributeError on missing fields
+        # instead of returning None, so use `getattr` with defaults.
+        session_metadata = getattr(session, "metadata", None) or {}
+        if (session_metadata.get("user_id") if hasattr(session_metadata, "get") else None) != user["id"]:
             raise HTTPException(status_code=403, detail="Сесията не принадлежи на този потребител.")
-        si = session.get("setup_intent") or {}
-        pm_id = si.get("payment_method") if isinstance(si, dict) else None
+        si = getattr(session, "setup_intent", None) or {}
+        pm_id = (
+            getattr(si, "payment_method", None)
+            if hasattr(si, "payment_method") or isinstance(si, dict)
+            else None
+        )
+        if not pm_id and isinstance(si, dict):
+            pm_id = si.get("payment_method")
         if not pm_id:
             raise HTTPException(status_code=400, detail="SetupIntent не е завършен — карта не е записана.")
         customer_id = await _get_or_create_stripe_customer(db, user)

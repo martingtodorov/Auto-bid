@@ -2021,3 +2021,27 @@ halo-effect.
 - 1× `premium_captured=false, current_bid=29 000` (release-only)
 - Stats: GMV = 44 000 € ✓ · Commission = 880 € (300 + 580) ✓ · sold_count = 2 ✓
 - 30-day bucket: същите стойности, защото `finalized_at` се пише сега.
+
+## 2026-05-03 — Fix: 500 error при preauth bidding flow
+
+**Bug**: `POST /api/stripe/authorizations/create-checkout` връщаше
+500 "Internal Server Error".
+
+**Root cause** (`routers/stripe_holds.py:314`):
+```python
+"stripe_payment_intent_id": session.get("payment_intent"),
+```
+Stripe SDK-то връща `StripeObject` вместо dict — `.get()` не е
+implemented за missing attrs и хвърля `AttributeError: get`.
+`payment_intent` ВИНАГИ е missing при checkout session create,
+защото се генерира асинхронно след payment.
+
+**Fix** (`routers/stripe_holds.py`):
+- Line 314: `getattr(session, "payment_intent", None)` вместо `session.get("payment_intent")`.
+- Also fixed similar dict-style access on lines 373-376 (metadata + setup_intent
+  retrieval) → defensive attr/get double-check.
+
+**Verified**:
+- `create-checkout` сега връща 200 с валиден Stripe Checkout URL:
+  `{"redirect":true,"id":"cs_test_...","url":"https://checkout.stripe.com/..."}`
+- Bidding flow работи end-to-end — потребителят се редиректва към Stripe.
