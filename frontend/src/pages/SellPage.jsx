@@ -414,7 +414,6 @@ export default function SellPage() {
                 placeholder="Sofia, София, Bucharest, Plovdiv…"
                 data-testid="sell-city"
               />
-              <p className="mt-1 text-xs text-[hsl(var(--ink-muted))]">{t("sell.form.city_hint", "Приемаме и кирилица, и латиница.")}</p>
             </Field>
             <Field label={t("sell.form.country")}>
               <select value={form.country} onChange={(e) => set("country", e.target.value)} className={inputCls} data-testid="sell-country">
@@ -533,8 +532,12 @@ export default function SellPage() {
                 {(() => {
                   // Aggregate raw bytes across every category so each uploader
                   // can know how much of the 120 MB budget is already used.
+                  // Hosted URLs (e.g. mobile.bg imports) don't contribute to
+                  // the upload budget — they live on remote CDNs — but we
+                  // still count them in the photo total so the user always
+                  // sees how many photos are attached.
                   const dataUrlBytes = (url) => {
-                    if (!url || typeof url !== "string") return 0;
+                    if (!url || typeof url !== "string" || !url.startsWith("data:")) return 0;
                     const i = url.indexOf(",");
                     if (i < 0) return 0;
                     return Math.floor((url.length - i - 1) * 0.75);
@@ -545,6 +548,7 @@ export default function SellPage() {
                     ...(form.images_wheels || []),
                     ...(form.images_interior || []),
                   ];
+                  const totalPhotos = allImgs.length;
                   const usedBytes = allImgs.reduce((s, u) => s + dataUrlBytes(u), 0);
                   const usedMB = (usedBytes / 1024 / 1024).toFixed(1);
                   const pct = Math.min(100, (usedBytes / (120 * 1024 * 1024)) * 100);
@@ -552,13 +556,23 @@ export default function SellPage() {
                   return (
                     <>
                       <div className="text-xs text-[hsl(var(--ink-muted))]" data-testid="photos-budget">
-                        <span>{t("sell.form.photos_budget", { used: usedMB, total: "120 MB" })}</span>
-                        <div className="h-1 mt-1 rounded-full bg-[hsl(var(--line))] overflow-hidden">
-                          <div
-                            className={`h-full transition-all ${near ? "bg-[hsl(var(--danger))]" : "bg-[hsl(var(--accent))]"}`}
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
+                        <span>
+                          {t("sell.form.photos_count", "Снимки: {{n}}", { n: totalPhotos })}
+                          {usedBytes > 0 && (
+                            <>
+                              {" · "}
+                              {t("sell.form.photos_budget", { used: usedMB, total: "120 MB" })}
+                            </>
+                          )}
+                        </span>
+                        {usedBytes > 0 && (
+                          <div className="h-1 mt-1 rounded-full bg-[hsl(var(--line))] overflow-hidden">
+                            <div
+                              className={`h-full transition-all ${near ? "bg-[hsl(var(--danger))]" : "bg-[hsl(var(--accent))]"}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        )}
                       </div>
                       <ImageUploader
                         label={t("sell.form.exterior")}

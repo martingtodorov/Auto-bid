@@ -501,6 +501,7 @@
       "photos": "Car photos",
       "photos_hint": "Please upload all required photos: min. 8 exterior, 4 wheels (one each), 1 front bumper, 4 interior. The first exterior photo is the cover.",
       "photos_budget": "Used: {{used}} MB / {{total}} (max 10 MB per photo)",
+      "photos_count": "Photos: {{n}}",
       "exterior": "Exterior",
       "exterior_helper": "Photos from all sides of the car",
       "bumper": "Front bumper",
