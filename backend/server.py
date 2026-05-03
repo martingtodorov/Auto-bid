@@ -15,7 +15,6 @@ from typing import List, Optional
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Query, WebSocket, WebSocketDisconnect, Response
 from fastapi.responses import PlainTextResponse
 from starlette.middleware.cors import CORSMiddleware
-from starlette.middleware.gzip import GZipMiddleware
 import re
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import ReturnDocument
@@ -4513,10 +4512,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# GZip JSON/HTML responses ≥ 500 B. Cuts auction list payloads ~80%
-# (typical 50 KB JSON → ~10 KB on the wire). The k8s ingress/Cloudflare
-# may add a second layer of compression on top — that's harmless.
-app.add_middleware(GZipMiddleware, minimum_size=500, compresslevel=5)
+# NOTE: We deliberately do NOT add Starlette's `GZipMiddleware` here.
+# It uses pure ASGI streaming and breaks `BaseHTTPMiddleware`-style
+# decorator middlewares (waf, csrf, maintenance_mode) with
+# `RuntimeError: No response returned.` — a known upstream issue.
+# Compression is handled instead by:
+#   • Cloudflare (production: autoandbid.bg / .ro / .com)
+#   • nginx (Hetzner: gzip on, gzip_types application/json)
+#   • k8s ingress (preview env): auto-gzips compressible MIME types
+# All three apply on the wire, so JSON payloads still arrive ~80% smaller
+# without us having to touch the FastAPI middleware stack.
 
 
 # Serve uploaded images from disk when STORAGE_BACKEND=disk (default).
