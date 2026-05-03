@@ -62,6 +62,15 @@ async def robots_txt(request: Request):
     """Dynamic robots.txt — flips to full Disallow when admin enables
     `deindex_mode` in /admin/settings. Nginx should proxy `/robots.txt`
     → this endpoint so crawlers see the live value."""
+    # Explicit headers so intermediaries (notably Cloudflare AI Shield,
+    # which otherwise injects `Content-Signal:` directives when it sees
+    # HTML content type) don't rewrite the body. `no-transform` is the
+    # documented opt-out for CF's "Content Signals" managed transform.
+    _plain_headers = {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "public, max-age=3600, no-transform",
+        "X-Robots-Tag": "noindex",  # the file itself is not indexed
+    }
     frontend_base = _frontend_base(request)
     if await _deindex_enabled():
         body = (
@@ -69,7 +78,10 @@ async def robots_txt(request: Request):
             "User-agent: *\n"
             "Disallow: /\n"
         )
-        return PlainTextResponse(content=body, headers={"Cache-Control": "no-store"})
+        return PlainTextResponse(
+            content=body,
+            headers={**_plain_headers, "Cache-Control": "no-store, no-transform"},
+        )
     body = (
         "User-agent: *\n"
         "Allow: /\n"
@@ -88,7 +100,7 @@ async def robots_txt(request: Request):
         f"Sitemap: {frontend_base}/sitemap.xml\n"
         f"Sitemap: {frontend_base}/sitemap-images.xml\n"
     )
-    return PlainTextResponse(content=body, headers={"Cache-Control": "public, max-age=3600"})
+    return PlainTextResponse(content=body, headers=_plain_headers)
 
 
 def _json_ld_vehicle(a: dict, url: str) -> str:

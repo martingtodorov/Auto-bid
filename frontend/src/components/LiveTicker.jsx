@@ -30,29 +30,34 @@ export default function LiveTicker() {
     return () => clearInterval(i);
   }, []);
 
-  if (!items.length) return null;
-  const loop = [...items, ...items];
+  // Always render the outer shell — even while `items` is empty — so the
+  // 36 px ticker bar is reserved from the very first paint. Previously we
+  // returned `null` until the fetch resolved, which pushed the entire hero
+  // down by 36 px and produced a ~0.47 CLS spike (flagged by PageSpeed).
+  const loop = items.length ? [...items, ...items] : [];
 
   return (
     <div className="bg-black text-white border-b border-[hsl(var(--line))]" data-testid="live-ticker">
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 h-9 flex items-center">
         <div className="flex-1 overflow-hidden relative ticker-scroll">
-          <div className="flex whitespace-nowrap animate-marquee w-max">
-            {loop.map((a, i) => (
-              <Link
-                key={i}
-                to={auctionUrl(a)}
-                className="flex items-center gap-3 text-xs font-mono text-white/80 hover:text-white transition shrink-0 pr-10"
-                data-testid={`ticker-item-${i}`}
-              >
-                <span className="truncate max-w-[220px]">{a.title}</span>
-                <span className="font-semibold" style={{ color: "#6DE0B1" }}>{formatEUR(grossEUR(a.current_bid_eur, a))}</span>
-                <span className="text-white/30">·</span>
-                <span className="text-white/40">{a.bid_count || 0} {t("time.bids_short")}</span>
-                <span className="text-white/20 ml-3">|</span>
-              </Link>
-            ))}
-          </div>
+          {loop.length > 0 ? (
+            <div className="flex whitespace-nowrap animate-marquee w-max">
+              {loop.map((a, i) => (
+                <Link
+                  key={i}
+                  to={auctionUrl(a)}
+                  className="flex items-center gap-3 text-xs font-mono text-white/80 hover:text-white transition shrink-0 pr-10"
+                  data-testid={`ticker-item-${i}`}
+                >
+                  <span className="truncate max-w-[220px]">{a.title}</span>
+                  <span className="font-semibold" style={{ color: "#6DE0B1" }}>{formatEUR(grossEUR(a.current_bid_eur, a))}</span>
+                  <span className="text-white/30">·</span>
+                  <span className="text-white/40">{a.bid_count || 0} {t("time.bids_short")}</span>
+                  <span className="text-white/20 ml-3">|</span>
+                </Link>
+              ))}
+            </div>
+          ) : null /* height reserved by parent `h-9` — no jump on load */}
         </div>
       </div>
     </div>

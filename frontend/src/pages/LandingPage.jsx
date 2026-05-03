@@ -143,7 +143,7 @@ export default function LandingPage() {
             <div className="lg:col-span-7 fade-up">
               {heroes.length > 0 ? (
                 <div data-testid="hero-featured-auction">
-                  <div className="overline text-[hsl(var(--accent))] mb-2">{t("hero.featured_listing")}</div>
+                  <h2 className="overline text-[hsl(var(--accent))] mb-2 font-sans !text-xs !leading-tight !tracking-widest">{t("hero.featured_listing")}</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-5">
                     {heroes.map((h, idx) => (
                       <AuctionCard key={h.id} auction={h} priority={idx === 0} />

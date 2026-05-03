@@ -72,23 +72,27 @@ const applySocialBotMiddleware = (devServerConfig) => {
   const SOCIAL_BOTS_RE = /(facebookexternalhit|facebot|twitterbot|slackbot|whatsapp|telegrambot|linkedinbot|discordbot|pinterestbot|skypeuripreview|redditbot|vkshare|applebot|googlebot-image)/i;
   const AUCTION_PATH_RE = /^\/auctions\/([^/?#]+)\/?$/;
 
-  const botShareMiddleware = (req, res, next) => {
-    if (req.method !== "GET") return next();
-    const m = AUCTION_PATH_RE.exec((req.url || "").split("?")[0] || "");
-    if (!m) return next();
-    const ua = req.headers["user-agent"] || "";
-    if (!SOCIAL_BOTS_RE.test(ua)) return next();
-    const slug = m[1];
+  // Also proxy SEO root endpoints to the backend — otherwise the React
+  // dev server falls through to index.html, returns HTML, and Cloudflare's
+  // AI Shield layer wraps the HTML body with "Content-Signal" directives
+  // that PageSpeed flags as robots.txt syntax errors.
+  const SEO_PATHS = new Set([
+    "/robots.txt",
+    "/sitemap.xml",
+    "/sitemap-images.xml",
+  ]);
+
+  const proxyToBackend = (req, res, backendPath, next) => {
     const http = require("http");
     const proxyReq = http.request(
       {
         host: "127.0.0.1",
         port: 8001,
-        path: `/api/share/auction/${encodeURIComponent(slug)}`,
+        path: backendPath,
         method: "GET",
         headers: {
           Host: req.headers.host || "localhost",
-          "User-Agent": ua,
+          "User-Agent": req.headers["user-agent"] || "",
           "X-Forwarded-Proto": req.headers["x-forwarded-proto"] || "https",
           "X-Forwarded-For": req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "",
         },
@@ -104,6 +108,24 @@ const applySocialBotMiddleware = (devServerConfig) => {
     );
     proxyReq.on("error", () => next());
     proxyReq.end();
+  };
+
+  const botShareMiddleware = (req, res, next) => {
+    if (req.method !== "GET") return next();
+    const url = (req.url || "").split("?")[0] || "";
+    // SEO root passthroughs (always hit backend regardless of UA)
+    if (SEO_PATHS.has(url)) {
+      return proxyToBackend(req, res, `/api${url}`, next);
+    }
+    const m = AUCTION_PATH_RE.exec(url);
+    if (!m) return next();
+    const ua = req.headers["user-agent"] || "";
+    if (!SOCIAL_BOTS_RE.test(ua)) return next();
+    return proxyToBackend(
+      req, res,
+      `/api/share/auction/${encodeURIComponent(m[1])}`,
+      next,
+    );
   };
 
   const originalSetupMiddlewares = devServerConfig.setupMiddlewares;
