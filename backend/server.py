@@ -2225,12 +2225,154 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
     return {"ok": True, "bid": public_bid, "preauth_amount_eur": fee_amount, "buyer_fee_eur": fee_amount}
 
 
+# ─── Paid auction promotion ─────────────────────────────────────────────
+# Sellers can pay €30 to pin their auction into the featured rotation
+# (shown first in the homepage "Active Auctions" grid + hero pool).
+# Payment is taken via Stripe Checkout — the `/promote/finalize`
+# endpoint verifies the payment and sets `featured=True` on the auction.
+# The previous "request-promotion" moderator-review flow is removed;
+# promotion is now self-serve and instant on payment.
+PROMOTION_PRICE_EUR = 30.0
+
+
+@api.post("/auctions/{auction_id}/promote/checkout")
+async def promote_checkout(auction_id: str, request: Request, body: dict = None,
+                           user: dict = Depends(require_verified_email)):
+    """Create a €30 Stripe Checkout for auction promotion. Seller-only."""
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Обявата не е намерена")
+    if a.get("seller_id") != user["id"]:
+        raise HTTPException(status_code=403, detail="Само продавачът може да промотира обявата си.")
+    if a.get("status") not in ("pending", "live"):
+        raise HTTPException(status_code=400, detail="Може да се промотират само активни/очакващи обяви.")
+    if a.get("featured"):
+        raise HTTPException(status_code=400, detail="Тази обява вече е промотирана.")
+
+    import stripe
+    api_key = os.environ.get("STRIPE_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="Stripe не е конфигуриран.")
+    stripe.api_key = api_key
+
+    # Preserve the seller's current domain (.bg/.com) on the return URL.
+    origin = ""
+    if isinstance(body, dict):
+        origin = str(body.get("origin") or "").rstrip("/")
+    if not origin:
+        origin = str(request.base_url).rstrip("/")
+
+    success_url = f"{origin}/my-listings?promote_session={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{origin}/my-listings?promote_cancelled=1"
+
+    try:
+        session = stripe.checkout.Session.create(
+            mode="payment",
+            line_items=[{
+                "price_data": {
+                    "currency": "eur",
+                    "product_data": {
+                        "name": f"Промотиране на обява: {a.get('title','')[:90]}",
+                        "description": "Еднократна такса за поставяне в избрана секция на началната страница.",
+                    },
+                    "unit_amount": int(PROMOTION_PRICE_EUR * 100),
+                },
+                "quantity": 1,
+            }],
+            payment_intent_data={
+                "capture_method": "automatic",
+                "metadata": {
+                    "user_id": user["id"],
+                    "auction_id": auction_id,
+                    "intent": "promote_auction",
+                },
+            },
+            metadata={
+                "user_id": user["id"],
+                "auction_id": auction_id,
+                "intent": "promote_auction",
+            },
+            customer_email=user.get("email"),
+            success_url=success_url,
+            cancel_url=cancel_url,
+        )
+    except stripe.error.StripeError as e:
+        logger.exception("promote stripe.checkout.create failed")
+        raise HTTPException(status_code=502, detail=f"Stripe error: {getattr(e, 'user_message', str(e))}")
+
+    await db.promotion_payments.insert_one({
+        "session_id": session["id"],
+        "user_id": user["id"],
+        "auction_id": auction_id,
+        "amount_eur": PROMOTION_PRICE_EUR,
+        "status": "pending",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"redirect": True, "id": session["id"], "url": session["url"]}
+
+
+@api.post("/auctions/{auction_id}/promote/finalize")
+async def promote_finalize(auction_id: str, body: dict,
+                           user: dict = Depends(require_verified_email)):
+    """Activate the `featured` flag after a successful promotion payment.
+    Idempotent: a second call on the same session is a no-op."""
+    session_id = (body or {}).get("session_id") or ""
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id липсва")
+
+    import stripe
+    api_key = os.environ.get("STRIPE_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="Stripe не е конфигуриран.")
+    stripe.api_key = api_key
+
+    try:
+        session = stripe.checkout.Session.retrieve(session_id)
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=502, detail=f"Stripe retrieve: {e}")
+
+    meta = getattr(session, "metadata", None) or {}
+    if (meta.get("user_id") if hasattr(meta, "get") else None) != user["id"]:
+        raise HTTPException(status_code=403, detail="Сесията не принадлежи на този потребител.")
+    if (meta.get("auction_id") if hasattr(meta, "get") else None) != auction_id:
+        raise HTTPException(status_code=400, detail="Сесията не е за тази обява.")
+    if getattr(session, "payment_status", None) != "paid":
+        raise HTTPException(status_code=402, detail="Плащането все още не е потвърдено.")
+
+    payment = await db.promotion_payments.find_one({"session_id": session_id}, {"_id": 0})
+    if payment and payment.get("status") == "activated":
+        return {"ok": True, "already_activated": True}
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    await db.auctions.update_one(
+        {"id": auction_id},
+        {"$set": {
+            "featured": True,
+            "featured_at": now_iso,
+            "featured_paid": True,
+            "featured_session_id": session_id,
+        }},
+    )
+    await db.promotion_payments.update_one(
+        {"session_id": session_id},
+        {"$set": {"status": "activated", "activated_at": now_iso}},
+    )
+    return {"ok": True, "auction_id": auction_id}
+
+
+
 @api.post("/auctions/{auction_id}/buy-now")
 @limiter.limit("10/minute")
-async def buy_now(auction_id: str, request: Request, user: dict = Depends(require_verified_email)):
-    """Instantly purchase an auction at its 'Купи сега' price. Ends the auction
-    and assigns the buyer as the winner. Buyer's premium is computed on the
-    gross (incl. VAT) price and pre-authorised on the user's saved card.
+async def buy_now(auction_id: str, request: Request, body: dict = None, user: dict = Depends(require_verified_email)):
+    """Instant purchase via Stripe Checkout. Creates a Stripe payment
+    session for the GROSS (incl. VAT) buy-now price and returns the
+    redirect URL. The actual auction claim only happens in
+    `/buy-now/finalize` AFTER the payment succeeds — this prevents
+    auctions from being "reserved" by users who abandon the checkout.
+
+    Atomic guarantee: `/buy-now/finalize` uses `find_one_and_update`
+    to claim the auction exactly once; if two users pay simultaneously,
+    the second gets auto-refunded.
     """
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     if not a:
@@ -2239,49 +2381,194 @@ async def buy_now(auction_id: str, request: Request, user: dict = Depends(requir
         raise HTTPException(status_code=400, detail="Само активни търгове поддържат 'Купи сега'.")
     if user["id"] == a.get("seller_id"):
         raise HTTPException(status_code=400, detail="Не можете да закупите собствения си автомобил.")
-    bn = a.get("buy_now_eur")
-    if not bn or float(bn) <= 0:
+    bn_net = a.get("buy_now_eur")
+    if not bn_net or float(bn_net) <= 0:
         raise HTTPException(status_code=400, detail="Тази обява няма зададена цена 'Купи сега'.")
-    bn = float(bn)
+    bn_net = float(bn_net)
+    if float(a.get("current_bid_eur") or 0) > bn_net:
+        raise HTTPException(status_code=409, detail="Текущата оферта вече надвишава цената 'Купи сега'.")
+
+    bn_gross = _gross_amount(bn_net, a)
+    amount_cents = int(round(bn_gross * 100))
+
+    import stripe
+    api_key = os.environ.get("STRIPE_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="Stripe не е конфигуриран.")
+    stripe.api_key = api_key
+
+    # Preserve the original domain the user came from (.bg vs .com) — the
+    # frontend passes `window.location.origin` in the request body, and
+    # the Stripe success_url echoes it back so we return to the right
+    # place. Fall back to request base_url if the client didn't send one.
+    origin = ""
+    if isinstance(body, dict):
+        origin = str(body.get("origin") or "").rstrip("/")
+    if not origin:
+        origin = str(request.base_url).rstrip("/")
+
+    success_url = f"{origin}/auctions/{auction_id}?buy_now_session={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{origin}/auctions/{auction_id}?buy_now_cancelled=1"
+
+    try:
+        session = stripe.checkout.Session.create(
+            mode="payment",
+            line_items=[{
+                "price_data": {
+                    "currency": "eur",
+                    "product_data": {
+                        "name": f"Купи сега: {a.get('title','')[:90]}",
+                        "description": f"Незабавна покупка на обявата (включва ДДС)" if a.get("vat_status") == "vat_inclusive" else "Незабавна покупка на обявата",
+                    },
+                    "unit_amount": amount_cents,
+                },
+                "quantity": 1,
+            }],
+            # Immediate capture — buy-now is a decisive action, no hold
+            # semantics. If atomic claim fails in /finalize, we refund.
+            payment_intent_data={
+                "capture_method": "automatic",
+                "metadata": {
+                    "user_id": user["id"],
+                    "auction_id": auction_id,
+                    "intent": "buy_now",
+                    "amount_gross_eur": str(round(bn_gross, 2)),
+                    "amount_net_eur": str(round(bn_net, 2)),
+                },
+            },
+            metadata={
+                "user_id": user["id"],
+                "auction_id": auction_id,
+                "intent": "buy_now",
+            },
+            customer_email=user.get("email"),
+            success_url=success_url,
+            cancel_url=cancel_url,
+        )
+    except stripe.error.StripeError as e:
+        logger.exception("buy-now stripe.checkout.create failed")
+        raise HTTPException(status_code=502, detail=f"Stripe error: {getattr(e, 'user_message', str(e))}")
+
+    # Log the intent so admins can audit abandoned sessions
+    await db.buy_now_intents.insert_one({
+        "session_id": session["id"],
+        "user_id": user["id"],
+        "auction_id": auction_id,
+        "amount_gross_eur": bn_gross,
+        "amount_net_eur": bn_net,
+        "status": "pending",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {
+        "redirect": True,
+        "id": session["id"],
+        "url": session["url"],
+        "amount_gross_eur": bn_gross,
+        "amount_net_eur": bn_net,
+    }
+
+
+@api.post("/auctions/{auction_id}/buy-now/finalize")
+async def buy_now_finalize(auction_id: str, body: dict, user: dict = Depends(require_verified_email)):
+    """Claim the auction after a successful buy-now Stripe Checkout.
+    Body: `{session_id: "cs_test_..."}`. Idempotent — safe to call
+    twice (e.g. if the user refreshes after the redirect). Second
+    simultaneous buyer gets an auto-refund.
+    """
+    session_id = (body or {}).get("session_id") or ""
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id липсва")
+
+    import stripe
+    api_key = os.environ.get("STRIPE_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="Stripe не е конфигуриран.")
+    stripe.api_key = api_key
+
+    try:
+        session = stripe.checkout.Session.retrieve(session_id)
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=502, detail=f"Stripe retrieve: {e}")
+
+    meta = getattr(session, "metadata", None) or {}
+    if (meta.get("user_id") if hasattr(meta, "get") else None) != user["id"]:
+        raise HTTPException(status_code=403, detail="Сесията не принадлежи на този потребител.")
+    if (meta.get("auction_id") if hasattr(meta, "get") else None) != auction_id:
+        raise HTTPException(status_code=400, detail="Сесията не е за тази обява.")
+    if getattr(session, "payment_status", None) != "paid":
+        raise HTTPException(status_code=402, detail="Плащането все още не е потвърдено от Stripe.")
+
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    if not a:
+        raise HTTPException(status_code=404, detail="Търгът не е намерен")
+
+    # If already sold via this same session (idempotent replay) just
+    # return success. If sold via a different session/user, refund.
+    intent_doc = await db.buy_now_intents.find_one({"session_id": session_id}, {"_id": 0})
+    if intent_doc and intent_doc.get("status") == "finalized":
+        return {"ok": True, "already_finalized": True, "auction_id": auction_id}
+
+    bn_net = float(a.get("buy_now_eur") or 0)
     now = datetime.now(timezone.utc)
-    # Buyer's premium for Buy Now: 2% of the gross (incl. VAT) price, clamped
-    # by the platform's configured min/max in admin Settings (default 150 / 4000).
-    fee_amount = _buyer_fee_on_auction(bn, a)
-    # Atomic claim — only one user can buy. Conditions:
-    #   • Auction is still live (not already sold/finalized/archived).
-    #   • Current bid hasn't surpassed the buy-now price meanwhile.
-    # Two clicks at the same time → exactly one wins, the other gets 409.
+    now_iso = now.isoformat()
+
+    # Atomic claim — same safety as before, minus the bid_count increment
+    # (buy-now is not a bid, per user request).
     claim = await db.auctions.find_one_and_update(
         {
             "id": auction_id,
             "status": {"$in": ["live", "scheduled"]},
             "is_archived": {"$ne": True},
-            "current_bid_eur": {"$lte": bn},
+            "current_bid_eur": {"$lte": bn_net},
         },
         {
             "$set": {
                 "status": "sold",
-                "current_bid_eur": bn,
+                "current_bid_eur": bn_net,
                 "high_bidder_id": user["id"],
                 "high_bidder_name": user["name"],
-                "ends_at": now.isoformat(),
-                "sold_at": now.isoformat(),
+                "ends_at": now_iso,
+                "sold_at": now_iso,
+                # `finalized_at` makes the auction show up in 30-day GMV
+                # metrics and in the buyer's profile Purchases tab. The
+                # previous (direct) buy-now path forgot this field, which
+                # is part of the reason profile stats weren't updating.
+                "finalized_at": now_iso,
                 "sold_via_buy_now": True,
+                "buy_now_session_id": session_id,
             },
-            "$inc": {"bid_count": 1},
         },
         return_document=ReturnDocument.AFTER,
-        projection={"_id": 0, "bid_count": 1},
     )
+
     if not claim:
-        raise HTTPException(status_code=409, detail="Търгът вече е продаден или цената е надвишена.")
+        # Someone else won the race → refund this user's payment and
+        # return a specific error so the UI can explain.
+        pi_id = getattr(session, "payment_intent", None)
+        if pi_id:
+            try:
+                stripe.Refund.create(payment_intent=pi_id, reason="duplicate")
+            except Exception as e:
+                logger.error("buy-now refund failed for session=%s: %s", session_id, e)
+        await db.buy_now_intents.update_one(
+            {"session_id": session_id},
+            {"$set": {"status": "refunded_lost_race", "updated_at": now_iso}},
+        )
+        raise HTTPException(status_code=409, detail="Търгът вече е продаден. Плащането ви е възстановено.")
+
+    await db.buy_now_intents.update_one(
+        {"session_id": session_id},
+        {"$set": {"status": "finalized", "finalized_at": now_iso}},
+    )
+
     await hub.broadcast(auction_id, {
         "type": "buy_now",
         "auction_id": auction_id,
         "buyer_name": user["name"],
-        "amount_eur": bn,
-        "ends_at": now.isoformat(),
+        "amount_eur": bn_net,
+        "ends_at": now_iso,
     })
+
     seller_id = a.get("seller_id")
     if seller_id and seller_id != "platform":
         try:
@@ -2289,20 +2576,21 @@ async def buy_now(auction_id: str, request: Request, user: dict = Depends(requir
             if seller and seller.get("email"):
                 await email_seller_new_bid(
                     seller["email"], seller.get("name", ""), a["title"], auction_id,
-                    user["name"], bn, int(claim.get("bid_count", 1)),
+                    user["name"], bn_net, int(a.get("bid_count") or 0),
                 )
         except Exception as e:
             logger.warning("buy-now seller email failed: %s", e)
-    # Admin push (in-app + Web Push)
+
+    # Admin push with gross+commission (see _admin_notif_vat_fields)
     try:
         from routers.inbox import notify_admins as _notify_admins
-        vat = _admin_notif_vat_fields(bn, a)
+        vat = _admin_notif_vat_fields(bn_net, a)
         await _notify_admins(
             db,
             type="auction_buy_now",
             data={
                 "title": a.get("title", ""),
-                "amount": bn,
+                "amount": bn_net,
                 "amount_gross": vat["gross"],
                 "commission": vat["commission"],
                 "buyer": user.get("name", ""),
@@ -2311,9 +2599,6 @@ async def buy_now(auction_id: str, request: Request, user: dict = Depends(requir
             push_template_id="admin_auction_buy_now",
             push_fmt={
                 "title": (a.get("title") or "")[:80],
-                # Show the GROSS price in the notification body — that's the
-                # amount the buyer actually paid, and the basis for the 2 %
-                # commission figure we also include.
                 "amount": vat["gross"],
                 "vat_suffix": vat["vat_suffix"],
                 "commission": vat["commission"],
@@ -2321,7 +2606,7 @@ async def buy_now(auction_id: str, request: Request, user: dict = Depends(requir
         )
     except Exception:
         pass
-    return {"ok": True, "auction_id": auction_id, "amount_eur": bn, "buyer_fee_eur": fee_amount}
+    return {"ok": True, "auction_id": auction_id, "amount_eur": bn_net}
 
 
 @api.get("/auctions/{auction_id}/next-bid")

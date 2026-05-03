@@ -176,10 +176,20 @@ export default function AuctionDetailPage() {
     setBuyingNow(true);
     setError("");
     try {
-      await api.post(`/auctions/${id}/buy-now`);
-      // server broadcasts via WS; refresh anyway
-      const { data } = await api.get(`/auctions/${id}`);
-      setA(data);
+      // Hand off to Stripe Checkout. The backend creates a PaymentIntent
+      // for the full GROSS price (incl. VAT) and returns a hosted URL.
+      // `origin` preserves the domain the user is on (.bg vs .com) so
+      // Stripe's success_url redirects back to the SAME domain.
+      const { data } = await api.post(`/auctions/${id}/buy-now`, {
+        origin: window.location.origin,
+      });
+      if (data?.url) {
+        window.location.assign(data.url);
+        return;
+      }
+      // Fallback (should never happen — backend always returns redirect)
+      const { data: fresh } = await api.get(`/auctions/${id}`);
+      setA(fresh);
     } catch (e) {
       setError(formatError(e));
     } finally {
@@ -294,6 +304,50 @@ export default function AuctionDetailPage() {
     const params = new URLSearchParams(window.location.search);
     const sid = params.get("stripe_session_id");
     const cancelled = params.get("stripe_cancelled");
+    // ─── Buy Now return handler ────────────────────────────────────────
+    // Separate param name so we don't collide with the bidding flow.
+    // Backend `/buy-now/finalize` atomically claims the auction; if we
+    // lost the race it refunds us automatically. `paid` is determined
+    // by Stripe's webhook — poll up to 10× (20s) for the session to
+    // transition to `paid` in case the browser redirect beat the webhook.
+    const buyNowSid = params.get("buy_now_session");
+    const buyNowCancelled = params.get("buy_now_cancelled");
+    if (buyNowCancelled) {
+      setError(t("auction.buy_now_cancelled", "Покупката бе отказана."));
+      params.delete("buy_now_cancelled");
+      window.history.replaceState({}, "", `${window.location.pathname}${params.toString() ? "?" + params : ""}`);
+      return;
+    }
+    if (buyNowSid && id) {
+      let cancel = false;
+      (async () => {
+        for (let i = 0; i < 10 && !cancel; i++) {
+          try {
+            await api.post(`/auctions/${id}/buy-now/finalize`, { session_id: buyNowSid });
+            const { data: fresh } = await api.get(`/auctions/${id}`);
+            setA(fresh);
+            break;
+          } catch (e) {
+            const status = e?.response?.status;
+            if (status === 409) {
+              // Someone else won — refund already issued by backend.
+              setError(formatError(e));
+              break;
+            }
+            if (status === 402) {
+              // Payment not yet confirmed by Stripe webhook — retry.
+              await new Promise((r) => setTimeout(r, 2000));
+              continue;
+            }
+            setError(formatError(e));
+            break;
+          }
+        }
+        params.delete("buy_now_session");
+        window.history.replaceState({}, "", `${window.location.pathname}${params.toString() ? "?" + params : ""}`);
+      })();
+      return () => { cancel = true; };
+    }
     if (cancelled) {
       setError(t("preauth.stripe_cancelled", "Плащането през Stripe бе отказано."));
       params.delete("stripe_cancelled");

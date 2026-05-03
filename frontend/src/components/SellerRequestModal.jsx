@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { X, Star, FileEdit, Images, ArrowUp, ArrowDown, Trash2, GripVertical } from "lucide-react";
+import { X, FileEdit, Images, ArrowUp, ArrowDown, Trash2, GripVertical } from "lucide-react";
 import { api } from "../lib/apiClient";
 import { formatError } from "../lib/auth";
 import { useTranslation } from "react-i18next";
@@ -21,9 +21,6 @@ export default function SellerRequestModal({ auction, mode, onClose, onDone }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  // Promote state
-  const [promoteNote, setPromoteNote] = useState("");
-
   // Text change state
   const [newTitle, setNewTitle] = useState(auction?.title || "");
   const [newDesc, setNewDesc] = useState(auction?.description || "");
@@ -44,9 +41,7 @@ export default function SellerRequestModal({ auction, mode, onClose, onDone }) {
   const submit = async () => {
     setErr(""); setBusy(true);
     try {
-      if (mode === "promote") {
-        await api.post(`/auctions/${auction.id}/request-promotion`, { note: promoteNote || null });
-      } else if (mode === "text") {
+      if (mode === "text") {
         if (!newTitle && !newDesc) {
           setErr(t("forms.required"));
           setBusy(false);
@@ -175,11 +170,10 @@ export default function SellerRequestModal({ auction, mode, onClose, onDone }) {
   };
 
   const titleMap = {
-    promote: { icon: Star, title: t("seller.promote_request") },
     text: { icon: FileEdit, title: t("seller.request_text_change") },
     reorder: { icon: Images, title: t("seller.reorder_photos") },
   };
-  const Meta = titleMap[mode] || titleMap.promote;
+  const Meta = titleMap[mode] || titleMap.text;
   const Icon = Meta.icon;
 
   return (
@@ -201,22 +195,7 @@ export default function SellerRequestModal({ auction, mode, onClose, onDone }) {
             <div className="text-sm text-[hsl(var(--ink))] mt-0.5">{auction.title}</div>
           </div>
 
-          {mode === "promote" && (
-            <>
-              <p className="text-sm text-[hsl(var(--ink-muted))]" data-testid="promote-description">{t("seller.promote_description")}</p>
-              <div>
-                <label className="overline text-[hsl(var(--ink-muted))] block mb-1.5">{t("seller.note_for_mod")}</label>
-                <textarea
-                  value={promoteNote}
-                  onChange={(e) => setPromoteNote(e.target.value)}
-                  rows={4}
-                  maxLength={600}
-                  className="w-full border border-[hsl(var(--line))] p-3 text-sm"
-                  data-testid="promote-note-input"
-                />
-              </div>
-            </>
-          )}
+          {/* Promotion is now self-serve via Stripe Checkout — no modal mode. */}
 
           {mode === "text" && (
             <>

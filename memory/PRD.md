@@ -2072,3 +2072,61 @@ implemented за missing attrs и хвърля `AttributeError: get`.
 
 Сега админът веднага вижда реалната сума на плащане и точната
 комисионна при всеки продаден с VAT търг.
+
+## 2026-05-03 — Buy Now Stripe Checkout + promotion €30 payment + homepage cleanup
+
+### Request 1: Buy Now → Stripe Checkout (fix)
+**Bug**: `/buy-now` маркираше auction като sold мигновено без да
+изисква плащане. Също така инкрементираше `bid_count`.
+
+**Fix** (`server.py`):
+- `/api/auctions/{id}/buy-now` изцяло rewrite — сега създава Stripe
+  Checkout session за GROSS (нето + ДДС) buy-now цена, immediate
+  capture. Връща `{url: ...}`.
+- Нов endpoint `/api/auctions/{id}/buy-now/finalize` (POST) — извиква
+  се след redirect-back с `session_id`. Проверява payment_status=paid
+  + metadata → атомично claim-ва auction (`find_one_and_update`).
+  Ако друг е купил пред него → auto-refund + 409.
+- **Bid count НЕ се увеличава** (по искане на потребителя — buy-now
+  не е наддаване).
+- **finalized_at се попълва** → `high_bidder_id` + profile
+  "Покупки"/„Печеливши" статистиката се обновяват.
+- `domain preservation`: frontend подава `window.location.origin`;
+  success_url echo-ва го обратно → `.bg` остава `.bg`, `.com` остава
+  `.com`.
+
+**Frontend** (`AuctionDetailPage.jsx`):
+- `onBuyNow` → redirects to Stripe (`window.location.assign(data.url)`).
+- `useEffect` проверява `?buy_now_session=<id>` след return, извиква
+  `/buy-now/finalize` (с до 10 retries за случаите когато webhook-ът
+  още не е ъпдейтнал статуса). `?buy_now_cancelled=1` показва грешка.
+
+### Request 2: Paid €30 promotion (replaces "request-promotion" moderator flow)
+**Backend** (`server.py`):
+- `/api/auctions/{id}/promote/checkout` — създава €30 Stripe Checkout
+  (immediate capture), seller-only, validates auction status.
+- `/api/auctions/{id}/promote/finalize` — verifies payment + атомично
+  сетва `featured=True, featured_paid=True, featured_session_id`.
+- Стар `/api/auctions/{id}/request-promotion` **премахнат** от
+  `routers/seller_requests.py`.
+
+**Frontend**:
+- `MyListingsPage.jsx`: "Промотирай (request)" button заменен с
+  "Промотирай — €30" който отива към Stripe Checkout. Return handler
+  извиква `/promote/finalize` при `?promote_session=<id>`.
+- `SellerRequestModal.jsx`: `mode="promote"` премахнат (само text
+  change и reorder остават).
+
+### Request 3: Homepage cleanup
+**LandingPage.jsx**:
+- "Selected listings" (Featured editorial) секция **изтрита**.
+- Active Auctions grid: 9 cards max (previously 6), **промотираните
+  auctions винаги са първи** (partition: featured first, regular last,
+  slice(0, 9)).
+
+**Verified**:
+- `curl /promote/checkout` → 200, Stripe session €30, success_url preserves `.bg` domain ✓
+- `curl /request-promotion` → 404 (removed) ✓
+- `curl /buy-now` → 200, Stripe session for GROSS amount ✓
+- H2 headings screenshot confirms "Selected" is gone ✓
+- Active auctions grid renders N cards (up to 9, promoted first) ✓

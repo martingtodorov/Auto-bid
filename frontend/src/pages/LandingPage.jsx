@@ -97,8 +97,19 @@ export default function LandingPage() {
         : [featured[0], auctions[0]].filter(Boolean).slice(0, 2));
   const heroIds = new Set(heroes.map((h) => h.id));
   // Filter the lists below so hero cars never render twice on the page.
-  const featuredEx = featured.filter((a) => !heroIds.has(a.id));
+  // (Previously we also built `featuredEx` for the "Selected listings"
+  // section — removed per product decision: promoted auctions now take
+  // the lead slots in the Active Auctions grid instead.)
+  // Active-auction overview: 9 cards total, promoted ones first. We
+  // partition the active list into `featured` (paid promotion) + the
+  // rest, dedupe against heroes, then concatenate so promoted cards
+  // always win the top slots on the landing page. Heroes are already
+  // stripped via `heroIds` above so nothing renders twice.
   const auctionsEx = auctions.filter((a) => !heroIds.has(a.id));
+  const featuredIds = new Set(featured.map((f) => f.id));
+  const promotedActive = auctionsEx.filter((a) => featuredIds.has(a.id) || a.featured);
+  const regularActive = auctionsEx.filter((a) => !featuredIds.has(a.id) && !a.featured);
+  const activeOverview = [...promotedActive, ...regularActive].slice(0, 9);
 
   // CMS-editable hero text per language (falls back to static i18n)
   const cmsHeadline = settings?.[`hero_headline_${lang}`];
@@ -171,7 +182,7 @@ export default function LandingPage() {
             </Link>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 stagger" data-testid="landing-auctions-grid">
-            {auctionsEx.slice(0, 6).map((a) => <AuctionCard key={a.id} auction={a} />)}
+            {activeOverview.map((a) => <AuctionCard key={a.id} auction={a} />)}
           </div>
         </div>
       </section>
@@ -205,22 +216,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Featured editorial */}
-      {featuredEx.length > 0 && (
-        <section className="rule-b">
-          <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-16 lg:py-24">
-            <div className="flex items-end justify-between mb-10">
-              <div>
-                <div className="overline text-[hsl(var(--accent))]">{t("landing.editorial")}</div>
-                <h2 className="font-serif text-3xl lg:text-5xl tracking-tight mt-3">{t("landing.selected")}</h2>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 stagger">
-              {featuredEx.slice(0, 6).map((a) => <AuctionCard key={a.id} auction={a} />)}
-            </div>
-          </div>
-        </section>
-      )}
+      {/* Featured/Selected listings removed — promoted auctions now appear
+          first in the Active Auctions grid above. */}
 
       {/* Top sales */}
       {sold.length > 0 && (

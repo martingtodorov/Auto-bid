@@ -51,6 +51,55 @@ export default function MyListingsPage() {
 
   useEffect(() => { if (user) load(); }, [user]);
 
+  // ─── Promotion-payment return handler ────────────────────────────────
+  // After Stripe Checkout the seller returns to /my-listings with either
+  // `?promote_session=<id>` (success) or `?promote_cancelled=1`. We call
+  // /promote/finalize to activate the `featured` flag — the backend is
+  // idempotent so a refresh is safe. `payment_status` may still be
+  // `unpaid` for ~1s while Stripe's webhook catches up; retry on 402.
+  useEffect(() => {
+    if (!user) return;
+    const params = new URLSearchParams(window.location.search);
+    const promoteSid = params.get("promote_session");
+    const promoteCancelled = params.get("promote_cancelled");
+    if (promoteCancelled) {
+      setErr(t("seller.promote_cancelled", "Плащането за промотиране бе отказано."));
+      params.delete("promote_cancelled");
+      window.history.replaceState({}, "", `${window.location.pathname}${params.toString() ? "?" + params : ""}`);
+      return;
+    }
+    if (!promoteSid || !items) return;
+    let cancel = false;
+    (async () => {
+      // Need the auction id: the session doesn't carry it on the client,
+      // so we iterate over pending listings and ask the backend which one
+      // matches via the session metadata. Simpler: scan seller listings
+      // and try each until one succeeds — realistically only 1-3 retries.
+      for (const a of items || []) {
+        if (cancel) return;
+        if (a.featured) continue;
+        for (let i = 0; i < 8 && !cancel; i++) {
+          try {
+            await api.post(`/auctions/${a.id}/promote/finalize`, { session_id: promoteSid });
+            await load();
+            params.delete("promote_session");
+            window.history.replaceState({}, "", `${window.location.pathname}${params.toString() ? "?" + params : ""}`);
+            return;
+          } catch (e) {
+            const status = e?.response?.status;
+            if (status === 400 || status === 403) break; // wrong auction, try next
+            if (status === 402) { await new Promise((r) => setTimeout(r, 2000)); continue; }
+            break;
+          }
+        }
+      }
+      params.delete("promote_session");
+      window.history.replaceState({}, "", `${window.location.pathname}${params.toString() ? "?" + params : ""}`);
+    })();
+    return () => { cancel = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, items?.length]);
+
   if (loading) return <div className="py-24 text-center">{t("watchlist.loading")}</div>;
   if (!user) return <Navigate to="/login?next=/my-listings" replace />;
 
@@ -228,13 +277,22 @@ export default function MyListingsPage() {
                                 </button>
                                 {!a.featured && (
                                   <button
-                                    onClick={() => setModal({ auction: a, mode: "promote" })}
+                                    onClick={async () => {
+                                      if (!window.confirm(t("seller.promote_confirm", "Промотирайте обявата за €30? Плащането е еднократно."))) return;
+                                      try {
+                                        const { data } = await api.post(`/auctions/${a.id}/promote/checkout`, {
+                                          origin: window.location.origin,
+                                        });
+                                        if (data?.url) window.location.assign(data.url);
+                                      } catch (e) {
+                                        setErr(formatError(e));
+                                      }
+                                    }}
                                     className="btn btn-secondary !py-2 !px-3 text-xs flex items-center gap-1.5 !border-amber-400 !text-amber-700"
-                                    data-testid={`request-promote-${a.id}`}
-                                    disabled={!!requestsByAuction[a.id]?.promotion}
-                                    title={requestsByAuction[a.id]?.promotion ? t("seller.pending_request") : t("seller.promote_description")}
+                                    data-testid={`promote-paid-${a.id}`}
+                                    title={t("seller.promote_description", "Промотирайте обявата си за €30")}
                                   >
-                                    <Star size={12} /> {requestsByAuction[a.id]?.promotion ? t("seller.pending_request") : t("seller.promote_request")}
+                                    <Star size={12} /> {t("seller.promote_paid", "Промотирай — €30")}
                                   </button>
                                 )}
                                 {a.featured && (

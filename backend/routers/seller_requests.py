@@ -81,54 +81,10 @@ def register_routes():
         return {"ok": True, "images": new_order}
 
     # ------------------------------------------------------------------
-    # 2) Seller requests promotion (featured on homepage)
+    # 2) Seller requests promotion — REMOVED.
+    # Promotion is now self-serve via `/api/auctions/{id}/promote/checkout`
+    # (Stripe €30) and `/promote/finalize`. See server.py.
     # ------------------------------------------------------------------
-    @router.post("/auctions/{auction_id}/request-promotion")
-    async def request_promotion(auction_id: str, payload: PromotionRequestCreate, request: Request,
-                                user: dict = Depends(_get_current_user)):
-        a = await _load_auction_for_seller(auction_id, user)
-        if a.get("featured"):
-            raise HTTPException(status_code=400, detail="Тази обява вече е промотирана.")
-        if a.get("status") not in ("pending", "live"):
-            raise HTTPException(status_code=400, detail="Може да се промотират само активни/очакващи обяви.")
-        # Dedupe: one pending promotion request per auction
-        existing = await db.seller_requests.find_one(
-            {"auction_id": auction_id, "type": "promotion", "status": "pending"}, {"_id": 0, "id": 1},
-        )
-        if existing:
-            raise HTTPException(status_code=409, detail="Вече имате чакаща заявка за промотиране на тази обява.")
-        doc = {
-            "id": _uuid.uuid4().hex,
-            "auction_id": auction_id,
-            "auction_title": a.get("title", ""),
-            "seller_id": user["id"],
-            "seller_name": user.get("name", ""),
-            "type": "promotion",
-            "payload": {"note": (payload.note or "").strip()[:600]},
-            "status": "pending",
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }
-        await db.seller_requests.insert_one(doc)
-        doc.pop("_id", None)
-        try:
-            from routers.inbox import notify_admins as _notify_admins
-            await _notify_admins(
-                db, type="promotion_request",
-                data={"seller": user.get("name", ""), "title": a.get("title", "")},
-                auction_id=auction_id,
-                link="/admin?tab=requests",
-                push_template_id="admin_promotion_request",
-                push_fmt={"seller": (user.get("name") or "Продавач")[:60], "title": (a.get("title") or "")[:80]},
-            )
-        except Exception:
-            pass
-        await audit_log(
-            db, actor_id=user["id"], actor_email=user.get("email", ""), actor_role=user.get("role", "user"),
-            action="seller_request.create", target_type="auction", target_id=auction_id,
-            details={"type": "promotion"}, ip=request.client.host if request.client else "",
-            user_agent=request.headers.get("user-agent", ""),
-        )
-        return doc
 
     # ------------------------------------------------------------------
     # 3) Seller requests text change on live/pending auction
