@@ -676,6 +676,7 @@
     "total_too_large": "Total {{current}}, this photo adds {{incoming}} — limit is {{max}}.",
     "decode_failed": "Could not read {{name}}.",
     "heic_unsupported": "{{name}} is a HEIC file that your browser can't decode. On iPhone, switch Settings → Camera → Formats → Most Compatible, or convert to JPG.",
+    "heic_converting": "Converting {{name}} from HEIC to JPEG…",
     "too_many": "You can upload at most {{max}} photos in this category."
   },
   "chat": {

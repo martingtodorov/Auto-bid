@@ -117,6 +117,30 @@ export default function ImageUploader({
       reader.readAsDataURL(file);
     });
 
+  // Detect HEIC/HEIF — iPhones save in this format by default and only
+  // Safari can decode it natively. Identification is via either the
+  // file's MIME (most browsers fill it correctly when picking via the
+  // OS file dialog) or the `.heic`/`.heif` extension as a fallback.
+  const isHeicFile = (file) => {
+    const t = (file.type || "").toLowerCase();
+    if (t.includes("heic") || t.includes("heif")) return true;
+    const n = (file.name || "").toLowerCase();
+    return /\.heic$|\.heif$/.test(n);
+  };
+
+  // Convert HEIC → JPEG Blob using the libheif WASM bundle. The library
+  // (~1 MB) is lazily imported so it only ships to users who actually
+  // need it — desktop Chrome / Firefox visitors never download it.
+  const convertHeicToJpegFile = async (file) => {
+    const { default: heic2any } = await import("heic2any");
+    const out = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 });
+    // heic2any returns a Blob (single image) or Blob[] (multi-frame).
+    const blob = Array.isArray(out) ? out[0] : out;
+    // Re-wrap as a File so downstream filename/size logging stays sane.
+    const newName = (file.name || "image").replace(/\.(heic|heif)$/i, ".jpg");
+    return new File([blob], newName, { type: "image/jpeg" });
+  };
+
   const handleFiles = async (files) => {
     const fmt = (n) => `${(n / 1024 / 1024).toFixed(1)} MB`;
     const arr = Array.from(files);
@@ -145,7 +169,22 @@ export default function ImageUploader({
         break;
       }
       try {
-        const dataUrl = await compress(f);
+        // HEIC files (iPhone default) cannot be decoded by canvas in
+        // Chrome/Firefox. Convert to JPEG first via lazy-loaded WASM
+        // before running the standard compression pipeline. Conversion
+        // is slow (~1-3s per photo), so we surface a toast for context.
+        let inputFile = f;
+        if (isHeicFile(f)) {
+          const tid = toast.loading(
+            t("uploader.heic_converting", "Конвертирам {{name}} от HEIC към JPEG…", { name: f.name })
+          );
+          try {
+            inputFile = await convertHeicToJpegFile(f);
+          } finally {
+            toast.dismiss(tid);
+          }
+        }
+        const dataUrl = await compress(inputFile);
         const compressedBytes = dataUrlBytes(dataUrl);
         // Recheck against the cap with the actual encoded size.
         if (runningTotal + compressedBytes > totalBudgetBytes) {
@@ -159,11 +198,11 @@ export default function ImageUploader({
         runningTotal += compressedBytes;
         accepted.push(dataUrl);
       } catch (e) {
-        // HEIC (default iPhone format) cannot be decoded by canvas in
-        // non-Safari browsers; the user needs to switch their iOS camera
-        // setting to "Most Compatible" or convert. Surface that hint
-        // when the file extension hints at HEIC/HEIF.
-        const isHeic = /\.heic$|\.heif$/i.test(f.name) || /heic|heif/i.test(f.type);
+        // HEIC conversion or canvas decode failed. The HEIC branch above
+        // already wraps its own try/finally so a thrown error here for a
+        // .heic input means libheif could not parse the file — likely a
+        // 16-bit / multi-track variant. Fall back to a clear hint.
+        const isHeic = isHeicFile(f);
         toast.error(
           isHeic
             ? t(
@@ -420,7 +459,7 @@ export default function ImageUploader({
           </button>
         )}
       </div>
-      <input ref={ref} type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} data-testid={`${testId}-input`} />
+      <input ref={ref} type="file" accept="image/*,.heic,.heif" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} data-testid={`${testId}-input`} />
 
       {menuOpen != null && (
         <>
