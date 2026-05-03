@@ -1774,3 +1774,26 @@ the user's request 1:1.
   2 interior shots prefetched от IntersectionObserver)
 - **66% намаление** на bandwidth-а при initial page load.
 
+
+## 2026-05-03 — Leaderboard integration finalized + Nav dropdown restructure
+
+**Context**: Предишният агент остави Leaderboard фичъра недовършен —
+backend `/api/leaderboard` endpoint и `LeaderboardPage.jsx` бяха
+създадени, но без route в `App.js` и без линк в менюто.
+
+**Changes**:
+- `App.js`: импорт на `LeaderboardPage`; добавен `<Route path="/leaderboard">`
+  **преди** catch-all dealer route (`/:dealerSlug`), за да не го погълне wildcard-а.
+- `components/Nav.jsx`:
+  - Desktop: „Търгове" е вече hover dropdown с опции
+    **Актуални търгове** (`/auctions`) и **Продадени** (`/sales`).
+    Trigger-ът сам по себе си води до `/auctions` (click + keyboard friendly).
+  - Desktop меню: „Продадени" премахнат и заменен с **Класация**
+    (`/leaderboard`).
+  - Mobile меню: нищо не е премахнато, добавен е нов линк **Класация**
+    между Продадени и Продай.
+- i18n: `nav.auctions_current` и `nav.leaderboard` добавени в bg/en/ro.
+
+**Verified**: screenshot на `/leaderboard` (данни + табове рендерират),
+screenshot на hover dropdown в Nav, `GET /api/leaderboard` връща 200 с
+очаквана структура.

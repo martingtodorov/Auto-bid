@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Menu, X, User, Search } from "lucide-react";
+import { Menu, X, User, Search, ChevronDown } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../lib/auth";
 import LanguageSwitcher from "./LanguageSwitcher";
@@ -31,10 +31,22 @@ export default function Nav() {
   }, [open, closeMobile]);
   const brandTld = brandTldForLang(i18n.resolvedLanguage || i18n.language);
 
-  const links = [
+  // Desktop primary links. `Търгове` is rendered as a dropdown
+  // (current auctions + sold) and is handled inline below — it's kept
+  // out of this list so we can style the trigger differently. On mobile
+  // (`links` is reused further down) we still show each destination as
+  // a flat link so nothing is hidden behind a hover state on touch.
+  const desktopLinks = [
+    { to: "/how-it-works", label: t("footer.how_it_works") },
+    { to: "/leaderboard", label: t("nav.leaderboard", "Класация") },
+    { to: "/sell", label: t("nav.sell") },
+  ];
+
+  const mobileLinks = [
     { to: "/auctions", label: t("nav.auctions") },
     { to: "/how-it-works", label: t("footer.how_it_works") },
     { to: "/sales", label: t("nav.sold") },
+    { to: "/leaderboard", label: t("nav.leaderboard", "Класация") },
     { to: "/sell", label: t("nav.sell") },
   ];
 
@@ -54,7 +66,44 @@ export default function Nav() {
           </Link>
 
           <nav className="hidden md:flex items-center gap-5 lg:gap-7 shrink-0">
-            {links.map((l) => (
+            {/* Търгове dropdown — hover (desktop) reveals Актуални/Продадени.
+                The trigger itself links to `/auctions` so keyboard users and
+                click-through users still land on the listings page. The
+                invisible padding under the trigger keeps the menu open while
+                the cursor moves down into the flyout. */}
+            <div className="relative group" data-testid="nav-auctions-menu">
+              <NavLink
+                to="/auctions"
+                className={({ isActive }) =>
+                  `inline-flex items-center gap-1 text-sm tracking-wide whitespace-nowrap py-2 ${
+                    isActive ? "text-[hsl(var(--accent))]" : "text-[hsl(var(--ink))] hover:text-[hsl(var(--accent))]"
+                  }`
+                }
+                data-testid="nav-link-auctions"
+              >
+                {t("nav.auctions")}
+                <ChevronDown size={14} className="opacity-70 group-hover:opacity-100 transition" />
+              </NavLink>
+              <div className="absolute left-0 top-full pt-2 hidden group-hover:block group-focus-within:block z-40">
+                <div className="min-w-[200px] rounded-card border border-[hsl(var(--line))] bg-[hsl(var(--surface))] shadow-xl py-1.5">
+                  <Link
+                    to="/auctions"
+                    className="block px-4 py-2 text-sm hover:bg-[hsl(var(--bg))] transition-colors"
+                    data-testid="nav-menu-auctions-current"
+                  >
+                    {t("nav.auctions_current", "Актуални търгове")}
+                  </Link>
+                  <Link
+                    to="/sales"
+                    className="block px-4 py-2 text-sm hover:bg-[hsl(var(--bg))] transition-colors"
+                    data-testid="nav-menu-auctions-sold"
+                  >
+                    {t("nav.sold")}
+                  </Link>
+                </div>
+              </div>
+            </div>
+            {desktopLinks.map((l) => (
               <NavLink
                 key={l.to}
                 to={l.to}
@@ -174,7 +223,7 @@ export default function Nav() {
               </div>
             </div>
 
-            {links.map((l) => (
+            {mobileLinks.map((l) => (
               <Link key={l.to} to={l.to} onClick={closeMobile} className="block py-2 text-sm" data-testid={`mobile-nav-${l.to.slice(1)}`}>
                 {l.label}
               </Link>

@@ -33,6 +33,7 @@ import ContactsPage from "./pages/ContactsPage";
 import TermsPage from "./pages/TermsPage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
 import DealerPage from "./pages/DealerPage";
+import LeaderboardPage from "./pages/LeaderboardPage";
 import VerifyEmailBanner from "./components/VerifyEmailBanner";
 import TwoFactorPromptBanner from "./components/TwoFactorPromptBanner";
 
@@ -71,6 +72,7 @@ function App() {
               <Route path="/contacts" element={<ContactsPage />} />
               <Route path="/terms" element={<TermsPage />} />
               <Route path="/verify-email" element={<VerifyEmailPage />} />
+              <Route path="/leaderboard" element={<LeaderboardPage />} />
               {/* Dealer storefront — resolves `autoandbid.bg/{slug}` to a
                   public dealer profile page. Declared AFTER every named
                   route so reserved paths (/sell, /login, …) win the

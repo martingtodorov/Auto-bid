@@ -56,7 +56,9 @@
   "nav": {
     "home": "Home",
     "auctions": "Auctions",
+    "auctions_current": "Current auctions",
     "sold": "Sold",
+    "leaderboard": "Leaderboard",
     "sell": "Sell your car",
     "about": "About",
     "login": "Log in",

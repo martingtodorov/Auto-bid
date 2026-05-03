@@ -56,7 +56,9 @@
   "nav": {
     "home": "Acasă",
     "auctions": "Licitații",
+    "auctions_current": "Licitații active",
     "sold": "Vândute",
+    "leaderboard": "Clasament",
     "sell": "Vinde-ți mașina",
     "about": "Despre noi",
     "login": "Autentificare",
