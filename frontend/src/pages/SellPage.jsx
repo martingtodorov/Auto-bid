@@ -280,6 +280,26 @@ export default function SellPage() {
     setImporting(true);
     try {
       const { data } = await api.post("/auctions/import-mobile-bg", { url });
+      // Auto-distribute the imported gallery into the four mandatory
+      // categories so the user can submit straight away. mobile.bg always
+      // returns 17 high-res shots in the same order: exteriors first, a
+      // front-bumper close-up, wheels detail, interior. The split below
+      // matches that order: 8 / 1 / 4 / 4 = 17. If the listing has fewer
+      // photos we still pre-fill exterior with whatever is available so
+      // the user only has to top-up the missing buckets.
+      const imported = data.images || [];
+      let ext = imported, bp = [], wh = [], intr = [];
+      if (imported.length >= 17) {
+        ext = imported.slice(0, 8);
+        bp = imported.slice(8, 9);
+        wh = imported.slice(9, 13);
+        intr = imported.slice(13, 17);
+      } else if (imported.length >= 13) {
+        ext = imported.slice(0, 8);
+        bp = imported.slice(8, 9);
+        wh = imported.slice(9, 13);
+        intr = imported.slice(13);
+      }
       setForm((p) => ({
         ...p,
         title: data.title || p.title,
@@ -296,11 +316,19 @@ export default function SellPage() {
         city: data.city || p.city,
         country: data.country || p.country,
         description: data.description || p.description,
-        images_exterior: data.images && data.images.length ? data.images : p.images_exterior,
+        images_exterior: ext.length ? ext : p.images_exterior,
+        images_bumper: bp.length ? bp : p.images_bumper,
+        images_wheels: wh.length ? wh : p.images_wheels,
+        images_interior: intr.length ? intr : p.images_interior,
       }));
-      const foundImgs = (data.images || []).length;
+      const foundImgs = imported.length;
+      const distributed = foundImgs >= 13;
       setImportMsg(
-        `Данните са заредени${foundImgs ? ` · ${foundImgs} снимки в "Екстериор"` : ""}. Проверете всички полета, задайте цена и доразпределете снимките по категории.`
+        distributed
+          ? `Данните са заредени · ${foundImgs} снимки разпределени по категории (екстериор ${ext.length} · броня ${bp.length} · джанти ${wh.length} · интериор ${intr.length}). Проверете полетата и задайте цена.`
+          : foundImgs
+            ? `Данните са заредени · ${foundImgs} снимки в "Екстериор". Преразпределете снимките по категории и задайте цена.`
+            : `Данните са заредени. Качете снимки и задайте цена.`
       );
     } catch (e) { setImportErr(formatError(e)); }
     finally { setImporting(false); }
