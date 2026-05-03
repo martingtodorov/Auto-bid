@@ -766,6 +766,22 @@
       "outbid": {
         "title": "Ați fost depășit",
         "body": "Alt licitator a făcut o ofertă mai mare pentru {{title}}"
+      },
+      "auction_buy_now": {
+        "title": "Anunțul a fost cumpărat prin Buy Now",
+        "body": "{{title}} — €{{amount}}"
+      },
+      "auction_sold_negotiated": {
+        "title": "Vândut după negociere",
+        "body": "{{title}} — €{{price}}"
+      },
+      "listing_approved": {
+        "title": "Anunțul dvs. a fost aprobat",
+        "body": "{{title}}"
+      },
+      "text_change_request": {
+        "title": "Cerere de modificare text",
+        "body": "{{seller}}: {{title}}"
       }
     }
   },

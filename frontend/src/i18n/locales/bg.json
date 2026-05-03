@@ -770,6 +770,22 @@
       "outbid": {
         "title": "Надигнаха ви",
         "body": "Друг наддавач предложи по-висока цена за {{title}}"
+      },
+      "auction_buy_now": {
+        "title": "Обявата е купена с Купи сега",
+        "body": "{{title}} — €{{amount}}"
+      },
+      "auction_sold_negotiated": {
+        "title": "Продаден след преговори",
+        "body": "{{title}} — €{{price}}"
+      },
+      "listing_approved": {
+        "title": "Обявата Ви е одобрена",
+        "body": "{{title}}"
+      },
+      "text_change_request": {
+        "title": "Заявка за промяна на текст",
+        "body": "{{seller}}: {{title}}"
       }
     }
   },

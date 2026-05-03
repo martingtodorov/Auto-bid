@@ -2130,3 +2130,25 @@ implemented за missing attrs и хвърля `AttributeError: get`.
 - `curl /buy-now` → 200, Stripe session for GROSS amount ✓
 - H2 headings screenshot confirms "Selected" is gone ✓
 - Active auctions grid renders N cards (up to 9, promoted first) ✓
+
+## 2026-05-03 — Fix: Празни notification items в drawer-а
+
+**Bug** (от user screenshot): Някои notifications показват само
+timestamp, без title/body.
+
+**Root cause**: 4 notification `type`-а, които backend изпраща, нямат
+i18n entries: `auction_buy_now`, `auction_sold_negotiated`,
+`listing_approved`, `text_change_request`. Когато `resolveNotification`
+не намери i18n entry И `title`/`body` са празни (което е за всички
+typed notifications), връщаше `{title:"", body:""}` → празен item.
+
+**Fix**:
+- Добавени 4 липсващи i18n entries в bg/en/ro
+- `resolveNotification` сега:
+  - Префeрира literal stored `title/body` ако са попълнени (safety net)
+  - Пада на i18n lookup ако нямат literal
+  - Final fallback: humanised version на `type` (`auction_buy_now` →
+    `Auction Buy Now`) за да няма НИКОГА blank row
+
+Това означава, че дори ако backend добави нов тип notification в
+бъдеще без съответната i18n entry, няма да имаме празен item.

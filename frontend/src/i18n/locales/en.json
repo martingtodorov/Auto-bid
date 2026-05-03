@@ -770,6 +770,22 @@
       "outbid": {
         "title": "You've been outbid",
         "body": "Another bidder placed a higher bid on {{title}}"
+      },
+      "auction_buy_now": {
+        "title": "Listing bought via Buy Now",
+        "body": "{{title}} — €{{amount}}"
+      },
+      "auction_sold_negotiated": {
+        "title": "Sold after negotiation",
+        "body": "{{title}} — €{{price}}"
+      },
+      "listing_approved": {
+        "title": "Your listing has been approved",
+        "body": "{{title}}"
+      },
+      "text_change_request": {
+        "title": "Text change request",
+        "body": "{{seller}}: {{title}}"
       }
     }
   },
