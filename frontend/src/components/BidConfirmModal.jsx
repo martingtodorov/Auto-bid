@@ -50,12 +50,25 @@ export default function BidConfirmModal({
   const available = Number(accountCredit?.total_available_eur || 0);
   const limit = Number(accountCredit?.total_limit_eur || 0);
 
+  // Display amounts: the user types and reads in GROSS (incl. VAT) for
+  // this auction. The credit pool is stored in NET on the backend, but
+  // for *this* overlay we convert to gross terms so the math the user
+  // sees matches what they're typing — €6,000 bid against a €X budget,
+  // both in the same currency basis. Backend math on submit still uses
+  // NET (`onConfirm(net)`).
+  const vatMul = 1 + Number(vatRate || 0) / 100;
+  const availableGross = available * vatMul;
+  const limitGross = limit * vatMul;
+
   // The user's existing high bid on THIS auction is already committed
   // — adding to it only counts the *delta*. If they're not leading,
-  // the entire net amount is fresh commit.
+  // the entire net amount is fresh commit. We compute everything in
+  // gross terms for display consistency with the typed amount.
   const delta = Math.max(0, net - currentLeadByMe);
+  const deltaGross = delta * vatMul;
   const remaining = available - delta;
-  const sufficient = remaining >= -0.5; // tiny float-rounding cushion
+  const remainingGross = availableGross - deltaGross;
+  const sufficient = remaining >= -0.5;
   const minGrossDisplay = vatRate > 0 ? Math.ceil(minNet * (1 + vatRate / 100)) : minNet;
   const belowMin = minNet > 0 && net < minNet - 0.5;
 
@@ -67,8 +80,10 @@ export default function BidConfirmModal({
   const place = async () => {
     if (belowMin) return;
     if (!sufficient) {
-      // Hand off to top-up flow. Parent decides what amount to suggest.
-      onTopUp && onTopUp(Math.ceil(Math.abs(remaining) / 1000) * 1000);
+      // Hand off to top-up flow. Suggest a gross-rounded amount so
+      // the user sees the same currency basis they were typing in.
+      const suggestedGross = Math.ceil(Math.abs(remainingGross) / 1000) * 1000;
+      onTopUp && onTopUp(suggestedGross);
       return;
     }
     setBusy(true);
@@ -127,7 +142,7 @@ export default function BidConfirmModal({
               <div className="text-sm text-amber-900">
                 {t("bid_confirm.shortfall",
                   "Недостигат {{amt}} от наличния кредит. Заредете още, за да наддадете.",
-                  { amt: formatEUR(Math.abs(remaining)) })}
+                  { amt: formatEUR(Math.abs(remainingGross)) })}
               </div>
             </div>
           )}
@@ -190,16 +205,16 @@ export default function BidConfirmModal({
                   {t("bid_confirm.credit_available", "Налично сега")}
                 </div>
                 <div className="font-mono tabular-nums" data-testid="bid-confirm-available">
-                  {formatEUR(available)}
-                  <span className="text-[10px] text-[hsl(var(--ink-muted))] ml-1">/ {formatEUR(limit)}</span>
+                  {formatEUR(availableGross)}
+                  <span className="text-[10px] text-[hsl(var(--ink-muted))] ml-1">/ {formatEUR(limitGross)}</span>
                 </div>
               </div>
               <div>
                 <div className="text-xs text-[hsl(var(--ink-muted))]">
                   {t("bid_confirm.credit_after", "След това наддаване")}
                 </div>
-                <div className={`font-mono tabular-nums ${remaining < 0 ? "text-amber-700 font-semibold" : ""}`} data-testid="bid-confirm-remaining">
-                  {formatEUR(Math.max(0, remaining))}
+                <div className={`font-mono tabular-nums ${remainingGross < 0 ? "text-amber-700 font-semibold" : ""}`} data-testid="bid-confirm-remaining">
+                  {formatEUR(Math.max(0, remainingGross))}
                 </div>
               </div>
             </div>
@@ -218,7 +233,7 @@ export default function BidConfirmModal({
             {!sufficient && (
               <button
                 type="button"
-                onClick={() => onTopUp && onTopUp(Math.ceil(Math.abs(remaining) / 1000) * 1000)}
+                onClick={() => onTopUp && onTopUp(Math.ceil(Math.abs(remainingGross) / 1000) * 1000)}
                 disabled={busy}
                 className="btn btn-secondary flex-1 inline-flex items-center justify-center gap-1.5"
                 data-testid="bid-confirm-topup"
