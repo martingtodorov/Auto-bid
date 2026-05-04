@@ -33,14 +33,26 @@ Environment variables (test mode by default)
   STRIPE_API_KEY            sk_test_… (already provisioned in this pod)
   STRIPE_WEBHOOK_SECRET     whsec_…   (set after configuring the endpoint
                                        in the Stripe Dashboard or stripe-cli)
-  STRIPE_SUCCESS_URL        optional override; otherwise built from request
-  STRIPE_CANCEL_URL         optional override; otherwise built from request
+  DEFAULT_FRONTEND_URL      Static-fallback origin used when the inbound
+                            request has no allowed Origin/Referer (e.g.
+                            CLI cron, server-to-server). FRONTEND_URL is
+                            still honoured for backwards-compat.
+
+Multi-domain redirects
+──────────────────────────────────────────────────────────────────────────────
+The site lives on three TLDs (.com, .bg, .ro) which DO NOT share
+cookies. Stripe Checkout success/cancel URLs are therefore built
+**dynamically** from the inbound request's Origin/Referer, validated
+against an allow-list (`ALLOWED_PROD_ORIGINS` + dev preview patterns).
+Hardcoded STRIPE_SUCCESS_URL / STRIPE_CANCEL_URL env overrides have
+been **removed** — they would force every user back to one TLD.
 
 To switch to live mode, swap STRIPE_API_KEY → sk_live_… and
 STRIPE_WEBHOOK_SECRET to the live-mode whsec_…  No code changes needed.
 """
 from __future__ import annotations
 import os
+import re
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -71,23 +83,91 @@ def _hold_amount_eur(bidding_limit_eur: float) -> float:
 # autoandbid.bg and autoandbid.com intentionally do not share cookies
 # (separate public suffixes), so returning a user from Stripe to the
 # wrong host silently logs them out and loses the session/JWT. We must
-# pick the *same* host the request came from. Priority:
+# pick the *same* host the request came from.
+#
+# Security: we **never** trust an arbitrary Origin/Referer/body value.
+# Each candidate must match either:
+#   • A hard-coded allow-list of production hosts (the three TLDs we
+#     actually own), OR
+#   • A regex pattern for development / preview hosts (Emergent preview
+#     subdomains, localhost), OR
+#   • The DEFAULT_FRONTEND_URL env var verbatim.
+# Anything else falls through to DEFAULT_FRONTEND_URL.
+#
+# Priority of candidates (first allowed wins):
 #   1. Explicit `origin` from the request body (frontend passes
-#      `window.location.origin`). Trustworthy — same-origin request.
+#      `window.location.origin`).
 #   2. `Origin` header — set by browsers on CORS/preflighted requests.
 #   3. Scheme+host parsed from `Referer` — set on normal navigations.
-#   4. `FRONTEND_URL` env var — last-resort static fallback.
-#   5. `request.base_url` — catches internal health-check / bot traffic.
-# The resolver is shared between holds, buy-now, save-card and promote
-# checkout code paths; DO NOT inline this logic per-route (history has
-# shown that copies drift and the `.com` fallback sneaks back in).
+#   4. DEFAULT_FRONTEND_URL fallback (FRONTEND_URL retained for
+#      backwards compat).
+ALLOWED_PROD_ORIGINS = (
+    "https://autoandbid.com",
+    "https://www.autoandbid.com",
+    "https://autoandbid.bg",
+    "https://www.autoandbid.bg",
+    "https://autoandbid.ro",
+    "https://www.autoandbid.ro",
+)
+
+# Dev / preview origin allow-list. Keep these tight — only Emergent's
+# own preview hostnames + localhost. Wildcarding anything broader would
+# defeat the whole point of the whitelist.
+_DEV_ORIGIN_PATTERNS = (
+    re.compile(r"^https://[a-z0-9\-]+\.preview\.emergentagent\.com$", re.IGNORECASE),
+    re.compile(r"^https://[a-z0-9\-]+\.cluster-[a-z0-9\-]+\.preview\.emergentcf\.cloud$", re.IGNORECASE),
+    re.compile(r"^https://[a-z0-9\-]+\.preview\.emergentcf\.cloud$", re.IGNORECASE),
+    re.compile(r"^http://localhost(:\d+)?$", re.IGNORECASE),
+    re.compile(r"^http://127\.0\.0\.1(:\d+)?$", re.IGNORECASE),
+)
+
+
+def _default_frontend_url() -> str:
+    """Static fallback origin. `DEFAULT_FRONTEND_URL` is the new
+    canonical name; `FRONTEND_URL` is kept for backwards compatibility
+    with older deployments."""
+    raw = (
+        os.environ.get("DEFAULT_FRONTEND_URL")
+        or os.environ.get("FRONTEND_URL")
+        or "https://autoandbid.com"
+    )
+    return raw.strip().rstrip("/")
+
+
+def _is_allowed_origin(origin: str) -> bool:
+    """Return True iff `origin` matches the production allow-list, the
+    dev preview pattern set, or the env-configured default."""
+    if not origin:
+        return False
+    o = str(origin).strip().rstrip("/")
+    if not (o.startswith("http://") or o.startswith("https://")):
+        return False
+    if o in ALLOWED_PROD_ORIGINS:
+        return True
+    for pat in _DEV_ORIGIN_PATTERNS:
+        if pat.match(o):
+            return True
+    if o == _default_frontend_url():
+        return True
+    return False
+
+
 def resolve_stripe_redirect_origin(body_origin: Optional[str], request) -> str:
+    """Pick the redirect origin for a Stripe Checkout session.
+
+    Each candidate is validated against the allow-list before being
+    returned. Untrusted values (e.g. an attacker-supplied Origin header
+    pointing at evil.com) are silently dropped and we fall through to
+    the configured DEFAULT_FRONTEND_URL.
+    """
     from urllib.parse import urlparse
-    candidates = []
+    candidates: list[str] = []
     if body_origin:
-        candidates.append(body_origin)
+        candidates.append(str(body_origin))
     try:
-        candidates.append(request.headers.get("origin"))
+        oh = request.headers.get("origin")
+        if oh:
+            candidates.append(oh)
         ref = request.headers.get("referer")
         if ref:
             parsed = urlparse(ref)
@@ -95,18 +175,12 @@ def resolve_stripe_redirect_origin(body_origin: Optional[str], request) -> str:
                 candidates.append(f"{parsed.scheme}://{parsed.netloc}")
     except Exception:
         pass
-    candidates.append(os.environ.get("FRONTEND_URL", ""))
-    try:
-        candidates.append(str(request.base_url))
-    except Exception:
-        pass
     for c in candidates:
-        if not c:
-            continue
-        c = str(c).strip().rstrip("/")
-        if c.startswith("http://") or c.startswith("https://"):
-            return c
-    return ""
+        c2 = str(c).strip().rstrip("/")
+        if _is_allowed_origin(c2):
+            return c2
+    # Final fallback — guaranteed-safe configured default.
+    return _default_frontend_url()
 
 
 
@@ -306,11 +380,13 @@ def build_stripe_router(db, get_current_user):
                 }
 
         # ---- Build URLs ----
+        # Domain-aware: the user is sent back to the same TLD they
+        # checked out from (.bg / .ro / .com). Hardcoded
+        # STRIPE_SUCCESS_URL / STRIPE_CANCEL_URL env overrides have
+        # been removed — they made multi-domain returns impossible.
         origin = resolve_stripe_redirect_origin(body.origin, request)
-        success_override = os.environ.get("STRIPE_SUCCESS_URL", "").strip()
-        cancel_override = os.environ.get("STRIPE_CANCEL_URL", "").strip()
-        success_url = success_override or f"{origin}/auctions/{body.auction_id}?stripe_session_id={{CHECKOUT_SESSION_ID}}"
-        cancel_url = cancel_override or f"{origin}/auctions/{body.auction_id}?stripe_cancelled=1"
+        success_url = f"{origin}/auctions/{body.auction_id}?stripe_session_id={{CHECKOUT_SESSION_ID}}"
+        cancel_url = f"{origin}/auctions/{body.auction_id}?stripe_cancelled=1"
 
         try:
             session = stripe.checkout.Session.create(
