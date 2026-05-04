@@ -51,7 +51,10 @@
   "common": {
     "min_short": "min.",
     "loading": "Loading…",
-    "zoom": "Zoom"
+    "zoom": "Zoom",
+    "close": "Close",
+    "cancel": "Cancel",
+    "processing": "Processing…"
   },
   "nav": {
     "home": "Home",
@@ -230,7 +233,13 @@
     "status_ended": "Ended",
     "with_reserve_amount": "With reserve",
     "counter_pending": "Awaiting response",
-    "counter_declined": "Counter-offer declined"
+    "counter_declined": "Counter-offer declined",
+    "credit_pitch_title": "Top up bidding credit",
+    "credit_pitch_body": "Universal — works on any auction.",
+    "credit_topup_needed": "Insufficient credit — top up",
+    "credit_topup_body": "Available {{avail}} → your bid needs {{need}}. Click to top up.",
+    "credit_available_short": "Available",
+    "credit_topup_short": "Top up"
   },
   "preauth": {
     "confirm_card": "Confirm bid",
@@ -865,5 +874,34 @@
     "empty_v2": "No active authorizations yet. Top up credit to start bidding.",
     "hold_blocked": "Held: {{h}}",
     "login_required": "You must sign in to view your bids."
+  },
+  "settings": {
+    "title": "Settings",
+    "headline": "Account & notifications",
+    "sms_title": "SMS notifications",
+    "sms_body": "Get an SMS when bidding happens in the last 5 minutes of an auction you watch or bid on. International format required (+359...).",
+    "phone": "Phone",
+    "sms_opt_label": "Send SMS in the final 5 minutes",
+    "saving": "Saving…",
+    "save": "Save",
+    "saved_searches_title": "Saved searches",
+    "add_from_search": "Add from search",
+    "saved_searches_body": "When a new listing matches your filters, we email you a direct link.",
+    "saved_searches_empty": "No saved searches yet. Open the auctions page, apply filters and click \"Save search\".",
+    "from": "from",
+    "to": "to",
+    "no_filters": "No filters",
+    "delete_phrase": "DELETE",
+    "delete_phrase_label": "Type \"{{p}}\" to confirm",
+    "delete_confirm_err": "Please type \"{{p}}\" to confirm.",
+    "delete_warn": "This action is irreversible. Continue?",
+    "delete_title": "Delete account (GDPR)",
+    "delete_body": "Your GDPR right to be forgotten. We will remove your bids, comments, favourites, saved searches, VIN requests and reviews. Your prior listings remain on the platform as anonymised records for accounting/legal compliance.",
+    "deleting": "Deleting…",
+    "delete_cta": "Permanently delete my account"
+  },
+  "leaderboard": {
+    "metric_comments_count": "{{n}} comments",
+    "karma_label": "karma"
   }
 }

@@ -205,33 +205,32 @@ export default function BidConfirmModal({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap pt-1">
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={busy}
+              className="btn btn-secondary flex-1"
+              data-testid="bid-confirm-cancel"
+            >
+              {t("common.cancel", "Отказ")}
+            </button>
             {!sufficient && (
               <button
                 type="button"
                 onClick={() => onTopUp && onTopUp(Math.ceil(Math.abs(remaining) / 1000) * 1000)}
                 disabled={busy}
-                className="btn btn-secondary !py-2.5 !px-4 text-sm inline-flex items-center gap-1.5"
+                className="btn btn-secondary flex-1 inline-flex items-center justify-center gap-1.5"
                 data-testid="bid-confirm-topup"
               >
                 <Plus size={13} /> {t("bid_confirm.topup", "Зареди още")}
               </button>
             )}
-            <div className="flex-1" />
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={busy}
-              className="btn btn-secondary"
-              data-testid="bid-confirm-cancel"
-            >
-              {t("common.cancel", "Отказ")}
-            </button>
             <button
               type="button"
               onClick={place}
               disabled={busy || belowMin}
-              className="btn btn-accent flex items-center gap-2"
+              className="btn btn-accent flex-1 inline-flex items-center justify-center gap-1.5"
               data-testid="bid-confirm-place"
             >
               <Gavel size={14} />

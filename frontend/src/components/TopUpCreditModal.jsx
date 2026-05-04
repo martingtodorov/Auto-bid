@@ -135,12 +135,12 @@ export default function TopUpCreditModal({ suggestedAmount = 10000, onClose, onI
             </div>
           )}
 
-          <div className="flex items-center gap-2 justify-end">
+          <div className="flex items-center gap-2 pt-1">
             <button
               type="button"
               onClick={onClose}
               disabled={busy}
-              className="btn btn-secondary"
+              className="btn btn-secondary flex-1"
               data-testid="topup-cancel"
             >
               {t("common.cancel", "Отказ")}
@@ -149,7 +149,7 @@ export default function TopUpCreditModal({ suggestedAmount = 10000, onClose, onI
               type="button"
               onClick={submit}
               disabled={busy}
-              className="btn btn-accent inline-flex items-center gap-1.5"
+              className="btn btn-accent flex-1 inline-flex items-center justify-center gap-1.5"
               data-testid="topup-submit"
             >
               <CreditCard size={14} />

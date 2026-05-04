@@ -70,11 +70,11 @@ export default function LeaderboardPage() {
     if (tab === "bidders" && r.extra?.total_eur)
       return <span className="text-xs text-[hsl(var(--ink-muted))]">· {formatEUR(r.extra.total_eur)} общо</span>;
     if (tab === "commenters" && r.extra?.comments)
-      return <span className="text-xs text-[hsl(var(--ink-muted))]">· {r.extra.comments} коментара</span>;
+      return <span className="text-xs text-[hsl(var(--ink-muted))]">· {t("leaderboard.metric_comments_count", "{{n}} коментара", { n: r.extra.comments })}</span>;
     if (tab === "reputation" && r.extra)
       return (
         <span className="text-xs text-[hsl(var(--ink-muted))]">
-          · {r.extra.sold || 0} продажби · +{r.extra.karma || 0} карма · {r.extra.bids || 0} бида
+          · {t("leaderboard.metric_sold", "{{n}} продажби", { n: r.extra.sold || 0 })} · +{r.extra.karma || 0} {t("leaderboard.karma_label", "карма")} · {t("leaderboard.metric_bids", "{{n}} бида", { n: r.extra.bids || 0 })}
         </span>
       );
     return null;

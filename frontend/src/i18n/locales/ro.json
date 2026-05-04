@@ -51,7 +51,10 @@
   "common": {
     "min_short": "min.",
     "loading": "Se încarcă…",
-    "zoom": "Mărește"
+    "zoom": "Mărește",
+    "close": "Închide",
+    "cancel": "Anulează",
+    "processing": "Procesare…"
   },
   "nav": {
     "home": "Acasă",
@@ -230,7 +233,13 @@
     "status_ended": "Finalizat",
     "with_reserve_amount": "Cu rezervă",
     "counter_pending": "În așteptare",
-    "counter_declined": "Contra-ofertă refuzată"
+    "counter_declined": "Contra-ofertă refuzată",
+    "credit_pitch_title": "Adăugați credit de licitație",
+    "credit_pitch_body": "Universal — funcționează la orice licitație.",
+    "credit_topup_needed": "Credit insuficient — adăugați",
+    "credit_topup_body": "Disponibil {{avail}} → oferta cere {{need}}. Apăsați pentru a adăuga.",
+    "credit_available_short": "Disponibil",
+    "credit_topup_short": "Adaugă"
   },
   "preauth": {
     "confirm_card": "Confirmă oferta",
@@ -861,5 +870,34 @@
     "empty_v2": "Nu aveți autorizări active. Adăugați credit pentru a începe.",
     "hold_blocked": "Blocat: {{h}}",
     "login_required": "Trebuie să vă autentificați pentru a vedea licitațiile."
+  },
+  "settings": {
+    "title": "Setări",
+    "headline": "Cont & notificări",
+    "sms_title": "Notificări SMS",
+    "sms_body": "Primiți SMS în ultimele 5 minute de licitație. Format internațional (+40...).",
+    "phone": "Telefon",
+    "sms_opt_label": "Vreau SMS în ultimele 5 minute",
+    "saving": "Se salvează…",
+    "save": "Salvează",
+    "saved_searches_title": "Căutări salvate",
+    "add_from_search": "Adaugă din căutare",
+    "saved_searches_body": "Când o ofertă nouă se potrivește cu filtrele dvs., primiți un email cu link direct.",
+    "saved_searches_empty": "Nu aveți căutări salvate. Deschideți pagina de licitații, aplicați filtrele și apăsați „Salvează căutarea\".",
+    "from": "de la",
+    "to": "până la",
+    "no_filters": "Fără filtre",
+    "delete_phrase": "ȘTERGE",
+    "delete_phrase_label": "Tastați „{{p}}\" pentru confirmare",
+    "delete_confirm_err": "Tastați „{{p}}\" pentru confirmare.",
+    "delete_warn": "Acțiune ireversibilă. Continuați?",
+    "delete_title": "Ștergere cont (GDPR)",
+    "delete_body": "Dreptul GDPR la ștergere. Vom elimina ofertele, comentariile, favoritele, căutările salvate, cererile VIN și recenziile. Anunțurile precedente rămân ca înregistrări anonimizate pentru evidența contabilă/juridică.",
+    "deleting": "Se șterge…",
+    "delete_cta": "Șterge contul definitiv"
+  },
+  "leaderboard": {
+    "metric_comments_count": "{{n}} comentarii",
+    "karma_label": "karma"
   }
 }
