@@ -1,0 +1,75 @@
+{
+  "summary": "Iteration 15: Backend refactor validation complete. All 29 tests pass. Newly extracted routers (leaderboard.py, watchlist.py, stripe_holds.py) are correctly mounted and functioning. All endpoints respond as expected.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration15_refactor_validation.py",
+    "/app/test_reports/pytest/pytest_iteration15.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_iteration15_refactor_validation.py"
+  ],
+  "success_rate": {
+    "backend": "100% (29/29 tests passed)",
+    "frontend": "N/A (backend-only testing per request)"
+  },
+  "test_credentials": "admin@autoandbid.com / Nero08787",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 15 validated the 2026-05-04 refactor that extracted Leaderboard, Watchlist, and Stripe holds endpoints into separate router files. All endpoints work correctly after the refactor.",
+  "tests_executed": {
+    "leaderboard_router": [
+      "GET /api/leaderboard?type=reputation&limit=20 → 200, returns list with rank/user_id/score",
+      "GET /api/leaderboard?type=sellers → 200, returns list",
+      "GET /api/leaderboard?type=commenters → 200, returns list with extra.comments",
+      "GET /api/leaderboard?type=bidders → 200, returns list",
+      "GET /api/leaderboard?type=invalid → 422 (validation error)",
+      "GET /api/leaderboard?period=month → 200, works with period filter"
+    ],
+    "watchlist_router": [
+      "GET /api/auctions/{id}/watch-status (no auth) → 401",
+      "GET /api/auctions/{id}/watch-status (auth) → 200, {watching: bool}",
+      "POST /api/auctions/{id}/watch → 200, toggles watch status correctly",
+      "GET /api/me/watchlist (no auth) → 401",
+      "GET /api/me/watchlist (auth) → 200, returns list",
+      "GET /api/me/listings (no auth) → 401",
+      "GET /api/me/listings (auth) → 200, returns list with id/title/status",
+      "GET /api/me/bids (no auth) → 401",
+      "GET /api/me/bids (auth) → 200, returns list (uses services/bidding.list_user_bids)"
+    ],
+    "stripe_holds_router": [
+      "GET /api/stripe/authorizations/my-credits (no auth) → 401",
+      "GET /api/stripe/authorizations/my-credits (auth) → 200, returns {holds, total_available_eur, total_limit_eur, total_hold_eur, count}",
+      "POST /api/stripe/authorizations/{id}/release (no auth) → 401",
+      "POST /api/stripe/authorizations/{id}/release (non-existent) → 404",
+      "GET /api/stripe/config → 200, returns {configured, mode, hold_percent}"
+    ],
+    "regression_endpoints": [
+      "GET /api/healthz → 200",
+      "GET /api/readyz → 200",
+      "GET /api/auctions → 200",
+      "GET /api/auctions/featured → 200",
+      "GET /api/auctions/facets → 200",
+      "POST /api/auth/login (valid) → 200",
+      "POST /api/auth/login (invalid) → 401",
+      "GET /api/auth/me (no auth) → 401",
+      "GET /api/auth/me (auth) → 200",
+      "POST /api/auctions/{id}/request-vin (admin) → 400 'already have access' (correct behavior)"
+    ]
+  },
+  "verified_router_mounting": {
+    "leaderboard.py": "app.include_router(_leaderboard_router.build_leaderboard_router(db)) at line 5304",
+    "watchlist.py": "app.include_router(_watchlist_router.build_watchlist_router(db, get_current_user, _auction_status, _public_auction)) at line 5308",
+    "stripe_holds.py": "app.include_router(_stripe_holds.build_stripe_router(db, get_current_user)) at line 5299"
+  }
+}

@@ -3282,13 +3282,6 @@ async def request_vin(auction_id: str, user: dict = Depends(get_current_user)):
         logger.error("email_vin_delivery failed: %s", e)
     return {"ok": True, "message": f"Изпратихме пълния VIN на {user['email']}"}
 
-@api.post("/auctions/{auction_id}/request-vin")
-async def request_vin(auction_id: str, user: dict = Depends(get_current_user)):
-    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
-    if not a:
-        raise HTTPException(status_code=404, detail="Търгът не е намерен")
-    if _auction_status(a) != "live":
-
 
 # ---- Profile ----
 @api.patch("/me/profile")

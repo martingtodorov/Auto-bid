@@ -7,6 +7,7 @@ import { api, API_BASE, formatEUR, formatLocal, formatKM, timeLeft, formatTimeLe
 import { translateEnum } from "../lib/carTranslations";
 import { useAuth, formatError } from "../lib/auth";
 import BiddingCreditModal from "../components/BiddingCreditModal";
+import BidConfirmModal from "../components/BidConfirmModal";
 import AuctionCard from "../components/AuctionCard";
 import NegotiationPortal from "../components/NegotiationPortal";
 import Lightbox from "../components/Lightbox";
@@ -33,6 +34,12 @@ export default function AuctionDetailPage() {
   const [placing, setPlacing] = useState(false);
   const [buyingNow, setBuyingNow] = useState(false);
   const [showCredit, setShowCredit] = useState(false);
+  const [showBidConfirm, setShowBidConfirm] = useState(false);
+  // Stash the typed bid amounts at the moment the user clicked "Наддай"
+  // so the confirm overlay always reflects what they intended, not the
+  // input field which may keep changing in the background while a modal
+  // is open.
+  const [pendingBid, setPendingBid] = useState(null);
   const [wsStatus, setWsStatus] = useState("connecting");
   const [watching, setWatching] = useState(false);
   const [notFound, setNotFound] = useState(false);
@@ -270,7 +277,8 @@ export default function AuctionDetailPage() {
     // into `BiddingCreditModal` (previously the bid-only `PreauthModal`
     // was shown for this case; the two flows have been merged into one).
     if (credit && Number(credit.max_amount_eur) >= netAmt) {
-      confirmBid(null);
+      setPendingBid({ gross: typed, net: netAmt });
+      setShowBidConfirm(true);
       return;
     }
     setShowCredit(true);
@@ -593,6 +601,21 @@ export default function AuctionDetailPage() {
           currentCredit={credit}
           onClose={() => setShowCredit(false)}
           onSaved={(c) => setCredit(c)}
+        />
+      )}
+
+      {showBidConfirm && a && pendingBid && (
+        <BidConfirmModal
+          amountGross={pendingBid.gross}
+          amountNet={pendingBid.net}
+          vatRate={vatRate}
+          credit={credit}
+          onConfirm={() => confirmBid(null)}
+          onTopUp={() => {
+            setShowBidConfirm(false);
+            setShowCredit(true);
+          }}
+          onClose={() => setShowBidConfirm(false)}
         />
       )}
 
