@@ -275,6 +275,26 @@ def _buyer_fee(amount_eur: float) -> float:
     )
 
 
+def _stripe_meta_get(metadata, key: str):
+    """Extract a key from a Stripe metadata object.
+
+    The Stripe Python SDK ≥ 8 returns metadata as a `StripeObject`
+    which is **not** a dict subclass — calling `.get()` on it raises
+    AttributeError, and `metadata[key]` raises a KeyError that the
+    SDK's own `__getitem__` swallows oddly. The safe path is
+    `getattr(metadata, key, None)` which works for both StripeObject
+    and plain dict (and the empty `{}` fallback we use when metadata
+    is missing).
+    """
+    if metadata is None:
+        return None
+    # plain dict path
+    if isinstance(metadata, dict):
+        return metadata.get(key)
+    # StripeObject — supports attribute access
+    return getattr(metadata, key, None)
+
+
 def _gross_amount(net_eur: float, auction: dict) -> float:
     """Apply VAT rate to the bid when an auction is sold WITH VAT.
     For VAT-exempt listings the gross equals the net.
@@ -2379,9 +2399,9 @@ async def promote_finalize(auction_id: str, body: dict,
         raise HTTPException(status_code=502, detail=f"Stripe retrieve: {e}")
 
     meta = getattr(session, "metadata", None) or {}
-    if (meta.get("user_id") if hasattr(meta, "get") else None) != user["id"]:
+    if _stripe_meta_get(meta, "user_id") != user["id"]:
         raise HTTPException(status_code=403, detail="Сесията не принадлежи на този потребител.")
-    if (meta.get("auction_id") if hasattr(meta, "get") else None) != auction_id:
+    if _stripe_meta_get(meta, "auction_id") != auction_id:
         raise HTTPException(status_code=400, detail="Сесията не е за тази обява.")
     if getattr(session, "payment_status", None) != "paid":
         raise HTTPException(status_code=402, detail="Плащането все още не е потвърдено.")
@@ -2554,9 +2574,9 @@ async def buy_now_finalize(auction_id: str, body: dict, user: dict = Depends(req
         raise HTTPException(status_code=502, detail=f"Stripe retrieve: {e}")
 
     meta = getattr(session, "metadata", None) or {}
-    if (meta.get("user_id") if hasattr(meta, "get") else None) != user["id"]:
+    if _stripe_meta_get(meta, "user_id") != user["id"]:
         raise HTTPException(status_code=403, detail="Сесията не принадлежи на този потребител.")
-    if (meta.get("auction_id") if hasattr(meta, "get") else None) != auction_id:
+    if _stripe_meta_get(meta, "auction_id") != auction_id:
         raise HTTPException(status_code=400, detail="Сесията не е за тази обява.")
     if getattr(session, "payment_status", None) != "paid":
         raise HTTPException(status_code=402, detail="Плащането все още не е потвърдено от Stripe.")

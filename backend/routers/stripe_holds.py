@@ -491,10 +491,15 @@ def build_stripe_router(db, get_current_user):
         except stripe.error.StripeError as e:
             raise HTTPException(status_code=502, detail=f"Stripe retrieve: {e}")
         # Сигурност: session трябва да е на този потребител.
-        # Stripe's `StripeObject` raises AttributeError on missing fields
-        # instead of returning None, so use `getattr` with defaults.
+        # Stripe's `StripeObject` (SDK ≥ 8) is **not** a dict subclass —
+        # `.get()` is missing entirely. Use attribute access with a
+        # safe fallback so wrong-user sessions are still rejected.
         session_metadata = getattr(session, "metadata", None) or {}
-        if (session_metadata.get("user_id") if hasattr(session_metadata, "get") else None) != user["id"]:
+        if isinstance(session_metadata, dict):
+            uid = session_metadata.get("user_id")
+        else:
+            uid = getattr(session_metadata, "user_id", None)
+        if uid != user["id"]:
             raise HTTPException(status_code=403, detail="Сесията не принадлежи на този потребител.")
         si = getattr(session, "setup_intent", None) or {}
         pm_id = (
