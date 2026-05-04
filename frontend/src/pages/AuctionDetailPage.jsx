@@ -6,8 +6,8 @@ import { useTranslation } from "react-i18next";
 import { api, API_BASE, formatEUR, formatLocal, formatKM, timeLeft, formatTimeLeft, intlLocale } from "../lib/apiClient";
 import { translateEnum } from "../lib/carTranslations";
 import { useAuth, formatError } from "../lib/auth";
-import BiddingCreditModal from "../components/BiddingCreditModal";
 import BidConfirmModal from "../components/BidConfirmModal";
+import TopUpCreditModal from "../components/TopUpCreditModal";
 import AuctionCard from "../components/AuctionCard";
 import NegotiationPortal from "../components/NegotiationPortal";
 import Lightbox from "../components/Lightbox";
@@ -47,7 +47,10 @@ export default function AuctionDetailPage() {
   const [vinMsg, setVinMsg] = useState("");
   const [vinErr, setVinErr] = useState("");
   const [related, setRelated] = useState([]);
-  const [credit, setCredit] = useState(null);
+  // Account-level credit pool (universal, not per-auction). Powers the
+  // bid validation gate below — if the user doesn't have enough free
+  // credit we open `TopUpCreditModal` instead of placing the bid.
+  const [accountCredit, setAccountCredit] = useState(null);
   const [nextBid, setNextBid] = useState({ min_next_eur: 0, buyer_fee_eur: 150, step_eur: 100 });
   const titleRef = useRef(null);
   const wsRef = useRef(null);
@@ -132,10 +135,25 @@ export default function AuctionDetailPage() {
     api.get(`/auctions/${id}/watch-status`).then((r) => setWatching(!!r.data.watching)).catch(() => {});
   }, [user, id]);
 
-  // Bidding credit
+  // Account-level credit pool (universal, not per-auction).
+  // Refreshed on user/auction load + on `credits-updated` events
+  // (dispatched from top-up / release flows). This drives the
+  // "do you have enough credit to bid?" gate in `startBid` below.
   useEffect(() => {
-    if (!user || !id) { setCredit(null); return; }
-    api.get(`/auctions/${id}/bidding-credit`).then((r) => setCredit(r.data || null)).catch(() => setCredit(null));
+    if (!user) { setAccountCredit(null); return; }
+    let cancelled = false;
+    const fetchCredit = () => {
+      api.get("/stripe/authorizations/my-credits")
+        .then((r) => { if (!cancelled) setAccountCredit(r.data || null); })
+        .catch(() => { if (!cancelled) setAccountCredit(null); });
+    };
+    fetchCredit();
+    const onUpdate = () => fetchCredit();
+    window.addEventListener("credits-updated", onUpdate);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("credits-updated", onUpdate);
+    };
   }, [user, id]);
 
   // SEO meta tags + structured data
@@ -272,16 +290,22 @@ export default function AuctionDetailPage() {
       setError(`${t("auction.min_bid_error", "Минималното следващо наддаване е")} €${minDisplay.toLocaleString()}`);
       return;
     }
-    // If the user's existing bidding-credit already covers this bid, fire
-    // the bid off directly — no modal needed. Otherwise we now always fall
-    // into `BiddingCreditModal` (previously the bid-only `PreauthModal`
-    // was shown for this case; the two flows have been merged into one).
-    if (credit && Number(credit.max_amount_eur) >= netAmt) {
+    // Account-level credit pool check. We treat the user's existing
+    // high-bid on THIS auction as already-committed, so a top-up bid
+    // only needs the *delta* to fit within the available pool.
+    const isAdmin = ["admin", "moderator"].includes(user?.role);
+    const myCurrent = a.high_bidder_id === user.id ? Number(a.current_bid_eur || 0) : 0;
+    const newCommitDelta = Math.max(0, netAmt - myCurrent);
+    const available = Number(accountCredit?.total_available_eur || 0);
+    if (!isAdmin && newCommitDelta > available + 0.5) {
+      // Not enough — open the top-up modal pre-filled with the shortfall.
       setPendingBid({ gross: typed, net: netAmt });
-      setShowBidConfirm(true);
+      setShowCredit(true);
       return;
     }
-    setShowCredit(true);
+    // Sufficient credit — show the confirmation overlay.
+    setPendingBid({ gross: typed, net: netAmt });
+    setShowBidConfirm(true);
   };
 
   const confirmBid = async (paymentMethodId) => {
@@ -368,57 +392,17 @@ export default function AuctionDetailPage() {
     if (!sid || !id) return;
     let cancel = false;
     (async () => {
-      // Stripe webhook may take ~1-2s after redirect to mark auth active.
-      // Poll up to 6× (12s total) for `authorizations/active`.
-      let auth = null;
-      for (let i = 0; i < 6 && !cancel; i++) {
-        try {
-          const { data } = await api.get(`/stripe/authorizations/active`, { params: { auction_id: id } });
-          if (data && data.id) { auth = data; break; }
-        } catch (_e) { /* ignore */ }
-        await new Promise((r) => setTimeout(r, 2000));
-      }
-      if (cancel) return;
-      if (!auth) {
-        setError(t("preauth.stripe_pending", "Плащането през Stripe все още се обработва. Моля, опитайте отново след минута."));
-        return;
-      }
-      // Stripe authorization was confirmed → tell the global nav
-      // counter to refresh immediately. We do this BEFORE the
-      // bidding-credit registration so even if that step fails
-      // (e.g. unverified email, network blip) the user at least sees
-      // their hold reflected in the menu.
+      // Account-level top-up flow now lands on /my-bids, so this
+      // handler is mostly a safety net for users who navigate back to
+      // the auction page with the session_id still in the URL. We
+      // just refresh the credit counter and clean up the URL.
       window.dispatchEvent(new Event("credits-updated"));
-      // Финализираме pending действие: 1) pending_credit → регистрирай credit;
-      // 2) pending_bid → подай бида.
-      try {
-        const credRaw = localStorage.getItem(`pending_credit_${id}`);
-        if (credRaw) {
-          const cred = JSON.parse(credRaw);
-          await api.post(`/auctions/${id}/bidding-credit`, {
-            max_amount_eur: Number(cred.max_amount_eur),
-            payment_method_id: auth.id, // canonical session id, not card data
-          });
-          localStorage.removeItem(`pending_credit_${id}`);
-          // Tell the nav counter to refresh now (skip the 90 s tick).
-          window.dispatchEvent(new Event("credits-updated"));
-          await load();
-        }
-        const bidRaw = localStorage.getItem(`pending_bid_${id}`);
-        if (bidRaw) {
-          const pb = JSON.parse(bidRaw);
-          const typed = Number(pb.amount_eur);
-          const netAmt = vatRate > 0 ? Math.round(typed / (1 + vatRate / 100)) : typed;
-          await api.post(`/auctions/${id}/bids`, { amount_eur: netAmt, payment_method_id: auth.id });
-          localStorage.removeItem(`pending_bid_${id}`);
-          await load();
-        }
-      } catch (e) {
-        setError(formatError(e));
-      }
-      // Изчистваме session_id от URL-а.
+      // Clean up URL.
       params.delete("stripe_session_id");
       window.history.replaceState({}, "", `${window.location.pathname}${params.toString() ? "?" + params : ""}`);
+      // Clear any stale legacy localStorage from the old per-auction flow.
+      try { localStorage.removeItem(`pending_credit_${id}`); } catch (_e) { /* ignore */ }
+      try { localStorage.removeItem(`pending_bid_${id}`); } catch (_e) { /* ignore */ }
     })();
     return () => { cancel = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -593,22 +577,23 @@ export default function AuctionDetailPage() {
           </div>
         </div>
       )}
-      {/* PreauthModal has been replaced by BiddingCreditModal as the
-          single unified entry point for card authorization. The modal
-          below handles both "no credit yet" and "increase limit" flows,
-          pre-filling the typed bid amount when opened from the bid form. */}
+      {/* Account-level top-up modal — replaces the old per-auction
+          BiddingCreditModal. Opens when the user tries to bid without
+          enough credit in their universal pool. The shortfall is
+          pre-filled as the suggested top-up amount. */}
       {showCredit && a && (
-        <BiddingCreditModal
-          auctionId={id}
-          currentBid={a.current_bid_eur}
-          prefillAmount={(() => {
+        <TopUpCreditModal
+          suggestedAmount={(() => {
             const typed = Number(bidAmount);
-            if (!typed) return null;
-            return vatRate > 0 ? Math.round(typed / (1 + vatRate / 100)) : typed;
+            const net = typed && vatRate > 0 ? Math.round(typed / (1 + vatRate / 100)) : typed;
+            const myCurrent = a.high_bidder_id === user?.id ? Number(a.current_bid_eur || 0) : 0;
+            const delta = Math.max(0, (net || 0) - myCurrent);
+            const avail = Number(accountCredit?.total_available_eur || 0);
+            const shortfall = Math.max(1000, delta - avail);
+            // Round up to nearest €1k for a cleaner default.
+            return Math.ceil(shortfall / 1000) * 1000;
           })()}
-          currentCredit={credit}
           onClose={() => setShowCredit(false)}
-          onSaved={(c) => setCredit(c)}
         />
       )}
 
@@ -617,7 +602,13 @@ export default function AuctionDetailPage() {
           amountGross={pendingBid.gross}
           amountNet={pendingBid.net}
           vatRate={vatRate}
-          credit={credit}
+          credit={{
+            // Adapt the new account-level summary to the modal's
+            // existing prop shape so we don't have to refactor the
+            // overlay just for a label change.
+            max_amount_eur: Number(accountCredit?.total_limit_eur || 0),
+            preauth_amount_eur: Number(accountCredit?.total_hold_eur || 0),
+          }}
           onConfirm={() => confirmBid(null)}
           onTopUp={() => {
             setShowBidConfirm(false);

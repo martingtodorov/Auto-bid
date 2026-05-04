@@ -242,6 +242,13 @@ class CreateAuthBody(BaseModel):
     use_saved_card: Optional[bool] = False  # ако True и user има saved PM, ползвай него
 
 
+class TopupCheckoutBody(BaseModel):
+    """Body for `/authorizations/topup-checkout`. Account-level credit
+    top-up — NOT bound to any specific auction."""
+    bidding_limit_eur: float
+    origin: Optional[str] = None  # frontend's window.location.origin
+
+
 class SetupCardBody(BaseModel):
     origin: Optional[str] = None  # frontend's window.location.origin
 
@@ -527,6 +534,105 @@ def build_stripe_router(db, get_current_user):
                     session["id"], user["id"], body.auction_id, amount_eur)
         return {"redirect": True, "id": session["id"], "url": session["url"], "amount_eur": amount_eur}
 
+    # ---- Account-level top-up (universal credit pool) ----
+
+    @router.post("/authorizations/topup-checkout")
+    async def topup_checkout(body: TopupCheckoutBody, request: Request, user: dict = Depends(get_current_user)):
+        """Top up the user's account-level bidding credit pool.
+
+        Unlike `create-checkout` this is NOT tied to a specific
+        auction. The resulting `bid_authorization` row carries
+        `auction_id=None`, so the funds become part of the user's
+        universal credit pool that can be spent across ANY active
+        auction. See `my_credits_summary` for the bookkeeping.
+        """
+        if not api_key:
+            raise HTTPException(status_code=503, detail="Stripe не е конфигуриран. Свържете се с администратор.")
+        # Mirror the safety gate from `create_checkout`: do NOT redirect
+        # an unverified user to Stripe — they'll pay and then get
+        # blocked downstream, leaving their card charged with no usable
+        # credit.
+        if user.get("role") not in ("admin", "moderator"):
+            if user.get("verification_required") and not user.get("email_verified"):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Моля, потвърдете имейл адреса си, преди да авторизирате карта.",
+                )
+        if float(body.bidding_limit_eur) <= 0:
+            raise HTTPException(status_code=400, detail="Невалидна сума.")
+
+        # Same buyer-fee policy as per-auction holds. The hold amount
+        # is the platform's fee — funds beyond that are settled
+        # off-platform with the seller upon win.
+        pct, min_eur, max_eur = await _hold_settings(db)
+        amount_eur = _hold_amount_eur(
+            body.bidding_limit_eur, pct=pct, min_eur=min_eur, max_eur=max_eur,
+        )
+        amount_cents = int(round(amount_eur * 100))
+        customer_id = await _get_or_create_stripe_customer(db, user)
+        origin = resolve_stripe_redirect_origin(body.origin, request)
+        # Land the user on /my-bids — that's the new top-up landing page.
+        success_url = f"{origin}/my-bids?stripe_session_id={{CHECKOUT_SESSION_ID}}"
+        cancel_url = f"{origin}/my-bids?stripe_cancelled=1"
+
+        try:
+            session = stripe.checkout.Session.create(
+                mode="payment",
+                customer=customer_id,
+                payment_method_types=["card"],
+                line_items=[{
+                    "price_data": {
+                        "currency": "eur",
+                        "product_data": {
+                            "name": f"Bidding credit · €{int(round(body.bidding_limit_eur)):,}".replace(",", " "),
+                            "description": "Авторизация на наддавателен кредит към акаунта (универсален пул).",
+                        },
+                        "unit_amount": amount_cents,
+                    },
+                    "quantity": 1,
+                }],
+                payment_intent_data={
+                    "capture_method": "manual",
+                    "setup_future_usage": "off_session",
+                    "metadata": {
+                        "user_id": user["id"],
+                        "bidding_limit_eur": str(round(float(body.bidding_limit_eur), 2)),
+                        "authorization_type": "account_credit_topup",
+                    },
+                },
+                metadata={
+                    "user_id": user["id"],
+                    "bidding_limit_eur": str(round(float(body.bidding_limit_eur), 2)),
+                    "topup": "1",
+                },
+                success_url=success_url,
+                cancel_url=cancel_url,
+            )
+        except stripe.error.StripeError as e:
+            logger.exception("stripe.checkout.topup failed")
+            raise HTTPException(status_code=502, detail=f"Stripe error: {getattr(e, 'user_message', str(e))}")
+
+        now = datetime.now(timezone.utc)
+        doc = {
+            "id": session["id"],
+            "stripe_checkout_session_id": session["id"],
+            "stripe_payment_intent_id": _stripe_obj_get(session, "payment_intent"),
+            "user_id": user["id"],
+            "auction_id": None,  # ← account-level pool, not bound to any auction
+            "bidding_limit_eur": float(body.bidding_limit_eur),
+            "amount_authorized_eur": amount_eur,
+            "amount_captured_eur": 0.0,
+            "currency": "eur",
+            "authorization_status": "pending",
+            "authorization_expires_at": (now + timedelta(days=AUTHORIZATION_TTL_DAYS)).isoformat(),
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+        await db.bid_authorizations.insert_one(doc)
+        logger.info("[stripe] topup checkout %s for user=%s amount_authorized=%s EUR limit=%s EUR",
+                    session["id"], user["id"], amount_eur, body.bidding_limit_eur)
+        return {"redirect": True, "id": session["id"], "url": session["url"], "amount_eur": amount_eur}
+
     # ---- Saved cards (Stripe SetupIntent flow) ----
 
     @router.post("/cards/setup-checkout")
@@ -736,91 +842,98 @@ def build_stripe_router(db, get_current_user):
 
     @router.get("/authorizations/my-credits")
     async def my_credits_summary(user: dict = Depends(get_current_user)):
-        """Return a rolled-up view of the user's bidding credits. Powers
-        the profile-menu counter AND the /my-bids page header.
+        """Account-level credit summary (UNIVERSAL POOL).
 
-        `available_eur` = bidding_limit - already-committed (current high
-        bid on the auction the hold is tied to). This matches the mental
-        model "how much I can still spend" shown in the UI bell section.
+        Holds are no longer bound to specific auctions. The user tops
+        up an account credit (one or more `bid_authorizations` rows
+        with `auction_id=None`), and any active live-auction high-bid
+        they hold counts as a *commitment* against the pool. The
+        formula:
+
+            authorized = Σ bidding_limit_eur of active account holds
+            committed  = Σ current_bid_eur of LIVE auctions where the
+                         user is high_bidder
+            available  = max(0, authorized − committed)
+
+        Each row in `holds[]` is an authorization the user can manage
+        (release / top-up). Each row in `commitments[]` is a live
+        leading bid the user currently holds — the UI surfaces both
+        so the user knows what they can release vs what's locked.
         """
         await _expire_stale_authorizations(db)
         # Promote any pending rows that have already been authorized on
-        # Stripe but whose webhook never reached us — without this, a
-        # user who just paid sees a `0€/0€` counter even though their
-        # card has been held.
+        # Stripe but whose webhook never reached us.
         await _promote_pending_authorizations(user["id"])
+
+        # 1. Active account-level holds (auction_id=None) — the credit pool.
         cursor = db.bid_authorizations.find(
             {"user_id": user["id"],
-             "authorization_status": {"$in": ["active", "loser_grace"]}},
-            {"_id": 0, "id": 1, "auction_id": 1, "bidding_limit_eur": 1,
+             "auction_id": None,
+             "authorization_status": {"$in": ["active", "pending"]}},
+            {"_id": 0, "id": 1, "bidding_limit_eur": 1,
              "amount_authorized_eur": 1, "authorization_status": 1,
-             "authorization_expires_at": 1, "currency": 1},
+             "authorization_expires_at": 1, "currency": 1, "created_at": 1},
         )
-        rows = await cursor.to_list(200)
-        if not rows:
-            return {"holds": [], "total_hold_eur": 0.0, "total_limit_eur": 0.0,
-                    "total_available_eur": 0.0, "count": 0}
+        holds = await cursor.to_list(50)
+        authorized_total = sum(float(r.get("bidding_limit_eur") or 0)
+                               for r in holds
+                               if r.get("authorization_status") == "active")
 
-        # Pull current bids for all involved auctions in a single batched
-        # query (avoid N+1 round-trips on users with many active holds).
-        auction_ids = [r["auction_id"] for r in rows]
-        a_cursor = db.auctions.find(
-            {"id": {"$in": auction_ids}},
-            {"_id": 0, "id": 1, "title": 1, "current_bid_eur": 1,
-             "high_bidder_id": 1, "status": 1, "slug": 1, "ends_at": 1,
-             "thumbnails": 1, "images": 1},
+        # 2. Live auctions where this user is currently the high bidder.
+        commit_cursor = db.auctions.find(
+            {"high_bidder_id": user["id"], "status": "live"},
+            {"_id": 0, "id": 1, "title": 1, "slug": 1, "current_bid_eur": 1,
+             "ends_at": 1, "thumbnails": 1, "images": 1, "vat_status": 1,
+             "vat_rate_pct": 1},
         )
-        by_id = {a["id"]: a async for a in a_cursor}
-
-        out_holds = []
-        total_limit = 0.0
-        total_hold = 0.0
-        total_avail = 0.0
-        for r in rows:
-            a = by_id.get(r["auction_id"], {})
-            limit = float(r.get("bidding_limit_eur") or 0)
-            hold = float(r.get("amount_authorized_eur") or 0)
-            # `current_bid` on an auction where the user is high-bidder
-            # counts toward "used" credits. Lost-race auctions return
-            # full limit back to available.
-            is_leading = a.get("high_bidder_id") == user["id"]
-            used = float(a.get("current_bid_eur") or 0) if is_leading else 0.0
-            available = max(0.0, limit - used)
-            total_limit += limit
-            total_hold += hold
-            total_avail += available
-            out_holds.append({
-                "authorization_id": r["id"],
-                "auction_id": r["auction_id"],
+        commitments = []
+        committed_total = 0.0
+        async for a in commit_cursor:
+            cb = float(a.get("current_bid_eur") or 0)
+            committed_total += cb
+            commitments.append({
+                "auction_id": a["id"],
                 "auction_title": a.get("title", ""),
                 "auction_slug": a.get("slug"),
-                "auction_status": a.get("status"),
-                "auction_ends_at": a.get("ends_at"),
                 "auction_thumb": (a.get("thumbnails") or a.get("images") or [None])[0],
-                "bidding_limit_eur": round(limit, 2),
-                "hold_eur": round(hold, 2),
-                "current_bid_eur": float(a.get("current_bid_eur") or 0),
-                "is_leading": is_leading,
-                "available_eur": round(available, 2),
+                "ends_at": a.get("ends_at"),
+                "current_bid_eur": round(cb, 2),
+            })
+
+        available_total = max(0.0, authorized_total - committed_total)
+
+        out_holds = []
+        for r in holds:
+            out_holds.append({
+                "authorization_id": r["id"],
+                "bidding_limit_eur": round(float(r.get("bidding_limit_eur") or 0), 2),
+                "hold_eur": round(float(r.get("amount_authorized_eur") or 0), 2),
                 "authorization_status": r.get("authorization_status"),
                 "expires_at": r.get("authorization_expires_at"),
                 "currency": r.get("currency") or "eur",
+                "created_at": r.get("created_at"),
             })
+
         return {
             "holds": out_holds,
-            "count": len(out_holds),
-            "total_limit_eur": round(total_limit, 2),
-            "total_hold_eur": round(total_hold, 2),
-            "total_available_eur": round(total_avail, 2),
+            "commitments": commitments,
+            "count": len([h for h in out_holds if h["authorization_status"] == "active"]),
+            "total_limit_eur": round(authorized_total, 2),
+            "total_hold_eur": round(sum(h["hold_eur"] for h in out_holds), 2),
+            "total_available_eur": round(available_total, 2),
+            "total_committed_eur": round(committed_total, 2),
         }
 
     @router.post("/authorizations/{auth_id}/release")
     async def release_authorization_route(auth_id: str, user: dict = Depends(get_current_user)):
-        """User-initiated release of a hold. The user may release a hold
-        **only** if they are not currently the highest bidder on its
-        auction — otherwise we'd cancel their own winning bid. For
-        already-finalized auctions we always allow release so the user
-        can instantly free their card.
+        """User-initiated release of an account-level hold.
+
+        Allowed iff the released amount would NOT push the user's
+        committed total above their remaining authorized credit. In
+        practice that means: if the user has any leading bid on a
+        live auction, we only allow releasing holds whose
+        `bidding_limit_eur` is small enough that the rest still
+        covers all live commitments.
         """
         doc = await db.bid_authorizations.find_one(
             {"id": auth_id, "user_id": user["id"]},
@@ -830,17 +943,35 @@ def build_stripe_router(db, get_current_user):
             raise HTTPException(status_code=404, detail="Авторизация не е намерена.")
         if doc.get("authorization_status") == "released":
             return {"ok": True, "already_released": True}
-        if doc.get("authorization_status") not in ("active", "loser_grace"):
+        if doc.get("authorization_status") not in ("active", "loser_grace", "pending"):
             raise HTTPException(status_code=400, detail="Тази авторизация не може да се освободи ръчно.")
 
-        a = await db.auctions.find_one(
-            {"id": doc["auction_id"]},
-            {"_id": 0, "high_bidder_id": 1, "status": 1},
-        ) or {}
-        if a.get("status") in ("live", "scheduled") and a.get("high_bidder_id") == user["id"]:
+        # Compute committed across all live auctions where the user leads.
+        commit_total = 0.0
+        async for a in db.auctions.find(
+            {"high_bidder_id": user["id"], "status": "live"},
+            {"_id": 0, "current_bid_eur": 1},
+        ):
+            commit_total += float(a.get("current_bid_eur") or 0)
+
+        # Sum of all OTHER active account holds (excluding this one).
+        other_total = 0.0
+        async for r in db.bid_authorizations.find(
+            {"user_id": user["id"],
+             "auction_id": None,
+             "authorization_status": "active",
+             "id": {"$ne": auth_id}},
+            {"_id": 0, "bidding_limit_eur": 1},
+        ):
+            other_total += float(r.get("bidding_limit_eur") or 0)
+
+        if commit_total > other_total:
             raise HTTPException(
                 status_code=409,
-                detail="Не можете да освободите — вие сте текущ лидер. Изчакайте някой да Ви надмине или търгът да приключи.",
+                detail=(
+                    f"Не можете да освободите — €{int(commit_total):,} са ангажирани "
+                    f"в активни наддавания, а ще остане €{int(other_total):,} кредит."
+                ),
             )
         try:
             return await cancel_authorization(db, auth_id)

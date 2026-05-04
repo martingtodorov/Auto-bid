@@ -2,26 +2,24 @@ import React, { useEffect, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { X, Wallet, Plus, Trophy, Clock, ExternalLink } from "lucide-react";
+import { X, Wallet, Plus, Clock, ExternalLink } from "lucide-react";
 import { api, formatEUR } from "../lib/apiClient";
 import { formatError } from "../lib/auth";
 import { auctionUrl } from "../lib/auctionUrl";
+import TopUpCreditModal from "./TopUpCreditModal";
 
 /**
- * CreditsOverlay — quick-action sheet wired to the Nav credit counter.
+ * CreditsOverlay — лесен достъп до акаунтния кредит пул от Nav.
  *
- * Shows the same data as `/my-bids` but as a modal so users can
- * cancel/top-up holds without losing their current page context.
+ * Backed by GET /api/stripe/authorizations/my-credits, който връща:
+ *   • holds[]        — активни авторизации (могат да се отменят)
+ *   • commitments[]  — текущи лидерски бидове (заключен кредит)
+ *   • totals         — limit / hold / committed / available
  *
- *   • Releases holds where the user is NOT currently leading (server
- *     enforces the same rule and rejects 409 if the user races into
- *     leading mid-click).
- *   • "Зареди още" deep-links to the auction's bid form for any held
- *     auction (top-up via BiddingCreditModal there).
- *   • If there are no holds, shows a CTA to browse auctions.
- *
- * Data source: GET /api/stripe/authorizations/my-credits — same
- * endpoint that powers the Nav counter, so the totals always match.
+ * Действия:
+ *   • "Зареди още" — отваря TopUpCreditModal (Stripe Checkout)
+ *   • "Освободи" на конкретен hold — server enforces че може да се
+ *     освободи само ако оставащият limit покрива committed.
  */
 export default function CreditsOverlay({ onClose, onChanged }) {
   const { t } = useTranslation();
@@ -29,7 +27,8 @@ export default function CreditsOverlay({ onClose, onChanged }) {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
-  const [busy, setBusy] = useState({}); // {auth_id: true}
+  const [busy, setBusy] = useState({});
+  const [showTopUp, setShowTopUp] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -53,21 +52,12 @@ export default function CreditsOverlay({ onClose, onChanged }) {
   }, [onClose]);
 
   const release = async (hold) => {
-    if (hold.is_leading && hold.auction_status === "live") {
-      // Server will refuse with 409 — surface a clear pre-emptive
-      // confirmation instead of letting the click fail silently.
-      if (!window.confirm(t("credit_overlay.release_warning",
-        "Вие сте текущ лидер на този търг — авторизацията не може да се отмени, докато водите."))) return;
-    } else {
-      if (!window.confirm(t("credit_overlay.release_confirm",
-        "Освобождаване на авторизация за {{title}}?", { title: hold.auction_title }))) return;
-    }
+    if (!window.confirm(t("credit_overlay.release_confirm_v2",
+      "Освободи {{lim}} от наддавателния кредит?", { lim: formatEUR(hold.bidding_limit_eur) }))) return;
     setBusy((b) => ({ ...b, [hold.authorization_id]: true }));
     try {
       await api.post(`/stripe/authorizations/${hold.authorization_id}/release`);
       await load();
-      // Tell the nav counter to refresh — without this the counter
-      // stays stuck on the old value for up to 90 s after a release.
       window.dispatchEvent(new Event("credits-updated"));
       onChanged && onChanged();
     } catch (e) {
@@ -75,16 +65,6 @@ export default function CreditsOverlay({ onClose, onChanged }) {
     } finally {
       setBusy((b) => ({ ...b, [hold.authorization_id]: false }));
     }
-  };
-
-  const topUp = (hold) => {
-    onClose();
-    const link = auctionUrl({
-      id: hold.auction_id,
-      slug: hold.auction_slug,
-      title: hold.auction_title,
-    });
-    navigate(`${link}?bid=1`);
   };
 
   return createPortal(
@@ -115,7 +95,7 @@ export default function CreditsOverlay({ onClose, onChanged }) {
         </div>
 
         <div className="p-5 space-y-4">
-          {summary && summary.count > 0 && (
+          {summary && (
             <div
               className="rounded-card border border-[hsl(var(--line))] p-4 bg-[hsl(var(--surface))] grid grid-cols-3 gap-3 text-center"
               data-testid="credits-overlay-totals"
@@ -138,10 +118,10 @@ export default function CreditsOverlay({ onClose, onChanged }) {
               </div>
               <div>
                 <div className="text-[10px] uppercase tracking-wide text-[hsl(var(--ink-muted))]">
-                  {t("credit_overlay.held", "Блокирано")}
+                  {t("credit_overlay.committed", "Ангажирано")}
                 </div>
                 <div className="font-serif text-lg tabular-nums">
-                  {formatEUR(summary.total_hold_eur)}
+                  {formatEUR(summary.total_committed_eur || 0)}
                 </div>
               </div>
             </div>
@@ -156,111 +136,95 @@ export default function CreditsOverlay({ onClose, onChanged }) {
             </div>
           )}
 
+          <button
+            type="button"
+            onClick={() => setShowTopUp(true)}
+            className="w-full btn btn-primary inline-flex items-center justify-center gap-1.5"
+            data-testid="credits-overlay-topup-cta"
+          >
+            <Plus size={14} /> {t("credit_overlay.topup_cta", "Зареди още кредит")}
+          </button>
+
           {loading ? (
             <div className="text-center text-[hsl(var(--ink-muted))] py-6">
               {t("common.loading", "Зарежда…")}
             </div>
-          ) : !summary || summary.count === 0 ? (
-            <div
-              className="text-center py-10 border border-dashed border-[hsl(var(--line))] rounded-card"
-              data-testid="credits-overlay-empty"
-            >
-              <Wallet size={28} className="mx-auto text-[hsl(var(--ink-muted))] mb-3" />
-              <p className="font-serif text-lg mb-1">
-                {t("credit_overlay.empty_title", "Няма активни авторизации")}
-              </p>
-              <p className="text-sm text-[hsl(var(--ink-muted))] mb-4">
-                {t("credit_overlay.empty_body", "Авторизирайте карта на който и да е активен търг.")}
-              </p>
-              <Link
-                to="/auctions"
-                onClick={onClose}
-                className="btn btn-primary"
-                data-testid="credits-overlay-browse"
-              >
-                {t("credit_overlay.browse", "Разгледай търгове")}
-              </Link>
-            </div>
           ) : (
-            <div className="space-y-2.5" data-testid="credits-overlay-holds">
-              {summary.holds.map((h) => {
-                const ended = h.auction_status && h.auction_status !== "live" && h.auction_status !== "scheduled";
-                const canRelease = !h.is_leading || ended;
-                return (
-                  <div
-                    key={h.authorization_id}
-                    className="rounded-card border border-[hsl(var(--line))] p-3"
-                    data-testid={`credits-overlay-row-${h.auction_id}`}
-                  >
-                    <div className="flex items-start gap-3">
-                      {h.auction_thumb && (
-                        <Link
-                          to={auctionUrl({ id: h.auction_id, slug: h.auction_slug, title: h.auction_title })}
-                          onClick={onClose}
-                          className="shrink-0"
-                        >
-                          <img src={h.auction_thumb} alt="" className="w-16 h-12 object-cover rounded" loading="lazy" />
-                        </Link>
+            <>
+              {summary && summary.commitments && summary.commitments.length > 0 && (
+                <div className="space-y-2" data-testid="credits-overlay-commitments">
+                  <h3 className="overline text-[hsl(var(--ink-muted))]">
+                    {t("credit_overlay.committed_to", "Активни наддавания")}
+                  </h3>
+                  {summary.commitments.map((c) => (
+                    <button
+                      key={c.auction_id}
+                      type="button"
+                      onClick={() => { onClose(); navigate(auctionUrl({ id: c.auction_id, slug: c.auction_slug, title: c.auction_title })); }}
+                      className="w-full text-left rounded-card border border-[hsl(var(--line))] p-3 hover:border-[hsl(var(--accent))] flex items-center gap-3"
+                      data-testid={`credits-overlay-commit-${c.auction_id}`}
+                    >
+                      {c.auction_thumb && (
+                        <img src={c.auction_thumb} alt="" className="w-14 h-10 object-cover rounded shrink-0" loading="lazy" />
                       )}
                       <div className="flex-1 min-w-0">
-                        <Link
-                          to={auctionUrl({ id: h.auction_id, slug: h.auction_slug, title: h.auction_title })}
-                          onClick={onClose}
-                          className="text-sm font-semibold line-clamp-1 hover:text-[hsl(var(--accent))]"
-                        >
-                          {h.auction_title}
-                        </Link>
-                        <div className="flex items-center gap-3 mt-1 text-[11px]">
-                          {h.is_leading ? (
-                            <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold">
-                              <Trophy size={10} /> {t("credit_overlay.leading", "Водите")}
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-amber-700">
-                              <Clock size={10} /> {t("credit_overlay.outbid", "Надминат")}
-                            </span>
-                          )}
-                          <span className="text-[hsl(var(--ink-muted))] tabular-nums">
-                            {formatEUR(h.available_eur)} / {formatEUR(h.bidding_limit_eur)}
-                          </span>
+                        <div className="text-sm font-semibold line-clamp-1">{c.auction_title}</div>
+                        <div className="text-xs text-[hsl(var(--ink-muted))] tabular-nums">
+                          {formatEUR(c.current_bid_eur)} · <Clock size={9} className="inline" /> {new Date(c.ends_at).toLocaleDateString()}
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2 mt-3 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={() => topUp(h)}
-                        className="btn btn-primary !py-1.5 !px-3 text-xs inline-flex items-center gap-1"
-                        data-testid={`credits-overlay-topup-${h.auction_id}`}
-                      >
-                        <Plus size={11} /> {t("credit_overlay.topup", "Зареди още")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { onClose(); navigate(auctionUrl({ id: h.auction_id, slug: h.auction_slug, title: h.auction_title })); }}
-                        className="btn btn-secondary !py-1.5 !px-3 text-xs inline-flex items-center gap-1"
-                        data-testid={`credits-overlay-view-${h.auction_id}`}
-                      >
-                        <ExternalLink size={11} /> {t("credit_overlay.view", "Виж търга")}
-                      </button>
+                      <ExternalLink size={12} className="text-[hsl(var(--ink-muted))]" />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {summary && summary.holds && summary.holds.length > 0 && (
+                <div className="space-y-2" data-testid="credits-overlay-holds">
+                  <h3 className="overline text-[hsl(var(--ink-muted))]">
+                    {t("credit_overlay.holds", "Авторизации на картата")}
+                  </h3>
+                  {summary.holds.filter((h) => h.authorization_status === "active").map((h) => (
+                    <div
+                      key={h.authorization_id}
+                      className="rounded-card border border-[hsl(var(--line))] p-3 flex items-center justify-between gap-2"
+                      data-testid={`credits-overlay-hold-${h.authorization_id}`}
+                    >
+                      <div>
+                        <div className="text-sm font-semibold tabular-nums">
+                          {formatEUR(h.bidding_limit_eur)}
+                        </div>
+                        <div className="text-[11px] text-[hsl(var(--ink-muted))]">
+                          {t("credit_overlay.hold_blocked", "Блокирано: {{h}}", { h: formatEUR(h.hold_eur) })}
+                          {h.created_at && ` · ${new Date(h.created_at).toLocaleDateString()}`}
+                        </div>
+                      </div>
                       <button
                         type="button"
                         onClick={() => release(h)}
                         disabled={busy[h.authorization_id]}
-                        className={`btn !py-1.5 !px-3 text-xs inline-flex items-center gap-1 ${canRelease ? "btn-secondary !text-[hsl(var(--danger))] !border-[hsl(var(--danger))]/30" : "btn-secondary opacity-60"}`}
-                        data-testid={`credits-overlay-release-${h.auction_id}`}
-                        title={canRelease
-                          ? t("credit_overlay.release_hint", "Освобождава 2% hold от картата")
-                          : t("credit_overlay.release_locked_hint", "Не можете да освободите, докато водите")}
+                        className="btn btn-secondary !py-1.5 !px-3 text-xs inline-flex items-center gap-1 !text-[hsl(var(--danger))] !border-[hsl(var(--danger))]/30"
+                        data-testid={`credits-overlay-release-${h.authorization_id}`}
                       >
                         <X size={11} />
                         {busy[h.authorization_id] ? t("common.processing", "Обработва…") : t("credit_overlay.release", "Освободи")}
                       </button>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  ))}
+                </div>
+              )}
+
+              {summary && summary.count === 0 && (
+                <div
+                  className="text-center py-8 border border-dashed border-[hsl(var(--line))] rounded-card"
+                  data-testid="credits-overlay-empty"
+                >
+                  <p className="text-sm text-[hsl(var(--ink-muted))]">
+                    {t("credit_overlay.empty_v2", "Все още нямате авторизирани кредити. Заредете, за да започнете да наддавате.")}
+                  </p>
+                </div>
+              )}
+            </>
           )}
 
           <div className="flex items-center justify-between pt-2">
@@ -282,7 +246,15 @@ export default function CreditsOverlay({ onClose, onChanged }) {
           </div>
         </div>
       </div>
+
+      {showTopUp && (
+        <TopUpCreditModal
+          suggestedAmount={10000}
+          onClose={() => setShowTopUp(false)}
+        />
+      )}
     </div>,
     document.body,
   );
 }
+

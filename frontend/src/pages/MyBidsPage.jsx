@@ -1,24 +1,21 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Wallet, ExternalLink, Plus, X, Trophy, Clock } from "lucide-react";
+import { Wallet, ExternalLink, Plus, X, Clock } from "lucide-react";
 import { api, formatEUR } from "../lib/apiClient";
 import { formatError, useAuth } from "../lib/auth";
 import { auctionUrl } from "../lib/auctionUrl";
+import TopUpCreditModal from "../components/TopUpCreditModal";
 
 /**
- * /my-bids — single-page overview of every auction the signed-in user
- * currently has a preauthorization on, plus per-row actions.
+ * /my-bids — детайлен преглед на акаунтния наддавателен кредит.
  *
- * Data source: GET /api/stripe/authorizations/my-credits. The endpoint
- * already rolls up available/limit/hold per auction and is the same
- * data feeding the profile-menu wallet counter.
+ * Data: GET /api/stripe/authorizations/my-credits → връща
+ *   • holds[]        — активни Stripe авторизации (могат да се освободят)
+ *   • commitments[]  — текущи lead-нати търгове (заключен кредит)
  *
- * Actions per row:
- *   • Наддай повече → deep-link into the auction's bid modal
- *   • Виж търга      → navigate to the auction page
- *   • Освободи кредит → POST /authorizations/{id}/release (server-side
- *     gate: cannot release while user is high bidder on LIVE auction)
+ * Кредитът е универсален и НЕ е свързан с конкретен търг — потребителят
+ * зарежда X евро и ги харчи където поиска.
  */
 export default function MyBidsPage() {
   const { t } = useTranslation();
@@ -27,8 +24,9 @@ export default function MyBidsPage() {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
-  const [releasing, setReleasing] = useState({}); // {auth_id: true}
+  const [releasing, setReleasing] = useState({});
   const [toast, setToast] = useState("");
+  const [showTopUp, setShowTopUp] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -44,6 +42,22 @@ export default function MyBidsPage() {
 
   useEffect(() => { if (user) load(); else setLoading(false); }, [user, load]);
 
+  // Auto-open top-up modal if URL contains ?topup=1 (deep-link from CTAs)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("topup") === "1") {
+      setShowTopUp(true);
+      params.delete("topup");
+      window.history.replaceState({}, "", `${window.location.pathname}${params.toString() ? "?" + params : ""}`);
+    }
+    if (params.get("stripe_session_id")) {
+      // User is back from Stripe — refresh credits + nav counter.
+      window.dispatchEvent(new Event("credits-updated"));
+      params.delete("stripe_session_id");
+      window.history.replaceState({}, "", `${window.location.pathname}${params.toString() ? "?" + params : ""}`);
+    }
+  }, []);
+
   useEffect(() => {
     if (!toast) return;
     const t2 = setTimeout(() => setToast(""), 3000);
@@ -51,15 +65,13 @@ export default function MyBidsPage() {
   }, [toast]);
 
   const release = async (hold) => {
-    if (hold.is_leading && hold.auction_status === "live") {
-      if (!window.confirm(t("my_bids.release_warning", "Вие сте текущ лидер — сървърът ще откаже освобождаването. Продължаване?"))) return;
-    } else {
-      if (!window.confirm(t("my_bids.release_confirm", "Освобождаване на авторизация за {{title}}? Това ще отмени наддавателния Ви лимит за този търг.", { title: hold.auction_title }))) return;
-    }
+    if (!window.confirm(t("my_bids.release_confirm_v2",
+      "Освободи {{lim}} от наддавателния кредит?", { lim: formatEUR(hold.bidding_limit_eur) }))) return;
     setReleasing((r) => ({ ...r, [hold.authorization_id]: true }));
     try {
       await api.post(`/stripe/authorizations/${hold.authorization_id}/release`);
       setToast(t("my_bids.released_ok", "Авторизацията е освободена."));
+      window.dispatchEvent(new Event("credits-updated"));
       load();
     } catch (e) {
       setErr(formatError(e));
@@ -80,118 +92,140 @@ export default function MyBidsPage() {
 
   return (
     <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-10 py-12" data-testid="my-bids-page">
-      <div className="flex items-start justify-between gap-4 flex-wrap mb-8">
-        <div>
-          <h1 className="font-serif text-3xl lg:text-4xl tracking-tight">{t("my_bids.title", "Моите наддавания")}</h1>
-          <p className="text-sm text-[hsl(var(--ink-muted))] mt-1 max-w-xl">
-            {t("my_bids.subtitle", "Преглед на всички активни авторизации. Можете да наддавате повече, да следите търг или да освободите кредит.")}
-          </p>
-        </div>
-        {summary && summary.count > 0 && (
-          <div className="rounded-card border border-[hsl(var(--line))] p-4 bg-[hsl(var(--surface))] flex items-center gap-3" data-testid="my-bids-summary">
-            <Wallet size={18} className="text-[hsl(var(--accent))]" />
-            <div>
-              <div className="overline text-[hsl(var(--ink-muted))]">{t("my_bids.total_available", "Общо налично")}</div>
-              <div className="text-xl font-serif tabular-nums" data-testid="my-bids-total-available">
-                {formatEUR(summary.total_available_eur)}
-              </div>
-              <div className="text-[11px] text-[hsl(var(--ink-muted))] mt-0.5">
-                {t("my_bids.of_limit", "от лимит {{limit}}", { limit: formatEUR(summary.total_limit_eur) })}
-              </div>
+      <h1 className="font-serif text-3xl mb-8">{t("my_bids.title", "Моите наддавания")}</h1>
+
+      {summary && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8" data-testid="my-bids-totals">
+          <div className="rounded-card border border-[hsl(var(--line))] bg-[hsl(var(--surface))] p-5">
+            <div className="overline text-[hsl(var(--ink-muted))] mb-1.5">{t("my_bids.available", "Налично")}</div>
+            <div className="font-serif text-3xl tabular-nums" data-testid="my-bids-available">
+              {formatEUR(summary.total_available_eur)}
+            </div>
+            <div className="text-xs text-[hsl(var(--ink-muted))] mt-1">
+              {t("my_bids.available_hint", "за наддаване сега")}
             </div>
           </div>
-        )}
+          <div className="rounded-card border border-[hsl(var(--line))] p-5">
+            <div className="overline text-[hsl(var(--ink-muted))] mb-1.5">{t("my_bids.limit", "Авторизирано")}</div>
+            <div className="font-serif text-3xl tabular-nums">{formatEUR(summary.total_limit_eur)}</div>
+            <div className="text-xs text-[hsl(var(--ink-muted))] mt-1">
+              {summary.count} {t("my_bids.holds_count", "активни авторизации")}
+            </div>
+          </div>
+          <div className="rounded-card border border-[hsl(var(--line))] p-5">
+            <div className="overline text-[hsl(var(--ink-muted))] mb-1.5">{t("my_bids.committed", "Ангажирано")}</div>
+            <div className="font-serif text-3xl tabular-nums">{formatEUR(summary.total_committed_eur || 0)}</div>
+            <div className="text-xs text-[hsl(var(--ink-muted))] mt-1">
+              {(summary.commitments || []).length} {t("my_bids.commit_count", "лидерски бида")}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="mb-8">
+        <button
+          type="button"
+          onClick={() => setShowTopUp(true)}
+          className="btn btn-primary inline-flex items-center gap-2"
+          data-testid="my-bids-topup"
+        >
+          <Plus size={14} /> {t("my_bids.topup_cta", "Зареди още кредит")}
+        </button>
       </div>
 
-      {err && <div className="rounded-card border border-red-300 bg-red-50 text-red-800 px-4 py-3 mb-6 text-sm" data-testid="my-bids-error">{err}</div>}
-      {toast && <div className="fixed bottom-6 right-6 rounded-card border border-emerald-400 bg-emerald-50 text-emerald-800 px-4 py-3 text-sm shadow-lg z-50" data-testid="my-bids-toast">{toast}</div>}
-
-      {loading ? (
-        <div className="text-[hsl(var(--ink-muted))]">{t("common.loading", "Зарежда…")}</div>
-      ) : !summary || summary.count === 0 ? (
-        <div className="text-center py-20 border border-dashed border-[hsl(var(--line))] rounded-card" data-testid="my-bids-empty">
-          <Wallet size={32} className="mx-auto text-[hsl(var(--ink-muted))] mb-4" />
-          <h2 className="font-serif text-xl mb-2">{t("my_bids.empty_title", "Нямате активни наддавания")}</h2>
-          <p className="text-[hsl(var(--ink-muted))] mb-6">{t("my_bids.empty_body", "Щом авторизирате карта за търг, ще се появи тук.")}</p>
-          <Link to="/auctions" className="btn btn-primary" data-testid="my-bids-browse-auctions">
-            {t("my_bids.browse_auctions", "Разгледай търгове")}
-          </Link>
+      {err && (
+        <div className="rounded-card border border-red-300 bg-red-50 text-red-800 px-4 py-3 mb-6" data-testid="my-bids-error">
+          {err}
         </div>
-      ) : (
-        <div className="space-y-4">
-          {summary.holds.map((h) => {
-            const auctionLink = auctionUrl({ id: h.auction_id, slug: h.auction_slug, title: h.auction_title });
-            const ended = h.auction_status && h.auction_status !== "live" && h.auction_status !== "scheduled";
-            const canReleaseFreely = !h.is_leading || ended;
-            return (
-              <div key={h.authorization_id} className="rounded-card border border-[hsl(var(--line))] p-4 flex gap-4 items-center flex-wrap" data-testid={`my-bids-row-${h.auction_id}`}>
-                {h.auction_thumb && (
-                  <Link to={auctionLink} className="shrink-0">
-                    <img src={h.auction_thumb} alt="" className="w-24 h-16 object-cover rounded" loading="lazy" />
-                  </Link>
+      )}
+      {toast && (
+        <div className="rounded-card border border-green-300 bg-green-50 text-green-800 px-4 py-3 mb-6" data-testid="my-bids-toast">
+          {toast}
+        </div>
+      )}
+
+      {/* COMMITMENTS — auctions where the user currently leads. These
+          can be navigated to but cannot be released directly here;
+          the user must wait to be outbid or the auction to end. */}
+      {summary && summary.commitments && summary.commitments.length > 0 && (
+        <section className="mb-10" data-testid="my-bids-commitments">
+          <h2 className="font-serif text-2xl mb-4">{t("my_bids.committed_title", "Активни наддавания")}</h2>
+          <div className="space-y-3">
+            {summary.commitments.map((c) => (
+              <button
+                key={c.auction_id}
+                type="button"
+                onClick={() => navigate(auctionUrl({ id: c.auction_id, slug: c.auction_slug, title: c.auction_title }))}
+                className="w-full text-left flex items-center gap-4 p-4 rounded-card border border-[hsl(var(--line))] hover:border-[hsl(var(--accent))]"
+                data-testid={`my-bids-commit-${c.auction_id}`}
+              >
+                {c.auction_thumb && (
+                  <img src={c.auction_thumb} alt="" className="w-20 h-14 object-cover rounded shrink-0" loading="lazy" />
                 )}
-                <div className="flex-1 min-w-[200px]">
-                  <Link to={auctionLink} className="font-serif text-lg hover:text-[hsl(var(--accent))] line-clamp-1" data-testid={`my-bids-title-${h.auction_id}`}>
-                    {h.auction_title}
-                  </Link>
-                  <div className="flex items-center gap-3 mt-1 text-xs">
-                    {h.is_leading ? (
-                      <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold" data-testid={`my-bids-leading-${h.auction_id}`}>
-                        <Trophy size={11} /> {t("my_bids.leading", "Водите")}
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-amber-700" data-testid={`my-bids-outbid-${h.auction_id}`}>
-                        <Clock size={11} /> {t("my_bids.outbid", "Надминат")}
-                      </span>
-                    )}
-                    <span className="text-[hsl(var(--ink-muted))]">
-                      {t("my_bids.current_bid", "Текуща: {{amt}}", { amt: formatEUR(h.current_bid_eur) })}
-                    </span>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold line-clamp-1">{c.auction_title}</div>
+                  <div className="text-xs text-[hsl(var(--ink-muted))] tabular-nums mt-0.5">
+                    {formatEUR(c.current_bid_eur)} · <Clock size={10} className="inline" /> {new Date(c.ends_at).toLocaleString()}
                   </div>
                 </div>
+                <ExternalLink size={14} className="text-[hsl(var(--ink-muted))]" />
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
-                {/* Credit figures */}
-                <div className="text-right shrink-0">
-                  <div className="overline text-[hsl(var(--ink-muted))]">{t("my_bids.available", "Налично")}</div>
-                  <div className="font-mono text-sm tabular-nums" data-testid={`my-bids-available-${h.auction_id}`}>
-                    {formatEUR(h.available_eur)}
-                    <span className="text-[hsl(var(--ink-muted))]"> / {formatEUR(h.bidding_limit_eur)}</span>
+      {/* HOLDS — Stripe authorizations on the card. Releasable subject
+          to server-side guard (not over-committed). */}
+      <section data-testid="my-bids-holds">
+        <h2 className="font-serif text-2xl mb-4">{t("my_bids.holds_title", "Авторизации на картата")}</h2>
+        {loading ? (
+          <p className="text-[hsl(var(--ink-muted))]">{t("common.loading", "Зарежда…")}</p>
+        ) : !summary || !summary.holds || summary.holds.filter((h) => h.authorization_status === "active").length === 0 ? (
+          <div className="rounded-card border border-dashed border-[hsl(var(--line))] p-8 text-center" data-testid="my-bids-empty">
+            <Wallet size={32} className="mx-auto text-[hsl(var(--ink-muted))] mb-3" />
+            <p className="text-sm text-[hsl(var(--ink-muted))]">
+              {t("my_bids.empty_v2", "Все още нямате активни авторизации. Заредете кредит и започнете да наддавате.")}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {summary.holds.filter((h) => h.authorization_status === "active").map((h) => (
+              <div
+                key={h.authorization_id}
+                className="flex items-center justify-between gap-4 p-4 rounded-card border border-[hsl(var(--line))]"
+                data-testid={`my-bids-hold-${h.authorization_id}`}
+              >
+                <div>
+                  <div className="font-mono text-xl tabular-nums">{formatEUR(h.bidding_limit_eur)}</div>
+                  <div className="text-xs text-[hsl(var(--ink-muted))] mt-0.5">
+                    {t("my_bids.hold_blocked", "Блокирано: {{h}}", { h: formatEUR(h.hold_eur) })}
+                    {h.created_at && ` · ${new Date(h.created_at).toLocaleDateString()}`}
                   </div>
                 </div>
-
-                {/* Actions */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Link
-                    to={`${auctionLink}?bid=1`}
-                    className="btn btn-primary !py-1.5 !px-3 text-xs inline-flex items-center gap-1"
-                    data-testid={`my-bids-bid-more-${h.auction_id}`}
-                  >
-                    <Plus size={12} /> {t("my_bids.bid_more", "Наддай повече")}
-                  </Link>
-                  <Link
-                    to={auctionLink}
-                    className="btn btn-secondary !py-1.5 !px-3 text-xs inline-flex items-center gap-1"
-                    data-testid={`my-bids-view-${h.auction_id}`}
-                  >
-                    <ExternalLink size={12} /> {t("my_bids.view", "Виж търга")}
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => release(h)}
-                    disabled={releasing[h.authorization_id]}
-                    className={`btn !py-1.5 !px-3 text-xs inline-flex items-center gap-1 ${canReleaseFreely ? "btn-secondary" : "btn-secondary opacity-60"}`}
-                    data-testid={`my-bids-release-${h.auction_id}`}
-                    title={canReleaseFreely
-                      ? t("my_bids.release_hint", "Освобождава 2% hold от картата")
-                      : t("my_bids.release_locked_hint", "Не можете да освободите, докато водите")}
-                  >
-                    <X size={12} /> {releasing[h.authorization_id] ? t("common.processing", "Обработва…") : t("my_bids.release", "Освободи кредит")}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => release(h)}
+                  disabled={releasing[h.authorization_id]}
+                  className="btn btn-secondary !text-[hsl(var(--danger))] !border-[hsl(var(--danger))]/30 inline-flex items-center gap-1.5"
+                  data-testid={`my-bids-release-${h.authorization_id}`}
+                >
+                  <X size={13} />
+                  {releasing[h.authorization_id]
+                    ? t("common.processing", "Обработва…")
+                    : t("my_bids.release", "Освободи")}
+                </button>
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {showTopUp && (
+        <TopUpCreditModal
+          suggestedAmount={10000}
+          onClose={() => setShowTopUp(false)}
+        />
       )}
     </div>
   );

@@ -2059,32 +2059,60 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
     amount = float(payload.amount_eur)
     now = datetime.now(timezone.utc)
 
-    # Bidding credit or fresh preauth?
-    credit = await db.bidding_credits.find_one(
-        {"auction_id": auction_id, "user_id": user["id"], "status": "authorized"},
-        {"_id": 0},
-    )
-    credit_covers = bool(credit and float(credit.get("max_amount_eur", 0)) >= amount)
-    if not credit_covers and not payload.payment_method_id:
-        raise HTTPException(status_code=402, detail="Необходима е валидна карта за наддаване")
+    # ─── Account-level credit pool check ────────────────────────────
+    # Holds are no longer bound to specific auctions — the user tops
+    # up an account credit pool, and any leading bid on a live
+    # auction commits funds against that pool. Reject the bid if it
+    # would push committed > authorized.
+    #
+    # For admins/moderators we skip the gate (operational test
+    # bidding) — same carve-out we use elsewhere.
+    bypass_credit = user.get("role") in ("admin", "moderator")
+    authorized_total = 0.0
+    committed_total = 0.0
+    current_high_for_user = 0.0
+    if not bypass_credit:
+        async for r in db.bid_authorizations.find(
+            {"user_id": user["id"],
+             "auction_id": None,
+             "authorization_status": "active"},
+            {"_id": 0, "bidding_limit_eur": 1},
+        ):
+            authorized_total += float(r.get("bidding_limit_eur") or 0)
+        async for ca in db.auctions.find(
+            {"high_bidder_id": user["id"], "status": "live"},
+            {"_id": 0, "id": 1, "current_bid_eur": 1},
+        ):
+            cb = float(ca.get("current_bid_eur") or 0)
+            committed_total += cb
+            if ca["id"] == auction_id:
+                current_high_for_user = cb
+        # If the user is already leading THIS auction, the new bid
+        # *replaces* (not adds to) the previous commitment on this
+        # auction. Subtract the existing one so the math reflects the
+        # net delta the user is on the hook for.
+        new_commit = committed_total - current_high_for_user + amount
+        if new_commit > authorized_total + 1e-6:
+            shortage = new_commit - authorized_total
+            raise HTTPException(
+                status_code=402,
+                detail=(
+                    f"Нямате достатъчен наддавателен кредит. "
+                    f"Налични: €{int(authorized_total - committed_total):,}, "
+                    f"необходими: €{int(amount - current_high_for_user):,}. "
+                    f"Заредете още поне €{int(shortage):,} от профила си."
+                ),
+            )
 
     bid_id = str(uuid.uuid4())
     fee_amount = _buyer_fee_on_auction(amount, a)
 
-    # Release this user's previous active preauths on this auction (only if not credit-backed)
-    if not credit_covers:
-        await bidding_svc.release_user_active_preauths(auction_id, user["id"])
-
-    if credit_covers:
-        preauth_id = credit["preauth_id"]
-        preauth_status_val = "credit_backed"
-        card_last4 = credit.get("card_last4")
-        credit_id_val = credit["id"]
-    else:
-        preauth_id = f"mock_pi_{uuid.uuid4().hex[:16]}"
-        preauth_status_val = "authorized"
-        card_last4 = payload.payment_method_id[-4:] if payload.payment_method_id else None
-        credit_id_val = None
+    # Legacy `bidding_credits` table is no longer written. Bid is
+    # backed by the account-level credit pool (validated above).
+    preauth_id = f"acct_pool_{uuid.uuid4().hex[:16]}"
+    preauth_status_val = "credit_backed"
+    card_last4 = None
+    credit_id_val = None
 
     # ACID-correct placement (locks bid_state, validates, inserts, updates)
     try:
