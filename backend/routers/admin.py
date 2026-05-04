@@ -347,22 +347,48 @@ def register_routes():
         bids_this_week = await bidding_svc.count_bids(since=datetime.fromisoformat(week_ago) if isinstance(week_ago, str) else week_ago)
 
         # Commission = sum(`premium_amount_eur`) when admin captured it via
-        # /capture-premium, else fall back to 2 % of the winning bid so that
-        # auctions finalized via the "release-only" path (admin_finalize)
-        # still contribute to the expected-revenue line. Without the
-        # fallback, any sale before capture-premium was wired up reads as
-        # 0 € commission and the dashboard looks broken.
+        # /capture-premium, else fall back to the LIVE buyer-fee policy
+        # from `site_settings` so auctions finalized via the
+        # "release-only" path (admin_finalize) still contribute to the
+        # expected-revenue line. GMV is computed on the GROSS price
+        # (incl. VAT for vat_inclusive listings) — same rule as every
+        # other UI surface and the source of truth for commission.
+        s = await db.site_settings.find_one({}, {"_id": 0}) or {}
+        fee_pct = float(s.get("buyer_fee_pct") or 2.0) / 100.0
+        fee_min = float(s.get("buyer_fee_min_eur") or 150.0)
+        fee_max = float(s.get("buyer_fee_max_eur") or 4000.0)
+
+        # Mongo aggregation expression: gross = current_bid * (1+rate/100)
+        # for vat_inclusive listings, else current_bid. We use $cond so
+        # the calc is single-pass on the server — no Python loop.
+        gross_expr = {
+            "$cond": [
+                {"$eq": ["$vat_status", "vat_inclusive"]},
+                {"$multiply": [
+                    {"$ifNull": ["$current_bid_eur", 0]},
+                    {"$add": [1, {"$divide": [{"$ifNull": ["$vat_rate_pct", 0]}, 100]}]},
+                ]},
+                {"$ifNull": ["$current_bid_eur", 0]},
+            ],
+        }
+        # Computed buyer fee bounded by min/max. Order: max(min, raw),
+        # then min(max, …) — same semantics as `_buyer_fee` in
+        # server.py.
+        commission_expr = {
+            "$ifNull": [
+                "$premium_amount_eur",
+                {"$min": [
+                    fee_max,
+                    {"$max": [fee_min, {"$multiply": [gross_expr, fee_pct]}]},
+                ]},
+            ],
+        }
         gmv_cursor = db.auctions.aggregate([
             {"$match": {"status": "sold"}},
             {"$group": {
                 "_id": None,
-                "gmv": {"$sum": "$current_bid_eur"},
-                "commission": {"$sum": {
-                    "$ifNull": [
-                        "$premium_amount_eur",
-                        {"$multiply": [{"$ifNull": ["$current_bid_eur", 0]}, 0.02]},
-                    ],
-                }},
+                "gmv": {"$sum": gross_expr},
+                "commission": {"$sum": commission_expr},
                 "count": {"$sum": 1},
             }},
         ])
@@ -371,21 +397,13 @@ def register_routes():
         commission = float(gmv_docs[0]["commission"]) if gmv_docs else 0.0
         sold_count = int(gmv_docs[0]["count"]) if gmv_docs else 0
 
-        # Same fallback for the 30-day window. `finalized_at` may be NULL
-        # on legacy rows sold before that column was always written — those
-        # are intentionally excluded from the recent bucket (otherwise a
-        # missing timestamp would make every sale "recent").
+        # Same computation for the 30-day window.
         gmv_month_cursor = db.auctions.aggregate([
             {"$match": {"status": "sold", "finalized_at": {"$gte": month_ago}}},
             {"$group": {
                 "_id": None,
-                "gmv": {"$sum": "$current_bid_eur"},
-                "commission": {"$sum": {
-                    "$ifNull": [
-                        "$premium_amount_eur",
-                        {"$multiply": [{"$ifNull": ["$current_bid_eur", 0]}, 0.02]},
-                    ],
-                }},
+                "gmv": {"$sum": gross_expr},
+                "commission": {"$sum": commission_expr},
             }},
         ])
         gmv_month_docs = await gmv_month_cursor.to_list(1)
@@ -396,7 +414,15 @@ def register_routes():
             "auctions": {"total": total_auctions, "pending": pending, "live": live_stored, "sold": sold_count_s, "removed": removed, "reserve_not_met": reserve_not_met},
             "users": {"total": total_users, "admins": admins, "verified_dealers": verified_dealers, "new_this_week": new_users_week},
             "bids": {"total": total_bids, "this_week": bids_this_week},
-            "revenue": {"gmv_all_time": gmv, "commission_all_time": commission, "gmv_last_30d": gmv_month, "commission_last_30d": commission_month, "sold_count": sold_count},
+            "revenue": {
+                "gmv_all_time": gmv, "commission_all_time": commission,
+                "gmv_last_30d": gmv_month, "commission_last_30d": commission_month,
+                "sold_count": sold_count,
+                # Surface the live fee policy so the admin dashboard
+                # can render "X % of every sale" instead of hardcoding
+                # "2 %" (which used to mismatch the actual settings).
+                "buyer_fee_pct": float(s.get("buyer_fee_pct") or 2.0),
+            },
         }
 
     # ---- Users management ----

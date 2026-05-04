@@ -67,16 +67,38 @@ logger = logging.getLogger(__name__)
 AUTHORIZATION_TTL_DAYS = 7
 
 # Hold percentage of the bidder's stated bidding limit.
+# These constants are kept as fallbacks ONLY — the live values are
+# read from `site_settings` so admins can change the buyer-fee policy
+# without redeploying. See `_hold_amount_eur_async` below.
 HOLD_PERCENT = 0.02
 HOLD_MIN_EUR = 150.0
 HOLD_MAX_EUR = 4000.0
 
 
-def _hold_amount_eur(bidding_limit_eur: float) -> float:
+def _hold_amount_eur(bidding_limit_eur: float, *, pct: float = HOLD_PERCENT,
+                     min_eur: float = HOLD_MIN_EUR, max_eur: float = HOLD_MAX_EUR) -> float:
     """Compute the deposit/buyer-premium hold for a given bidding limit.
-    Backend-only — never accept the amount from the frontend."""
-    raw = max(0.0, float(bidding_limit_eur or 0)) * HOLD_PERCENT
-    return float(round(min(HOLD_MAX_EUR, max(HOLD_MIN_EUR, raw)), 2))
+    Pure function — pass the live `pct`/`min_eur`/`max_eur` from
+    `site_settings` to keep this in sync with admin settings.
+    Backend-only — never accept the amount from the frontend.
+    """
+    raw = max(0.0, float(bidding_limit_eur or 0)) * pct
+    return float(round(min(max_eur, max(min_eur, raw)), 2))
+
+
+async def _hold_settings(db) -> tuple[float, float, float]:
+    """Read the live buyer-fee policy from `site_settings`.
+
+    Returns `(pct_fraction, min_eur, max_eur)` — `pct_fraction` is in
+    [0, 1] (i.e. 2 % is `0.02`). Falls back to the module-level
+    HOLD_* constants when the document is missing or partially
+    populated, so a fresh DB still works out of the box.
+    """
+    s = await db.site_settings.find_one({}, {"_id": 0}) or {}
+    pct = float(s.get("buyer_fee_pct") or HOLD_PERCENT * 100) / 100.0
+    min_eur = float(s.get("buyer_fee_min_eur") or HOLD_MIN_EUR)
+    max_eur = float(s.get("buyer_fee_max_eur") or HOLD_MAX_EUR)
+    return pct, min_eur, max_eur
 
 
 # ─── Stripe redirect origin resolver ─────────────────────────────────────
@@ -281,13 +303,19 @@ def build_stripe_router(db, get_current_user):
 
     @router.get("/config")
     async def stripe_config():
-        """Returns whether Stripe is wired (test/live indicator)."""
+        """Returns whether Stripe is wired (test/live indicator).
+        `hold_percent`/`hold_min_eur`/`hold_max_eur` reflect the LIVE
+        site_settings policy so the frontend pre-auth preview matches
+        what we actually charge on Stripe — without this, admin tweaks
+        to the buyer fee would create a mismatch (FE shows 2.5 % blocked,
+        BE charges 2 %)."""
+        pct, min_eur, max_eur = await _hold_settings(db)
         return {
             "configured": bool(api_key),
             "mode": "live" if api_key.startswith("sk_live_") else "test",
-            "hold_percent": HOLD_PERCENT,
-            "hold_min_eur": HOLD_MIN_EUR,
-            "hold_max_eur": HOLD_MAX_EUR,
+            "hold_percent": pct,
+            "hold_min_eur": min_eur,
+            "hold_max_eur": max_eur,
             "ttl_days": AUTHORIZATION_TTL_DAYS,
         }
 
@@ -333,7 +361,14 @@ def build_stripe_router(db, get_current_user):
             raise HTTPException(status_code=400, detail="Не можете да авторизирате карта за собствения си търг.")
 
         # ---- Compute amount server-side (NEVER trust frontend) ----
-        amount_eur = _hold_amount_eur(body.bidding_limit_eur)
+        # Pull the live policy from site_settings — admins can change
+        # buyer_fee_pct and the min/max bounds via the panel without
+        # a redeploy. Fallback to module constants if the doc is
+        # missing.
+        pct, min_eur, max_eur = await _hold_settings(db)
+        amount_eur = _hold_amount_eur(
+            body.bidding_limit_eur, pct=pct, min_eur=min_eur, max_eur=max_eur,
+        )
         amount_cents = int(round(amount_eur * 100))
 
         # ---- Saved-card fast path: off-session PaymentIntent ----

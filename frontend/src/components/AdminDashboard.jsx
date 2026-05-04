@@ -35,7 +35,7 @@ export default function AdminDashboard() {
             icon={TrendingUp}
             label="Приходи комисионна"
             value={formatEUR(stats.revenue.commission_all_time)}
-            sub="2% от всяка сделка"
+            sub={`${stats.revenue.buyer_fee_pct ?? 2}% от всяка сделка`}
             accent
             tid="stat-commission"
           />

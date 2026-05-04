@@ -88,7 +88,7 @@ export default function StripeAuthorize({ auctionId, suggestedLimit = 10000 }) {
         <div>
           <div className="font-semibold text-sm">{t("stripe.authorize_title", "Активирай наддаване")}</div>
           <div className="text-xs text-[hsl(var(--ink-muted))] mt-0.5">
-            {t("stripe.authorize_hint", "Картата се обработва от Stripe — никога не я виждаме. Блокираме 2% от лимита (мин. €150).")}
+            {t("stripe.authorize_hint", "Картата се обработва от Stripe — никога не я виждаме. Блокираме малък процент от лимита съгласно настройките на платформата.")}
           </div>
         </div>
       </div>

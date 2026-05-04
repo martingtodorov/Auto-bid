@@ -5142,8 +5142,15 @@ async def _finalize_expired_auctions_once():
             vat = _admin_notif_vat_fields(current_bid, a)
             payload = {
                 "title": a.get("title", ""),
-                "bid": int(current_bid),
+                # Show the GROSS (incl. VAT) amount to both seller and
+                # buyer — matches the "prices WITH VAT" rule used
+                # everywhere else in the UI. Without this, the buyer's
+                # "Купихте този автомобил" notification reads with the
+                # net price while every other UI surface (auction page,
+                # invoice, my-bids) shows gross — a confusing mismatch.
+                "bid": vat["gross"],
                 "bid_gross": vat["gross"],
+                "vat_suffix": vat["vat_suffix"],
                 "commission": vat["commission"],
                 "margin": int(margin) if has_reserve else 0,
                 "has_reserve": has_reserve,
