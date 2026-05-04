@@ -47,6 +47,15 @@ const VerifyEmailPage = lazy(() => import("./pages/VerifyEmailPage"));
 const DealerPage = lazy(() => import("./pages/DealerPage"));
 const LeaderboardPage = lazy(() => import("./pages/LeaderboardPage"));
 const MyBidsPage = lazy(() => import("./pages/MyBidsPage"));
+const SsoStartPage = lazy(() => import("./pages/SsoStartPage"));
+const SsoCallbackPage = lazy(() => import("./pages/SsoCallbackPage"));
+
+// Cross-domain SSO bootstrap: silently redirects anonymous users from
+// .bg / .ro to the canonical .com to pick up a session, then bounces
+// back. No-op if already authenticated, on the canonical, or env
+// variable REACT_APP_SSO_CANONICAL_ORIGIN is empty.
+import { maybeStartSsoBootstrap } from "./lib/ssoBootstrap";
+maybeStartSsoBootstrap();
 
 // Lightweight neutral placeholder shown while a lazy chunk is downloading.
 // Intentionally blank (no spinner) so the perceived layout doesn't shift a
@@ -70,6 +79,8 @@ function App() {
             <Suspense fallback={<LazyFallback />}>
               <Routes>
                 <Route path="/" element={<LandingPage />} />
+                <Route path="/auth/sso/start" element={<SsoStartPage />} />
+                <Route path="/auth/sso/callback" element={<SsoCallbackPage />} />
                 <Route path="/auctions" element={<AuctionsPage />} />
                 <Route path="/auctions/:id" element={<AuctionDetailPage />} />
                 <Route path="/how-it-works" element={<HowItWorksPage />} />

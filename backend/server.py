@@ -5328,6 +5328,18 @@ api.include_router(_admin_router.router)
 api.include_router(_seller_requests_router.router)
 api.include_router(_push_router.register_push_routes(get_current_user))
 
+# SSO cross-domain handoff (autoandbid.com ↔ .bg ↔ .ro). Browsers
+# cannot share cookies across different public-suffix TLDs, so we
+# implement a 60 s nonce-token handoff. See routers/sso.py for the
+# full flow + security model.
+from routers import sso as _sso_router  # noqa: E402
+api.include_router(_sso_router.build_sso_router(
+    db=db,
+    create_token=create_token,
+    get_current_user=get_current_user,
+    set_auth_cookies=_auth_router._set_auth_cookies,
+))
+
 # In-app notification inbox (durable per-user message log)
 from routers import inbox as _inbox_router
 _inbox = _inbox_router.build_inbox_router(db, get_current_user)

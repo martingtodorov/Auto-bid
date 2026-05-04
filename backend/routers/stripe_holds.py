@@ -75,6 +75,33 @@ HOLD_MIN_EUR = 150.0
 HOLD_MAX_EUR = 4000.0
 
 
+def _stripe_obj_get(obj, key, default=None):
+    """Safely read a field from a Stripe SDK object OR a plain dict.
+
+    Stripe SDK ≥ 8 returns `StripeObject` instances which support
+    bracket access (`obj["status"]`) AND attribute access
+    (`obj.status`) but DO NOT implement `.get()` like a real dict —
+    `obj.get("foo")` raises `AttributeError`. Code paths that mix
+    both live API responses (StripeObject) and persisted dicts
+    (Mongo rows) need a single helper that works for both. This is
+    that helper.
+
+    `KeyError` is also caught because StripeObject's `__getitem__`
+    raises it for absent fields rather than returning None.
+    """
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    val = getattr(obj, key, None)
+    if val is not None:
+        return val
+    try:
+        return obj[key]
+    except (KeyError, AttributeError, TypeError):
+        return default
+
+
 def _hold_amount_eur(bidding_limit_eur: float, *, pct: float = HOLD_PERCENT,
                      min_eur: float = HOLD_MIN_EUR, max_eur: float = HOLD_MAX_EUR) -> float:
     """Compute the deposit/buyer-premium hold for a given bidding limit.
@@ -247,13 +274,18 @@ async def _saved_card_brief(db, user: dict) -> Optional[dict]:
         return None
     try:
         pm = stripe.PaymentMethod.retrieve(pm_id)
-        card = pm.get("card") or {}
+        # `pm` is a StripeObject — `.get()` would AttributeError. Same
+        # rule as `_promote_pending_authorizations`: use the safe
+        # accessor for every field. The nested `card` may itself be
+        # a StripeObject so we keep using `_stripe_obj_get` for its
+        # children too.
+        card = _stripe_obj_get(pm, "card") or {}
         return {
             "pm_id": pm_id,
-            "brand": card.get("brand"),
-            "last4": card.get("last4"),
-            "exp_month": card.get("exp_month"),
-            "exp_year": card.get("exp_year"),
+            "brand": _stripe_obj_get(card, "brand"),
+            "last4": _stripe_obj_get(card, "last4"),
+            "exp_month": _stripe_obj_get(card, "exp_month"),
+            "exp_year": _stripe_obj_get(card, "exp_year"),
         }
     except stripe.error.StripeError as e:
         logger.warning("[stripe] saved PM retrieve failed: %s", e)
@@ -636,21 +668,22 @@ def build_stripe_router(db, get_current_user):
                 # round-trips at most; runs only once per pending row.
                 if not pi_id and sid:
                     sess = stripe.checkout.Session.retrieve(sid)
-                    pi_id = getattr(sess, "payment_intent", None) or (
-                        sess.get("payment_intent") if isinstance(sess, dict) else None
-                    )
+                    # `sess` is a StripeObject — use the safe accessor
+                    # (calling `.get()` on it raises AttributeError).
+                    pi_id = _stripe_obj_get(sess, "payment_intent")
                 if not pi_id:
                     continue
                 pi = stripe.PaymentIntent.retrieve(pi_id)
-                status = pi["status"]
+                status = _stripe_obj_get(pi, "status")
                 now_iso = datetime.now(timezone.utc).isoformat()
                 if status == "requires_capture":
+                    capturable = _stripe_obj_get(pi, "amount_capturable", 0) or 0
                     await db.bid_authorizations.update_one(
                         {"id": row["id"]},
                         {"$set": {
                             "authorization_status": "active",
                             "stripe_payment_intent_id": pi_id,
-                            "amount_authorized_eur": round(int(pi.get("amount_capturable", 0)) / 100.0, 2),
+                            "amount_authorized_eur": round(int(capturable) / 100.0, 2),
                             "updated_at": now_iso,
                         }},
                     )
@@ -667,6 +700,11 @@ def build_stripe_router(db, get_current_user):
                     pass
             except stripe.error.StripeError as e:
                 logger.warning("[stripe] promote check failed for auth %s: %s", row.get("id"), e)
+                continue
+            except Exception as e:
+                # Defensive: any unexpected SDK shape change should NOT
+                # 500 the parent /my-credits endpoint. Log and move on.
+                logger.exception("[stripe] unexpected error promoting auth %s: %s", row.get("id"), e)
                 continue
         return promoted
 
@@ -855,26 +893,28 @@ def build_stripe_router(db, get_current_user):
 
         if et == "checkout.session.completed":
             session_id = obj["id"]
-            pi_id = obj.get("payment_intent")
+            pi_id = _stripe_obj_get(obj, "payment_intent")
             update = {"updated_at": now_iso}
             if pi_id:
                 update["stripe_payment_intent_id"] = pi_id
                 # Pull the PaymentIntent to confirm it is in requires_capture
                 try:
                     pi = stripe.PaymentIntent.retrieve(pi_id)
-                    if pi["status"] == "requires_capture":
+                    if _stripe_obj_get(pi, "status") == "requires_capture":
                         update["authorization_status"] = "active"
-                        update["amount_authorized_eur"] = round(int(pi.get("amount_capturable", 0)) / 100.0, 2)
+                        capturable = _stripe_obj_get(pi, "amount_capturable", 0) or 0
+                        update["amount_authorized_eur"] = round(int(capturable) / 100.0, 2)
                 except stripe.error.StripeError as e:
                     logger.warning("[stripe] PI retrieve failed in webhook: %s", e)
             await db.bid_authorizations.update_one({"id": session_id}, {"$set": update})
 
         elif et == "payment_intent.amount_capturable_updated":
             pi_id = obj["id"]
+            capturable = _stripe_obj_get(obj, "amount_capturable", 0) or 0
             await db.bid_authorizations.update_one(
                 {"stripe_payment_intent_id": pi_id},
                 {"$set": {"authorization_status": "active", "updated_at": now_iso,
-                          "amount_authorized_eur": round(int(obj.get("amount_capturable", 0)) / 100.0, 2)}},
+                          "amount_authorized_eur": round(int(capturable) / 100.0, 2)}},
             )
 
         elif et == "payment_intent.canceled":
@@ -901,7 +941,8 @@ def build_stripe_router(db, get_current_user):
         elif et == "payment_intent.succeeded":
             # Will arrive after we capture. Just log captured_amount.
             pi_id = obj["id"]
-            captured = round(int(obj.get("amount_received", 0)) / 100.0, 2)
+            received = _stripe_obj_get(obj, "amount_received", 0) or 0
+            captured = round(int(received) / 100.0, 2)
             await db.bid_authorizations.update_one(
                 {"stripe_payment_intent_id": pi_id},
                 {"$set": {"authorization_status": "captured",
@@ -934,7 +975,8 @@ async def capture_authorization(db, auth_id: str, amount_eur: Optional[float] = 
     except stripe.error.StripeError as e:
         logger.exception("[stripe] capture failed")
         raise HTTPException(status_code=502, detail=f"Capture failed: {e}")
-    captured = round(int(pi.get("amount_received", 0)) / 100.0, 2)
+    received = _stripe_obj_get(pi, "amount_received", 0) or 0
+    captured = round(int(received) / 100.0, 2)
     now_iso = datetime.now(timezone.utc).isoformat()
     await db.bid_authorizations.update_one(
         {"id": auth_id},
