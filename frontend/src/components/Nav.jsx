@@ -290,15 +290,22 @@ export default function Nav() {
                 )}
                 <Link to="/dashboard" onClick={closeMobile} className="flex items-center justify-between gap-3 py-2" data-testid="mobile-nav-dashboard">
                   <span className="text-sm font-medium truncate">{user.name}</span>
-                  {credits && (
-                    <span className="text-xs text-right shrink-0" data-testid="mobile-nav-user-credits">
-                      <span className="block text-[10px] uppercase tracking-wide text-[hsl(var(--ink-muted))]">
-                        {t("nav.bidding_credit", "Наддавателен кредит")}
-                      </span>
-                      <span className="font-semibold tabular-nums">{formatEUR(credits.total_available_eur)}</span>
-                    </span>
-                  )}
                 </Link>
+                {credits && (
+                  <Link
+                    to="/my-bids"
+                    onClick={closeMobile}
+                    className="flex items-center justify-between gap-3 py-2 -my-1 px-2 rounded-md hover:bg-[hsl(var(--surface))]"
+                    data-testid="mobile-nav-user-credits"
+                  >
+                    <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--ink-muted))]">
+                      {t("nav.bidding_credit", "Наддавателен кредит")}
+                    </span>
+                    <span className="text-sm font-semibold tabular-nums" data-testid="mobile-nav-credits-value">
+                      {formatEUR(credits.total_available_eur)}<span className="text-[hsl(var(--ink-muted))] font-normal">/{formatEUR(credits.total_limit_eur)}</span>
+                    </span>
+                  </Link>
+                )}
                 <Link to="/my-listings" onClick={closeMobile} className="block py-2 text-sm" data-testid="mobile-nav-my-listings">{t("nav.my_listings")}</Link>
                 <Link to="/my-bids" onClick={closeMobile} className="block py-2 text-sm" data-testid="mobile-nav-my-bids">{t("nav.my_bids", "Моите наддавания")}</Link>
                 <Link to="/watchlist" onClick={closeMobile} className="block py-2 text-sm" data-testid="mobile-nav-watchlist">{t("nav.watchlist")}</Link>

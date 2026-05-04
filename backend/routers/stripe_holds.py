@@ -475,6 +475,74 @@ def build_stripe_router(db, get_current_user):
         )
         return {"ok": True}
 
+    async def _promote_pending_authorizations(user_id: str, auction_id: Optional[str] = None) -> int:
+        """Polling fallback for missing Stripe webhooks.
+
+        Stripe webhooks are the source of truth for `pending → active`
+        transitions, but in prod they can fail silently when the
+        webhook secret is wrong, the endpoint isn't registered, or
+        Cloudflare blocks the inbound request. Without a fallback the
+        user sees their card charged on Stripe but no credit on our
+        site.
+
+        This helper queries Stripe directly for any `pending` rows
+        belonging to the user (optionally narrowed to one auction) and
+        promotes them to `active` when the underlying PaymentIntent is
+        in `requires_capture`. Idempotent — safe to call on every
+        read.
+        """
+        if not api_key:
+            return 0
+        q = {"user_id": user_id, "authorization_status": "pending"}
+        if auction_id:
+            q["auction_id"] = auction_id
+        promoted = 0
+        pending_count = await db.bid_authorizations.count_documents(q)
+        if pending_count:
+            logger.info("[stripe.promote] checking %d pending row(s) for user=%s", pending_count, user_id)
+        async for row in db.bid_authorizations.find(q, {"_id": 0}):
+            sid = row.get("stripe_checkout_session_id") or row.get("id")
+            pi_id = row.get("stripe_payment_intent_id")
+            try:
+                # Prefer the PI if we already have it; otherwise pull
+                # the Checkout Session and follow the link. Two extra
+                # round-trips at most; runs only once per pending row.
+                if not pi_id and sid:
+                    sess = stripe.checkout.Session.retrieve(sid)
+                    pi_id = getattr(sess, "payment_intent", None) or (
+                        sess.get("payment_intent") if isinstance(sess, dict) else None
+                    )
+                if not pi_id:
+                    continue
+                pi = stripe.PaymentIntent.retrieve(pi_id)
+                status = pi["status"]
+                now_iso = datetime.now(timezone.utc).isoformat()
+                if status == "requires_capture":
+                    await db.bid_authorizations.update_one(
+                        {"id": row["id"]},
+                        {"$set": {
+                            "authorization_status": "active",
+                            "stripe_payment_intent_id": pi_id,
+                            "amount_authorized_eur": round(int(pi.get("amount_capturable", 0)) / 100.0, 2),
+                            "updated_at": now_iso,
+                        }},
+                    )
+                    promoted += 1
+                    logger.info("[stripe] promoted pending→active via polling: auth=%s pi=%s", row["id"], pi_id)
+                elif status in ("canceled",):
+                    await db.bid_authorizations.update_one(
+                        {"id": row["id"]},
+                        {"$set": {"authorization_status": "released",
+                                  "released_at": now_iso, "updated_at": now_iso}},
+                    )
+                elif status in ("requires_payment_method", "requires_action"):
+                    # Still in the middle of 3DS — leave pending.
+                    pass
+            except stripe.error.StripeError as e:
+                logger.warning("[stripe] promote check failed for auth %s: %s", row.get("id"), e)
+                continue
+        return promoted
+
     @router.get("/authorizations/active")
     async def my_active_authorization(auction_id: str, user: dict = Depends(get_current_user)):
         """Return the user's currently active hold for this auction (if any)."""
@@ -484,6 +552,11 @@ def build_stripe_router(db, get_current_user):
         canonical_id = await _resolve_auction_id(auction_id)
         if not canonical_id:
             return {}
+        # Fallback: if the Stripe webhook never arrived (wrong secret,
+        # blocked endpoint, etc.) we still need to surface the active
+        # hold to the bidder. Query Stripe directly for any pending row
+        # on this auction.
+        await _promote_pending_authorizations(user["id"], canonical_id)
         doc = await db.bid_authorizations.find_one(
             {
                 "user_id": user["id"],
@@ -506,6 +579,11 @@ def build_stripe_router(db, get_current_user):
         model "how much I can still spend" shown in the UI bell section.
         """
         await _expire_stale_authorizations(db)
+        # Promote any pending rows that have already been authorized on
+        # Stripe but whose webhook never reached us — without this, a
+        # user who just paid sees a `0€/0€` counter even though their
+        # card has been held.
+        await _promote_pending_authorizations(user["id"])
         cursor = db.bid_authorizations.find(
             {"user_id": user["id"],
              "authorization_status": {"$in": ["active", "loser_grace"]}},

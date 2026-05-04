@@ -2,7 +2,12 @@ from dotenv import load_dotenv
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+# `override=True` so values in /app/backend/.env always win over the
+# parent process's shell env. Without this, the K8s pod's placeholder
+# `STRIPE_API_KEY=sk_test_emergent` (set in /etc/environment) would
+# shadow the real test key configured in `.env`, silently breaking
+# all live Stripe API calls.
+load_dotenv(ROOT_DIR / '.env', override=True)
 
 import os
 import asyncio
