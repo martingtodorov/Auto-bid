@@ -2436,7 +2436,14 @@ async def buy_now(auction_id: str, request: Request, body: dict = None, user: di
         raise HTTPException(status_code=409, detail="Текущата оферта вече надвишава цената 'Купи сега'.")
 
     bn_gross = _gross_amount(bn_net, a)
-    amount_cents = int(round(bn_gross * 100))
+    # Stripe charges only the platform's buyer-premium fee (% configured
+    # in admin → Settings → buyer_fee_pct, with min/max bounds). The
+    # remainder of the car price is settled off-platform between buyer
+    # and seller — same model as auction wins. Charging the full price
+    # would lock €40k+ on the buyer's card before they even talk to the
+    # seller, which is not the product's intent.
+    fee_eur = round(_buyer_fee(bn_gross), 2)
+    amount_cents = int(round(fee_eur * 100))
 
     import stripe
     api_key = os.environ.get("STRIPE_API_KEY", "")
@@ -2466,8 +2473,12 @@ async def buy_now(auction_id: str, request: Request, body: dict = None, user: di
                 "price_data": {
                     "currency": "eur",
                     "product_data": {
-                        "name": f"Купи сега: {a.get('title','')[:90]}",
-                        "description": f"Незабавна покупка на обявата (включва ДДС)" if a.get("vat_status") == "vat_inclusive" else "Незабавна покупка на обявата",
+                        "name": f"Купи сега — комисионна: {a.get('title','')[:80]}",
+                        "description": (
+                            f"Платформена комисионна за незабавна покупка на цена "
+                            f"€{int(round(bn_gross)):,}".replace(",", " ")
+                            + (" (вкл. ДДС)" if a.get("vat_status") == "vat_inclusive" else "")
+                        ),
                     },
                     "unit_amount": amount_cents,
                 },
@@ -2483,6 +2494,7 @@ async def buy_now(auction_id: str, request: Request, body: dict = None, user: di
                     "intent": "buy_now",
                     "amount_gross_eur": str(round(bn_gross, 2)),
                     "amount_net_eur": str(round(bn_net, 2)),
+                    "platform_fee_eur": str(round(fee_eur, 2)),
                 },
             },
             metadata={
@@ -2505,6 +2517,7 @@ async def buy_now(auction_id: str, request: Request, body: dict = None, user: di
         "auction_id": auction_id,
         "amount_gross_eur": bn_gross,
         "amount_net_eur": bn_net,
+        "platform_fee_eur": fee_eur,
         "status": "pending",
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
@@ -2514,6 +2527,7 @@ async def buy_now(auction_id: str, request: Request, body: dict = None, user: di
         "url": session["url"],
         "amount_gross_eur": bn_gross,
         "amount_net_eur": bn_net,
+        "platform_fee_eur": fee_eur,
     }
 
 

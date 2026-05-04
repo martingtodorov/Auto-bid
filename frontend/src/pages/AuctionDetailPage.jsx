@@ -1115,8 +1115,14 @@ export default function AuctionDetailPage() {
                       const buyNowFee = buyerFeeFor(grossPrice);
                       return buyNowFee > 0 && (
                         <div className="mt-2 text-xs text-[hsl(var(--ink-muted))]" data-testid="buy-now-fee-preview">
-                          {t("auction.buyer_fee_label")}: <span className="font-mono text-[hsl(var(--ink))]">{formatEUR(buyNowFee)}</span>
-                          <span className="ml-1">({settings.buyer_fee_pct}% {t("auction.incl_vat", "вкл. ДДС")})</span>
+                          <div>
+                            {t("auction.buy_now_charge_label", "Stripe ще таксува само комисионна:")}{" "}
+                            <span className="font-mono text-[hsl(var(--ink))] font-semibold">{formatEUR(buyNowFee)}</span>
+                            <span className="ml-1">({settings.buyer_fee_pct}%)</span>
+                          </div>
+                          <div className="mt-0.5">
+                            {t("auction.buy_now_settle_offline", "Остатъкът се урежда директно с продавача.")}
+                          </div>
                         </div>
                       );
                     })()}
@@ -1524,19 +1530,27 @@ function ShareButton({ auction }) {
 
   const share = async () => {
     const data = { title: auction?.title || brand, url: shareUrl };
-    try {
-      if (navigator.share) {
+    if (navigator.share) {
+      try {
         await navigator.share(data);
-        return;
+      } catch (err) {
+        // AbortError = user cancelled the native share sheet — DO
+        // NOT fall through to clipboard / prompt (that's what was
+        // surfacing the ugly `window.prompt` dialog after Cancel).
+        // Any other error means navigator.share threw before showing
+        // the sheet, so we still try clipboard as a graceful fallback.
+        const name = err?.name || "";
+        if (name === "AbortError" || name === "NotAllowedError") return;
       }
-    } catch { /* user cancelled or not supported */ }
+      // navigator.share resolved successfully — nothing else to do.
+      return;
+    }
+    // No Web Share API → silent clipboard copy + green "Copied!" pill.
     try {
       await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      window.prompt(shareUrl, shareUrl);
-    }
+    } catch { /* clipboard blocked — give up silently */ }
   };
 
   return (
