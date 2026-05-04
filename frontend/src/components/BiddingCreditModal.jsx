@@ -89,6 +89,8 @@ export default function BiddingCreditModal({ auctionId, currentBid, currentCredi
             payment_method_id: data.id,
           });
           try { localStorage.removeItem(`pending_credit_${auctionId}`); } catch (_e) { /* ignore */ }
+          // Refresh nav counter immediately
+          window.dispatchEvent(new Event("credits-updated"));
           onSaved && onSaved(credResp.credit);
           onClose();
         } catch (e) {
@@ -113,6 +115,8 @@ export default function BiddingCreditModal({ auctionId, currentBid, currentCredi
     setErr(""); setReleasing(true);
     try {
       await api.delete(`/auctions/${auctionId}/bidding-credit`);
+      // Refresh nav counter immediately
+      window.dispatchEvent(new Event("credits-updated"));
       onSaved && onSaved(null);
       onClose();
     } catch (e) { setErr(formatError(e)); }

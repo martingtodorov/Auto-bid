@@ -383,6 +383,12 @@ export default function AuctionDetailPage() {
         setError(t("preauth.stripe_pending", "Плащането през Stripe все още се обработва. Моля, опитайте отново след минута."));
         return;
       }
+      // Stripe authorization was confirmed → tell the global nav
+      // counter to refresh immediately. We do this BEFORE the
+      // bidding-credit registration so even if that step fails
+      // (e.g. unverified email, network blip) the user at least sees
+      // their hold reflected in the menu.
+      window.dispatchEvent(new Event("credits-updated"));
       // Финализираме pending действие: 1) pending_credit → регистрирай credit;
       // 2) pending_bid → подай бида.
       try {
@@ -394,6 +400,8 @@ export default function AuctionDetailPage() {
             payment_method_id: auth.id, // canonical session id, not card data
           });
           localStorage.removeItem(`pending_credit_${id}`);
+          // Tell the nav counter to refresh now (skip the 90 s tick).
+          window.dispatchEvent(new Event("credits-updated"));
           await load();
         }
         const bidRaw = localStorage.getItem(`pending_bid_${id}`);

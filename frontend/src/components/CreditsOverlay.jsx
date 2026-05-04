@@ -65,6 +65,9 @@ export default function CreditsOverlay({ onClose, onChanged }) {
     try {
       await api.post(`/stripe/authorizations/${hold.authorization_id}/release`);
       await load();
+      // Tell the nav counter to refresh — without this the counter
+      // stays stuck on the old value for up to 90 s after a release.
+      window.dispatchEvent(new Event("credits-updated"));
       onChanged && onChanged();
     } catch (e) {
       setErr(formatError(e));

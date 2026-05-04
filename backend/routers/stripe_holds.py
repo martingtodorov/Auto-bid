@@ -305,6 +305,17 @@ def build_stripe_router(db, get_current_user):
         """
         if not api_key:
             raise HTTPException(status_code=503, detail="Stripe не е конфигуриран. Свържете се с администратор.")
+        # Block unverified emails BEFORE we hit Stripe — otherwise the
+        # user pays, returns, and the downstream `/auctions/{id}/bidding-credit`
+        # rejects them with 403 (require_verified_email), leaving their
+        # card charged with no credit registered. Admins/moderators
+        # bypass per the same rule used in server.py.
+        if user.get("role") not in ("admin", "moderator"):
+            if user.get("verification_required") and not user.get("email_verified"):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Моля, потвърдете имейл адреса си, преди да авторизирате карта.",
+                )
         # Accept either canonical UUID or a slug-suffix string (the URL
         # param passed down from `AuctionDetailPage`). All downstream DB
         # lookups and Stripe metadata use the canonical id.

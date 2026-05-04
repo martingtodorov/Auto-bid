@@ -60,12 +60,19 @@ export default function Nav() {
     };
     fetchCredits();
     const t = setInterval(fetchCredits, 90_000);
-    return () => { mounted = false; clearInterval(t); };
+    // Cross-component refresh signal: any flow that creates / releases
+    // a hold (BiddingCreditModal, AuctionDetailPage post-Stripe
+    // handler, CreditsOverlay) dispatches `credits-updated` on
+    // `window` so the nav counter snaps to the new value within
+    // ~250 ms instead of waiting for the next poll tick.
+    const onUpdate = () => { fetchCredits(); };
+    window.addEventListener("credits-updated", onUpdate);
+    return () => {
+      mounted = false;
+      clearInterval(t);
+      window.removeEventListener("credits-updated", onUpdate);
+    };
   }, [user]);
-  const openCredits = () => {
-    closeMobile();
-    setCreditsOpen(true);
-  };
   const brandTld = brandTldForLang(i18n.resolvedLanguage || i18n.language);
 
   // Desktop primary links. `Търгове` is rendered as a dropdown
@@ -213,7 +220,7 @@ export default function Nav() {
                           <div className="border-t border-[hsl(var(--line))] my-1" />
                           <button
                             type="button"
-                            onClick={openCredits}
+                            onClick={() => setCreditsOpen(true)}
                             className="w-full text-left block px-4 py-2 hover:bg-[hsl(var(--bg))] transition-colors"
                             data-testid="nav-menu-credits"
                           >
@@ -304,31 +311,26 @@ export default function Nav() {
                     {t("nav.admin")}
                   </Link>
                 )}
-                <Link to="/dashboard" onClick={closeMobile} className="flex items-center justify-between gap-3 py-2" data-testid="mobile-nav-dashboard">
-                  <span className="text-sm font-medium truncate">{user.name}</span>
-                </Link>
-                {credits && (
-                  <button
-                    type="button"
-                    onClick={openCredits}
-                    className="w-full text-left flex items-start justify-between gap-3 py-2 -my-1 px-2 rounded-md hover:bg-[hsl(var(--surface))]"
-                    data-testid="mobile-nav-user-credits"
-                  >
-                    <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-[hsl(var(--ink-muted))]">
-                      <Wallet size={11} /> {t("nav.bidding_credit", "Наддавателен кредит")}
-                    </div>
-                    <div className="text-right shrink-0">
+                <div className="flex items-center justify-between gap-3 py-2" data-testid="mobile-nav-user-row">
+                  <Link to="/dashboard" onClick={closeMobile} className="text-sm font-medium truncate min-w-0" data-testid="mobile-nav-dashboard">
+                    {user.name}
+                  </Link>
+                  {credits && (
+                    <button
+                      type="button"
+                      onClick={() => setCreditsOpen(true)}
+                      className="text-right shrink-0 px-2 py-1 -my-1 rounded-md hover:bg-[hsl(var(--surface))]"
+                      data-testid="mobile-nav-user-credits"
+                    >
+                      <div className="flex items-center gap-1 text-[9px] uppercase tracking-wide text-[hsl(var(--ink-muted))] justify-end">
+                        <Wallet size={10} /> {t("nav.bidding_credit", "Наддавателен кредит")}
+                      </div>
                       <div className="text-sm font-semibold tabular-nums" data-testid="mobile-nav-credits-value">
                         {formatEUR(credits.total_available_eur)}<span className="text-[hsl(var(--ink-muted))] font-normal">/{formatEUR(credits.total_limit_eur)}</span>
                       </div>
-                      <div className="text-[10px] text-[hsl(var(--ink-muted))]">
-                        {credits.count > 0
-                          ? t("nav.credits_hint", "{{count}} активни авторизации", { count: credits.count })
-                          : t("nav.credits_none", "Няма активни авторизации")}
-                      </div>
-                    </div>
-                  </button>
-                )}
+                    </button>
+                  )}
+                </div>
                 <Link to="/my-listings" onClick={closeMobile} className="block py-2 text-sm" data-testid="mobile-nav-my-listings">{t("nav.my_listings")}</Link>
                 <Link to="/my-bids" onClick={closeMobile} className="block py-2 text-sm" data-testid="mobile-nav-my-bids">{t("nav.my_bids", "Моите наддавания")}</Link>
                 <Link to="/watchlist" onClick={closeMobile} className="block py-2 text-sm" data-testid="mobile-nav-watchlist">{t("nav.watchlist")}</Link>
