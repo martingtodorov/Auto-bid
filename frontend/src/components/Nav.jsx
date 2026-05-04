@@ -47,7 +47,19 @@ export default function Nav() {
     try {
       const { data } = await api.get("/stripe/authorizations/my-credits");
       setCredits(data);
-    } catch (_e) { /* keep last known value on transient errors */ }
+    } catch (e) {
+      // 401 = token expired (let auth flow handle); 5xx = backend hiccup;
+      // network = offline. In all of these we still want the counter
+      // to render — falling back to a known-empty summary keeps the
+      // UI honest ("0 € / 0 €") instead of silently hiding the row,
+      // which is what production users were seeing.
+      const status = e?.response?.status;
+      if (status && status !== 401) {
+        // Not auth: render zero state so users see SOMETHING.
+        setCredits({ holds: [], total_hold_eur: 0, total_limit_eur: 0,
+                     total_available_eur: 0, count: 0 });
+      }
+    }
   }, [user]);
   useEffect(() => {
     if (!user) { setCredits(null); return; }
@@ -56,15 +68,23 @@ export default function Nav() {
       try {
         const { data } = await api.get("/stripe/authorizations/my-credits");
         if (mounted) setCredits(data);
-      } catch (e) { /* silently ignore — counter just hides */ }
+      } catch (e) {
+        // Same fallback as `refreshCredits` above — never let a
+        // transient backend blip hide the counter for the rest of
+        // the session.
+        const status = e?.response?.status;
+        if (mounted && status && status !== 401) {
+          setCredits({ holds: [], total_hold_eur: 0, total_limit_eur: 0,
+                       total_available_eur: 0, count: 0 });
+        } else if (mounted && !status) {
+          // network/offline — still show 0 so users see the row.
+          setCredits({ holds: [], total_hold_eur: 0, total_limit_eur: 0,
+                       total_available_eur: 0, count: 0 });
+        }
+      }
     };
     fetchCredits();
     const t = setInterval(fetchCredits, 90_000);
-    // Cross-component refresh signal: any flow that creates / releases
-    // a hold (BiddingCreditModal, AuctionDetailPage post-Stripe
-    // handler, CreditsOverlay) dispatches `credits-updated` on
-    // `window` so the nav counter snaps to the new value within
-    // ~250 ms instead of waiting for the next poll tick.
     const onUpdate = () => { fetchCredits(); };
     window.addEventListener("credits-updated", onUpdate);
     return () => {

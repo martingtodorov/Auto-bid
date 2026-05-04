@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { X, Wallet, Plus, Trophy, Clock, ExternalLink } from "lucide-react";
@@ -86,7 +87,7 @@ export default function CreditsOverlay({ onClose, onChanged }) {
     navigate(`${link}?bid=1`);
   };
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
       data-testid="credits-overlay"
@@ -281,6 +282,7 @@ export default function CreditsOverlay({ onClose, onChanged }) {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
