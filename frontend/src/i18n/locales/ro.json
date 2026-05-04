@@ -802,5 +802,63 @@
     "limit_label": "Ofertă maximă (EUR)",
     "authorize_action": "Autorizează prin Stripe →",
     "processing": "Redirecționăm către Stripe…"
+  },
+  "topup": {
+    "title": "Adaugă credit de licitație",
+    "subtitle": "Creditul este universal și poate fi folosit la orice licitație activă. Nu este legat de o anumită ofertă.",
+    "amount": "Credit dorit (€)",
+    "charge": "Stripe va bloca {{fee}} ({{pct}}% din limită)",
+    "charge_hint": "Se autorizează doar comisionul platformei. Valoarea licitației se decontează direct cu vânzătorul după câștig.",
+    "bounds": "Minim {{min}} · maxim {{max}}",
+    "cta": "Adaugă prin Stripe",
+    "processing": "Procesare…",
+    "err_amount": "Suma trebuie să fie pozitivă."
+  },
+  "credit_overlay": {
+    "title": "Credit de licitație",
+    "available": "Disponibil",
+    "limit": "Limită",
+    "committed": "Angajat",
+    "committed_to": "Licitații în curs",
+    "holds": "Autorizări pe card",
+    "hold_blocked": "Blocat: {{h}}",
+    "topup_cta": "Adaugă credit",
+    "release": "Eliberează",
+    "release_confirm_v2": "Eliberează {{lim}} din creditul de licitație?",
+    "empty_v2": "Nu aveți încă credit autorizat. Adăugați pentru a începe.",
+    "full_page": "Vedere completă →"
+  },
+  "bid_confirm": {
+    "title": "Confirmă licitarea",
+    "your_bid": "Oferta dvs.",
+    "net": "Net (fără TVA)",
+    "credit_summary": "Credit de licitație",
+    "credit_available": "Disponibil acum",
+    "credit_after": "După această ofertă",
+    "no_charge": "Aveți suficient credit disponibil — fără plată nouă prin Stripe.",
+    "shortfall": "Lipsesc {{amt}} din creditul disponibil. Adăugați pentru a licita.",
+    "below_min": "Ofertă minimă: {{min}}",
+    "topup": "Adaugă credit",
+    "topup_then_bid": "Adaugă & licitează",
+    "place_cta": "Licitează {{amt}}",
+    "placing": "Se trimite…"
+  },
+  "my_bids": {
+    "title": "Licitațiile mele",
+    "available": "Disponibil",
+    "available_hint": "pentru a licita acum",
+    "limit": "Autorizat",
+    "committed": "Angajat",
+    "holds_count": "autorizări active",
+    "commit_count": "licitații în curs",
+    "topup_cta": "Adaugă credit",
+    "committed_title": "Licitații în curs",
+    "holds_title": "Autorizări pe card",
+    "release": "Eliberează",
+    "release_confirm_v2": "Eliberează {{lim}} din creditul de licitație?",
+    "released_ok": "Autorizare eliberată.",
+    "empty_v2": "Nu aveți autorizări active. Adăugați credit pentru a începe.",
+    "hold_blocked": "Blocat: {{h}}",
+    "login_required": "Trebuie să vă autentificați pentru a vedea licitațiile."
   }
 }

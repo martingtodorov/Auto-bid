@@ -69,12 +69,12 @@ export default function CreditsOverlay({ onClose, onChanged }) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+      className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
       data-testid="credits-overlay"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-t-card sm:rounded-card w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl"
+        className="bg-white rounded-card w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="sticky top-0 bg-white flex items-center justify-between px-5 py-4 border-b border-[hsl(var(--line))] z-10">

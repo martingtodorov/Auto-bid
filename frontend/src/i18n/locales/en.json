@@ -806,5 +806,63 @@
     "limit_label": "Maximum bid (EUR)",
     "authorize_action": "Authorize via Stripe →",
     "processing": "Redirecting to Stripe…"
+  },
+  "topup": {
+    "title": "Top up bidding credit",
+    "subtitle": "Credit is universal and can be used to bid on any active auction. It is not tied to a specific listing.",
+    "amount": "Desired credit (€)",
+    "charge": "Stripe will hold {{fee}} ({{pct}}% of the limit)",
+    "charge_hint": "Only the platform fee is authorized. The auction value itself is settled directly with the seller after winning.",
+    "bounds": "Minimum {{min}} · maximum {{max}}",
+    "cta": "Top up via Stripe",
+    "processing": "Processing…",
+    "err_amount": "Amount must be positive."
+  },
+  "credit_overlay": {
+    "title": "Bidding credit",
+    "available": "Available",
+    "limit": "Limit",
+    "committed": "Committed",
+    "committed_to": "Active leading bids",
+    "holds": "Card authorizations",
+    "hold_blocked": "Held: {{h}}",
+    "topup_cta": "Top up credit",
+    "release": "Release",
+    "release_confirm_v2": "Release {{lim}} of bidding credit?",
+    "empty_v2": "You have no authorized credit yet. Top up to start bidding.",
+    "full_page": "Full overview →"
+  },
+  "bid_confirm": {
+    "title": "Confirm your bid",
+    "your_bid": "Your bid",
+    "net": "Net (excl. VAT)",
+    "credit_summary": "Bidding credit",
+    "credit_available": "Available now",
+    "credit_after": "After this bid",
+    "no_charge": "You have enough available credit — no new Stripe charge.",
+    "shortfall": "Short by {{amt}} from available credit. Top up to bid.",
+    "below_min": "Minimum bid: {{min}}",
+    "topup": "Top up",
+    "topup_then_bid": "Top up & bid",
+    "place_cta": "Bid {{amt}}",
+    "placing": "Placing…"
+  },
+  "my_bids": {
+    "title": "My bids",
+    "available": "Available",
+    "available_hint": "to bid right now",
+    "limit": "Authorized",
+    "committed": "Committed",
+    "holds_count": "active authorizations",
+    "commit_count": "leading bids",
+    "topup_cta": "Top up credit",
+    "committed_title": "Active leading bids",
+    "holds_title": "Card authorizations",
+    "release": "Release",
+    "release_confirm_v2": "Release {{lim}} of bidding credit?",
+    "released_ok": "Authorization released.",
+    "empty_v2": "No active authorizations yet. Top up credit to start bidding.",
+    "hold_blocked": "Held: {{h}}",
+    "login_required": "You must sign in to view your bids."
   }
 }
