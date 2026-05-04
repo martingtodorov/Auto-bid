@@ -69,6 +69,10 @@
     "settings": "Настройки",
     "watchlist": "Любими",
     "my_listings": "Мои обяви",
+    "my_bids": "Моите наддавания",
+    "credits": "Кредити",
+    "credits_hint": "{{count}} активни авторизации",
+    "credits_none": "Няма активни авторизации",
     "dashboard": "Табло"
   },
   "search": {

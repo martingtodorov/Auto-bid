@@ -69,6 +69,10 @@
     "settings": "Setări",
     "watchlist": "Favorite",
     "my_listings": "Anunțurile mele",
+    "my_bids": "Licitațiile mele",
+    "credits": "Credite",
+    "credits_hint": "{{count}} autorizații active",
+    "credits_none": "Nicio autorizație activă",
     "dashboard": "Tablou de bord"
   },
   "search": {

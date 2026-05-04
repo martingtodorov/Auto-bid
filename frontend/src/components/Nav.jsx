@@ -178,13 +178,22 @@ export default function Nav() {
                       <Link to="/my-listings" className="block px-4 py-2 text-sm hover:bg-[hsl(var(--bg))] transition-colors" data-testid="nav-menu-my-listings">
                         {t("nav.my_listings")}
                       </Link>
+                      <Link to="/my-bids" className="block px-4 py-2 text-sm hover:bg-[hsl(var(--bg))] transition-colors" data-testid="nav-menu-my-bids">
+                        {t("nav.my_bids", "Моите наддавания")}
+                      </Link>
                       <Link to="/watchlist" className="block px-4 py-2 text-sm hover:bg-[hsl(var(--bg))] transition-colors" data-testid="nav-menu-watchlist">
                         {t("nav.watchlist")}
                       </Link>
                       <Link to="/settings" className="block px-4 py-2 text-sm hover:bg-[hsl(var(--bg))] transition-colors" data-testid="nav-menu-settings">
                         {t("nav.settings")}
                       </Link>
-                      {credits && credits.count > 0 && (
+                      {/* Preauthorization credit — always shown when the
+                          endpoint succeeds, even if 0. The summary is
+                          the source of truth for bidding power, so users
+                          want to see "€0" just as much as a positive
+                          number (it confirms they currently have no
+                          holds locking up their card). */}
+                      {credits && (
                         <>
                           <div className="border-t border-[hsl(var(--line))] my-1" />
                           <Link
@@ -200,7 +209,9 @@ export default function Nav() {
                               <span className="text-[hsl(var(--ink-muted))] font-normal"> / {formatEUR(credits.total_limit_eur)}</span>
                             </div>
                             <div className="text-[11px] text-[hsl(var(--ink-muted))] mt-0.5">
-                              {t("nav.credits_hint", "{{count}} активни авторизации", { count: credits.count })}
+                              {credits.count > 0
+                                ? t("nav.credits_hint", "{{count}} активни авторизации", { count: credits.count })
+                                : t("nav.credits_none", "Няма активни авторизации")}
                             </div>
                           </Link>
                         </>
@@ -281,6 +292,7 @@ export default function Nav() {
                   {user.name}
                 </Link>
                 <Link to="/my-listings" onClick={closeMobile} className="block py-2 text-sm" data-testid="mobile-nav-my-listings">{t("nav.my_listings")}</Link>
+                <Link to="/my-bids" onClick={closeMobile} className="block py-2 text-sm" data-testid="mobile-nav-my-bids">{t("nav.my_bids", "Моите наддавания")}</Link>
                 <Link to="/watchlist" onClick={closeMobile} className="block py-2 text-sm" data-testid="mobile-nav-watchlist">{t("nav.watchlist")}</Link>
                 <Link to="/inbox" onClick={closeMobile} className="block py-2 text-sm" data-testid="mobile-nav-inbox">{t("nav.notifications", t("inbox.title", "Известия"))}</Link>
                 <Link to="/settings" onClick={closeMobile} className="block py-2 text-sm" data-testid="mobile-nav-settings">{t("nav.settings")}</Link>

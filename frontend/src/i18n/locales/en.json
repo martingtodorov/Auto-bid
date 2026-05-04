@@ -69,6 +69,10 @@
     "settings": "Settings",
     "watchlist": "Watchlist",
     "my_listings": "My listings",
+    "my_bids": "My bids",
+    "credits": "Credits",
+    "credits_hint": "{{count}} active authorizations",
+    "credits_none": "No active authorizations",
     "dashboard": "Dashboard"
   },
   "search": {
