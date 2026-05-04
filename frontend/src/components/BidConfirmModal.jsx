@@ -230,10 +230,10 @@ export default function BidConfirmModal({
               type="button"
               onClick={place}
               disabled={busy || belowMin}
-              className="btn btn-accent flex-1 inline-flex items-center justify-center gap-1.5"
+              className="btn btn-accent flex-1 inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
               data-testid="bid-confirm-place"
             >
-              <Gavel size={14} />
+              {sufficient && !busy && <Gavel size={14} />}
               {busy
                 ? t("bid_confirm.placing", "Наддаване…")
                 : sufficient
