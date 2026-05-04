@@ -1118,18 +1118,35 @@ async def capture_authorization(db, auth_id: str, amount_eur: Optional[float] = 
 
 
 async def cancel_authorization(db, auth_id: str) -> dict:
-    """Release the hold (cancel the PaymentIntent) — used when the bidder loses."""
+    """Release a hold — cancel the PaymentIntent if one exists, else
+    expire the Checkout Session so the user can't accidentally finish
+    paying after we've already marked the row released.
+
+    Used both when the bidder loses an auction (auto release) and when
+    the user manually clicks "Освободи" in the UI.
+    """
     auth = await db.bid_authorizations.find_one({"id": auth_id}, {"_id": 0})
     if not auth:
         raise HTTPException(status_code=404, detail="Authorization not found")
     if auth["authorization_status"] not in ("active", "pending", "loser_grace"):
         return {"ok": True, "skipped": True, "reason": auth["authorization_status"]}
     pi_id = auth.get("stripe_payment_intent_id")
+    sid = auth.get("stripe_checkout_session_id")
     if pi_id:
+        # Active hold: cancel the underlying PaymentIntent so the
+        # bank-side authorization is released immediately.
         try:
             stripe.PaymentIntent.cancel(pi_id)
         except stripe.error.StripeError as e:
-            logger.warning("[stripe] cancel returned %s — proceeding with DB mark", e)
+            logger.warning("[stripe] cancel PI returned %s — proceeding with DB mark", e)
+    elif sid and sid.startswith("cs_"):
+        # Pending hold: PI hasn't been created yet (user never finished
+        # checkout, or webhook hasn't fired). Expire the Session so a
+        # late return can't surprise-charge the card.
+        try:
+            stripe.checkout.Session.expire(sid)
+        except stripe.error.StripeError as e:
+            logger.warning("[stripe] expire session %s returned %s — proceeding with DB mark", sid, e)
     now_iso = datetime.now(timezone.utc).isoformat()
     await db.bid_authorizations.update_one(
         {"id": auth_id},

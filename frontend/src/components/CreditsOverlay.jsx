@@ -184,37 +184,45 @@ export default function CreditsOverlay({ onClose, onChanged }) {
                   <h3 className="overline text-[hsl(var(--ink-muted))]">
                     {t("credit_overlay.holds", "Авторизации на картата")}
                   </h3>
-                  {summary.holds.filter((h) => h.authorization_status === "active").map((h) => (
-                    <div
-                      key={h.authorization_id}
-                      className="rounded-card border border-[hsl(var(--line))] p-3 flex items-center justify-between gap-2"
-                      data-testid={`credits-overlay-hold-${h.authorization_id}`}
-                    >
-                      <div>
-                        <div className="text-sm font-semibold tabular-nums">
-                          {formatEUR(h.bidding_limit_eur)}
-                        </div>
-                        <div className="text-[11px] text-[hsl(var(--ink-muted))]">
-                          {t("credit_overlay.hold_blocked", "Блокирано: {{h}}", { h: formatEUR(h.hold_eur) })}
-                          {h.created_at && ` · ${new Date(h.created_at).toLocaleDateString()}`}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => release(h)}
-                        disabled={busy[h.authorization_id]}
-                        className="btn btn-secondary !py-1.5 !px-3 text-xs inline-flex items-center gap-1 !text-[hsl(var(--danger))] !border-[hsl(var(--danger))]/30"
-                        data-testid={`credits-overlay-release-${h.authorization_id}`}
+                  {summary.holds.map((h) => {
+                    const isPending = h.authorization_status === "pending";
+                    return (
+                      <div
+                        key={h.authorization_id}
+                        className="rounded-card border border-[hsl(var(--line))] p-3 flex items-center justify-between gap-2"
+                        data-testid={`credits-overlay-hold-${h.authorization_id}`}
                       >
-                        <X size={11} />
-                        {busy[h.authorization_id] ? t("common.processing", "Обработва…") : t("credit_overlay.release", "Освободи")}
-                      </button>
-                    </div>
-                  ))}
+                        <div>
+                          <div className="text-sm font-semibold tabular-nums flex items-center gap-2">
+                            {formatEUR(h.bidding_limit_eur)}
+                            {isPending && (
+                              <span className="text-[10px] uppercase tracking-wide bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">
+                                {t("credit_overlay.pending", "Изчаква")}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-[hsl(var(--ink-muted))]">
+                            {t("credit_overlay.hold_blocked", "Блокирано: {{h}}", { h: formatEUR(h.hold_eur) })}
+                            {h.created_at && ` · ${new Date(h.created_at).toLocaleDateString()}`}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => release(h)}
+                          disabled={busy[h.authorization_id]}
+                          className="btn btn-secondary !py-1.5 !px-3 text-xs inline-flex items-center gap-1 !text-[hsl(var(--danger))] !border-[hsl(var(--danger))]/30"
+                          data-testid={`credits-overlay-release-${h.authorization_id}`}
+                        >
+                          <X size={11} />
+                          {busy[h.authorization_id] ? t("common.processing", "Обработва…") : t("credit_overlay.release", "Освободи")}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
-              {summary && summary.count === 0 && (
+              {summary && summary.holds && summary.holds.length === 0 && (
                 <div
                   className="text-center py-8 border border-dashed border-[hsl(var(--line))] rounded-card"
                   data-testid="credits-overlay-empty"

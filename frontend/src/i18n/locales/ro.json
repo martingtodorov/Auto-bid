@@ -826,7 +826,8 @@
     "release": "Eliberează",
     "release_confirm_v2": "Eliberează {{lim}} din creditul de licitație?",
     "empty_v2": "Nu aveți încă credit autorizat. Adăugați pentru a începe.",
-    "full_page": "Vedere completă →"
+    "full_page": "Vedere completă →",
+    "pending": "În așteptare"
   },
   "bid_confirm": {
     "title": "Confirmă licitarea",

@@ -830,7 +830,8 @@
     "release": "Release",
     "release_confirm_v2": "Release {{lim}} of bidding credit?",
     "empty_v2": "You have no authorized credit yet. Top up to start bidding.",
-    "full_page": "Full overview →"
+    "full_page": "Full overview →",
+    "pending": "Pending"
   },
   "bid_confirm": {
     "title": "Confirm your bid",

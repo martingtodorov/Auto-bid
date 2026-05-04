@@ -181,7 +181,7 @@ export default function MyBidsPage() {
         <h2 className="font-serif text-2xl mb-4">{t("my_bids.holds_title", "Авторизации на картата")}</h2>
         {loading ? (
           <p className="text-[hsl(var(--ink-muted))]">{t("common.loading", "Зарежда…")}</p>
-        ) : !summary || !summary.holds || summary.holds.filter((h) => h.authorization_status === "active").length === 0 ? (
+        ) : !summary || !summary.holds || summary.holds.length === 0 ? (
           <div className="rounded-card border border-dashed border-[hsl(var(--line))] p-8 text-center" data-testid="my-bids-empty">
             <Wallet size={32} className="mx-auto text-[hsl(var(--ink-muted))] mb-3" />
             <p className="text-sm text-[hsl(var(--ink-muted))]">
@@ -190,33 +190,43 @@ export default function MyBidsPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {summary.holds.filter((h) => h.authorization_status === "active").map((h) => (
-              <div
-                key={h.authorization_id}
-                className="flex items-center justify-between gap-4 p-4 rounded-card border border-[hsl(var(--line))]"
-                data-testid={`my-bids-hold-${h.authorization_id}`}
-              >
-                <div>
-                  <div className="font-mono text-xl tabular-nums">{formatEUR(h.bidding_limit_eur)}</div>
-                  <div className="text-xs text-[hsl(var(--ink-muted))] mt-0.5">
-                    {t("my_bids.hold_blocked", "Блокирано: {{h}}", { h: formatEUR(h.hold_eur) })}
-                    {h.created_at && ` · ${new Date(h.created_at).toLocaleDateString()}`}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => release(h)}
-                  disabled={releasing[h.authorization_id]}
-                  className="btn btn-secondary !text-[hsl(var(--danger))] !border-[hsl(var(--danger))]/30 inline-flex items-center gap-1.5"
-                  data-testid={`my-bids-release-${h.authorization_id}`}
+            {summary.holds.map((h) => {
+              const isPending = h.authorization_status === "pending";
+              return (
+                <div
+                  key={h.authorization_id}
+                  className="flex items-center justify-between gap-4 p-4 rounded-card border border-[hsl(var(--line))]"
+                  data-testid={`my-bids-hold-${h.authorization_id}`}
                 >
-                  <X size={13} />
-                  {releasing[h.authorization_id]
-                    ? t("common.processing", "Обработва…")
-                    : t("my_bids.release", "Освободи")}
-                </button>
-              </div>
-            ))}
+                  <div>
+                    <div className="font-mono text-xl tabular-nums flex items-center gap-2">
+                      {formatEUR(h.bidding_limit_eur)}
+                      {isPending && (
+                        <span className="text-[10px] uppercase tracking-wide bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">
+                          {t("credit_overlay.pending", "Изчаква")}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-[hsl(var(--ink-muted))] mt-0.5">
+                      {t("my_bids.hold_blocked", "Блокирано: {{h}}", { h: formatEUR(h.hold_eur) })}
+                      {h.created_at && ` · ${new Date(h.created_at).toLocaleDateString()}`}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => release(h)}
+                    disabled={releasing[h.authorization_id]}
+                    className="btn btn-secondary !text-[hsl(var(--danger))] !border-[hsl(var(--danger))]/30 inline-flex items-center gap-1.5"
+                    data-testid={`my-bids-release-${h.authorization_id}`}
+                  >
+                    <X size={13} />
+                    {releasing[h.authorization_id]
+                      ? t("common.processing", "Обработва…")
+                      : t("my_bids.release", "Освободи")}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
