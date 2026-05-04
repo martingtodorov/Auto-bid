@@ -46,6 +46,7 @@ const TermsPage = lazy(() => import("./pages/TermsPage"));
 const VerifyEmailPage = lazy(() => import("./pages/VerifyEmailPage"));
 const DealerPage = lazy(() => import("./pages/DealerPage"));
 const LeaderboardPage = lazy(() => import("./pages/LeaderboardPage"));
+const MyBidsPage = lazy(() => import("./pages/MyBidsPage"));
 
 // Lightweight neutral placeholder shown while a lazy chunk is downloading.
 // Intentionally blank (no spinner) so the perceived layout doesn't shift a
@@ -90,6 +91,7 @@ function App() {
                 <Route path="/terms" element={<TermsPage />} />
                 <Route path="/verify-email" element={<VerifyEmailPage />} />
                 <Route path="/leaderboard" element={<LeaderboardPage />} />
+                <Route path="/my-bids" element={<MyBidsPage />} />
                 {/* Dealer storefront — resolves `autoandbid.bg/{slug}` to a
                     public dealer profile page. Declared AFTER every named
                     route so reserved paths (/sell, /login, …) win the

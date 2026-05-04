@@ -496,6 +496,116 @@ def build_stripe_router(db, get_current_user):
         )
         return doc or {}
 
+    @router.get("/authorizations/my-credits")
+    async def my_credits_summary(user: dict = Depends(get_current_user)):
+        """Return a rolled-up view of the user's bidding credits. Powers
+        the profile-menu counter AND the /my-bids page header.
+
+        `available_eur` = bidding_limit - already-committed (current high
+        bid on the auction the hold is tied to). This matches the mental
+        model "how much I can still spend" shown in the UI bell section.
+        """
+        await _expire_stale_authorizations(db)
+        cursor = db.bid_authorizations.find(
+            {"user_id": user["id"],
+             "authorization_status": {"$in": ["active", "loser_grace"]}},
+            {"_id": 0, "id": 1, "auction_id": 1, "bidding_limit_eur": 1,
+             "amount_authorized_eur": 1, "authorization_status": 1,
+             "authorization_expires_at": 1, "currency": 1},
+        )
+        rows = await cursor.to_list(200)
+        if not rows:
+            return {"holds": [], "total_hold_eur": 0.0, "total_limit_eur": 0.0,
+                    "total_available_eur": 0.0, "count": 0}
+
+        # Pull current bids for all involved auctions in a single batched
+        # query (avoid N+1 round-trips on users with many active holds).
+        auction_ids = [r["auction_id"] for r in rows]
+        a_cursor = db.auctions.find(
+            {"id": {"$in": auction_ids}},
+            {"_id": 0, "id": 1, "title": 1, "current_bid_eur": 1,
+             "high_bidder_id": 1, "status": 1, "slug": 1, "ends_at": 1,
+             "thumbnails": 1, "images": 1},
+        )
+        by_id = {a["id"]: a async for a in a_cursor}
+
+        out_holds = []
+        total_limit = 0.0
+        total_hold = 0.0
+        total_avail = 0.0
+        for r in rows:
+            a = by_id.get(r["auction_id"], {})
+            limit = float(r.get("bidding_limit_eur") or 0)
+            hold = float(r.get("amount_authorized_eur") or 0)
+            # `current_bid` on an auction where the user is high-bidder
+            # counts toward "used" credits. Lost-race auctions return
+            # full limit back to available.
+            is_leading = a.get("high_bidder_id") == user["id"]
+            used = float(a.get("current_bid_eur") or 0) if is_leading else 0.0
+            available = max(0.0, limit - used)
+            total_limit += limit
+            total_hold += hold
+            total_avail += available
+            out_holds.append({
+                "authorization_id": r["id"],
+                "auction_id": r["auction_id"],
+                "auction_title": a.get("title", ""),
+                "auction_slug": a.get("slug"),
+                "auction_status": a.get("status"),
+                "auction_ends_at": a.get("ends_at"),
+                "auction_thumb": (a.get("thumbnails") or a.get("images") or [None])[0],
+                "bidding_limit_eur": round(limit, 2),
+                "hold_eur": round(hold, 2),
+                "current_bid_eur": float(a.get("current_bid_eur") or 0),
+                "is_leading": is_leading,
+                "available_eur": round(available, 2),
+                "authorization_status": r.get("authorization_status"),
+                "expires_at": r.get("authorization_expires_at"),
+                "currency": r.get("currency") or "eur",
+            })
+        return {
+            "holds": out_holds,
+            "count": len(out_holds),
+            "total_limit_eur": round(total_limit, 2),
+            "total_hold_eur": round(total_hold, 2),
+            "total_available_eur": round(total_avail, 2),
+        }
+
+    @router.post("/authorizations/{auth_id}/release")
+    async def release_authorization_route(auth_id: str, user: dict = Depends(get_current_user)):
+        """User-initiated release of a hold. The user may release a hold
+        **only** if they are not currently the highest bidder on its
+        auction — otherwise we'd cancel their own winning bid. For
+        already-finalized auctions we always allow release so the user
+        can instantly free their card.
+        """
+        doc = await db.bid_authorizations.find_one(
+            {"id": auth_id, "user_id": user["id"]},
+            {"_id": 0},
+        )
+        if not doc:
+            raise HTTPException(status_code=404, detail="Авторизация не е намерена.")
+        if doc.get("authorization_status") == "released":
+            return {"ok": True, "already_released": True}
+        if doc.get("authorization_status") not in ("active", "loser_grace"):
+            raise HTTPException(status_code=400, detail="Тази авторизация не може да се освободи ръчно.")
+
+        a = await db.auctions.find_one(
+            {"id": doc["auction_id"]},
+            {"_id": 0, "high_bidder_id": 1, "status": 1},
+        ) or {}
+        if a.get("status") in ("live", "scheduled") and a.get("high_bidder_id") == user["id"]:
+            raise HTTPException(
+                status_code=409,
+                detail="Не можете да освободите — вие сте текущ лидер. Изчакайте някой да Ви надмине или търгът да приключи.",
+            )
+        try:
+            return await cancel_authorization(db, auth_id)
+        except Exception as e:
+            logger.exception("manual release failed")
+            raise HTTPException(status_code=502, detail=f"Stripe release failed: {e}")
+
+
     @router.post("/webhook")
     async def stripe_webhook(request: Request):
         """Stripe webhook — verifies signature, transitions authorization state.

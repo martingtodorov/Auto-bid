@@ -1,8 +1,9 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Menu, X, User, Search, ChevronDown } from "lucide-react";
+import { Menu, X, User, Search, ChevronDown, Wallet } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../lib/auth";
+import { api, formatEUR } from "../lib/apiClient";
 import LanguageSwitcher from "./LanguageSwitcher";
 import ThemeToggle from "./ThemeToggle";
 import NotificationBell from "./NotificationBell";
@@ -29,6 +30,25 @@ export default function Nav() {
     if (open) closeMobile();
     else setOpen(true);
   }, [open, closeMobile]);
+
+  // Bidding credits summary — powers the wallet counter at the bottom of
+  // the profile dropdown. Refreshed on login/navigate and every 90 s so
+  // the displayed available balance stays roughly in sync with bidding
+  // activity without hammering Stripe. Polling stops while logged out.
+  const [credits, setCredits] = useState(null);
+  useEffect(() => {
+    if (!user) { setCredits(null); return; }
+    let mounted = true;
+    const fetchCredits = async () => {
+      try {
+        const { data } = await api.get("/stripe/authorizations/my-credits");
+        if (mounted) setCredits(data);
+      } catch (e) { /* silently ignore — counter just hides */ }
+    };
+    fetchCredits();
+    const t = setInterval(fetchCredits, 90_000);
+    return () => { mounted = false; clearInterval(t); };
+  }, [user]);
   const brandTld = brandTldForLang(i18n.resolvedLanguage || i18n.language);
 
   // Desktop primary links. `Търгове` is rendered as a dropdown
@@ -164,6 +184,27 @@ export default function Nav() {
                       <Link to="/settings" className="block px-4 py-2 text-sm hover:bg-[hsl(var(--bg))] transition-colors" data-testid="nav-menu-settings">
                         {t("nav.settings")}
                       </Link>
+                      {credits && credits.count > 0 && (
+                        <>
+                          <div className="border-t border-[hsl(var(--line))] my-1" />
+                          <Link
+                            to="/my-bids"
+                            className="block px-4 py-2 hover:bg-[hsl(var(--bg))] transition-colors"
+                            data-testid="nav-menu-credits"
+                          >
+                            <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-[hsl(var(--ink-muted))]">
+                              <Wallet size={12} /> {t("nav.credits", "Кредити")}
+                            </div>
+                            <div className="mt-0.5 text-sm font-semibold tabular-nums">
+                              {formatEUR(credits.total_available_eur)}
+                              <span className="text-[hsl(var(--ink-muted))] font-normal"> / {formatEUR(credits.total_limit_eur)}</span>
+                            </div>
+                            <div className="text-[11px] text-[hsl(var(--ink-muted))] mt-0.5">
+                              {t("nav.credits_hint", "{{count}} активни авторизации", { count: credits.count })}
+                            </div>
+                          </Link>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

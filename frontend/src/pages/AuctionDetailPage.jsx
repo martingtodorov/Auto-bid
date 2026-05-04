@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Calendar, Gauge, Fuel, Settings, MapPin, Palette, Zap, Cog, MessageCircle, Heart, ArrowLeft, Shield, Wifi, Share2, Languages, Gavel, ChevronUp, ChevronDown } from "lucide-react";
+import { Calendar, Gauge, Fuel, Settings, MapPin, Palette, Zap, Cog, MessageCircle, Heart, ArrowLeft, Shield, Wifi, Share2, Languages, Gavel, ChevronUp, ChevronDown, TrendingUp } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, API_BASE, formatEUR, formatLocal, formatKM, timeLeft, formatTimeLeft, intlLocale } from "../lib/apiClient";
 import { translateEnum } from "../lib/carTranslations";
@@ -760,7 +760,24 @@ export default function AuctionDetailPage() {
                     <div className="overline text-[hsl(var(--ink-muted))] flex items-center gap-1.5">
                       <Shield size={12} /> {t("auction.vin_number")}
                     </div>
-                    <div className="font-mono text-lg mt-1 tracking-wider" data-testid="vin-value">{a.vin}</div>
+                    <div className="flex items-center gap-3 mt-1 flex-wrap">
+                      <div className="font-mono text-lg tracking-wider" data-testid="vin-value">{a.vin}</div>
+                      {/* CarVertical affiliate check — placeholder URL
+                          until the affiliate code is provided. Swap the
+                          `AFFILIATE_CODE` segment once we have it; the
+                          query structure below matches CarVertical's
+                          public affiliate link format. */}
+                      <a
+                        href={`https://www.carvertical.com/bg/?a=AFFILIATE_CODE&vin=${encodeURIComponent(a.vin)}`}
+                        target="_blank"
+                        rel="noopener noreferrer sponsored"
+                        className="btn btn-secondary !py-1.5 !px-3 text-xs inline-flex items-center gap-1.5"
+                        data-testid="carvertical-check-btn"
+                        title={t("auction.carvertical_hint", "Провери историята на автомобила в CarVertical")}
+                      >
+                        <Shield size={12} /> {t("auction.carvertical_check", "Провери в CarVertical")}
+                      </a>
+                    </div>
                     {vinMsg && <div className="text-xs text-[hsl(var(--accent))] mt-2" data-testid="vin-request-msg">{vinMsg}</div>}
                     {vinErr && <div className="text-xs text-[hsl(var(--danger))] mt-2" data-testid="vin-request-err">{vinErr}</div>}
                   </div>
@@ -995,28 +1012,81 @@ export default function AuctionDetailPage() {
                       </div>
                     </div>
 
-                    {user && credit && (
-                      <div className="mt-3 p-3 rounded-card bg-white border border-[hsl(var(--accent))]/40 flex items-start justify-between gap-2" data-testid="credit-active-badge">
-                        <div className="text-xs leading-relaxed">
-                          <div className="font-semibold text-[hsl(var(--accent))] flex items-center gap-1.5">
-                            <Zap size={12} /> {t("auction.active_credit_short")} · {formatEUR(credit.max_amount_eur)}
+                    {/* Unified bidding-credit status + action.
+                        Replaces the previous split UI (standalone "create credit"
+                        pitch on idle + separate "manage" badge on active) with a
+                        single context-aware block that:
+                          • shows the active credit summary when present,
+                          • dynamically switches to "Нужен е по-голям лимит"
+                            when the typed bid exceeds it, pre-filling the
+                            increase modal with the required amount,
+                          • otherwise shows a compact pitch to pre-authorize.
+                        The result: the user sees exactly the one action the
+                        current typed bid requires — no hunting across widgets. */}
+                    {user && (() => {
+                      const typedNet = (() => {
+                        const v = Number(bidAmount);
+                        if (!v) return 0;
+                        return vatRate > 0 ? Math.round(v / (1 + vatRate / 100)) : v;
+                      })();
+                      const needsIncrease = !!credit && typedNet > 0 && typedNet > Number(credit.max_amount_eur || 0);
+                      if (credit && !needsIncrease) {
+                        return (
+                          <div className="mt-3 p-3 rounded-card bg-white border border-[hsl(var(--accent))]/40 flex items-start justify-between gap-2" data-testid="credit-active-badge">
+                            <div className="text-xs leading-relaxed">
+                              <div className="font-semibold text-[hsl(var(--accent))] flex items-center gap-1.5">
+                                <Zap size={12} /> {t("auction.active_credit_short")} · {formatEUR(credit.max_amount_eur)}
+                              </div>
+                              <div className="text-[hsl(var(--ink-muted))] mt-0.5">{t("auction.up_to_credit_hint")}</div>
+                            </div>
+                            <button onClick={() => setShowCredit(true)} className="text-xs font-semibold text-[hsl(var(--accent))] hover:underline shrink-0" data-testid="credit-manage-btn">
+                              {t("auction.credit_manage", "Управи")}
+                            </button>
                           </div>
-                          <div className="text-[hsl(var(--ink-muted))] mt-0.5">{t("auction.up_to_credit_hint")}</div>
-                        </div>
-                        <button onClick={() => setShowCredit(true)} className="text-xs font-semibold text-[hsl(var(--accent))] hover:underline shrink-0" data-testid="credit-manage-btn">Управи</button>
-                      </div>
-                    )}
-                    {user && !credit && (
-                      <button onClick={() => setShowCredit(true)} className="mt-3 w-full rounded-card border border-dashed border-[hsl(var(--accent))]/40 bg-[hsl(var(--accent-soft))]/50 hover:bg-[hsl(var(--accent-soft))] p-3 text-left transition" data-testid="credit-open-btn">
-                        <div className="flex items-center gap-2 text-xs">
-                          <Zap size={13} className="text-[hsl(var(--accent))] shrink-0" />
-                          <div>
-                            <div className="font-semibold text-[hsl(var(--accent-ink))]">{t("auction.bid_no_new_tx")}</div>
-                            <div className="text-[hsl(var(--ink-muted))] mt-0.5">Преавторизирай се за по-голяма сума →</div>
+                        );
+                      }
+                      if (needsIncrease) {
+                        return (
+                          <button
+                            onClick={() => setShowCredit(true)}
+                            className="mt-3 w-full rounded-card border border-amber-400/50 bg-amber-50/70 hover:bg-amber-50 p-3 text-left transition"
+                            data-testid="credit-increase-prompt"
+                          >
+                            <div className="flex items-center gap-2 text-xs">
+                              <TrendingUp size={13} className="text-amber-700 shrink-0" />
+                              <div>
+                                <div className="font-semibold text-amber-800">
+                                  {t("auction.credit_need_increase_title", "Необходим е по-голям лимит")}
+                                </div>
+                                <div className="text-[hsl(var(--ink-muted))] mt-0.5">
+                                  {t("auction.credit_need_increase_body", "Текущ лимит {{cur}} → Вашето наддаване {{typed}}. Кликнете, за да увеличите.", {
+                                    cur: formatEUR(credit.max_amount_eur),
+                                    typed: formatEUR(typedNet),
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      }
+                      // No credit yet — compact pitch. User can still just
+                      // press "Наддай" and the normal PreauthModal path runs.
+                      return (
+                        <button
+                          onClick={() => setShowCredit(true)}
+                          className="mt-3 w-full rounded-card border border-dashed border-[hsl(var(--accent))]/40 bg-[hsl(var(--accent-soft))]/50 hover:bg-[hsl(var(--accent-soft))] p-3 text-left transition"
+                          data-testid="credit-open-btn"
+                        >
+                          <div className="flex items-center gap-2 text-xs">
+                            <Zap size={13} className="text-[hsl(var(--accent))] shrink-0" />
+                            <div>
+                              <div className="font-semibold text-[hsl(var(--accent-ink))]">{t("auction.bid_no_new_tx")}</div>
+                              <div className="text-[hsl(var(--ink-muted))] mt-0.5">{t("auction.preauth_larger_amount", "Преавторизирай се за по-голяма сума →")}</div>
+                            </div>
                           </div>
-                        </div>
-                      </button>
-                    )}
+                        </button>
+                      );
+                    })()}
 
                     {error && <p className="text-xs text-[hsl(var(--danger))] mt-2" data-testid="bid-error">{error}</p>}
                   </div>

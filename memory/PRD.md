@@ -2182,3 +2182,49 @@ cleanup of read notifications > 30 days.
 - Backfill writes BSON Date: `read_at_ts: ISODate('2026-04-27T...')` ✓
 - `POST /inbox/clear-all` → `{"ok":true,"deleted":15}` ✓
 - `mark-all-read`: 9 unread → 0 unread ✓
+
+## 2026-05-04 — My Bids page + credit counter + CarVertical + merged preauth UI
+
+**4 части реализирани в един batch.**
+
+### 1. CarVertical бутон на VIN (`AuctionDetailPage.jsx`)
+Линк inline с VIN стойността. Използва CarVertical public affiliate
+URL формат: `https://www.carvertical.com/bg/?a=AFFILIATE_CODE&vin=<VIN>`.
+**Placeholder** `AFFILIATE_CODE` — трябва да се замени с реалния код
+когато user-ът го предостави.
+
+### 2. Credit counter в profile dropdown (`Nav.jsx`)
+Backend: нов `GET /api/stripe/authorizations/my-credits` — връща rolled-up
+view на всички активни preauth-и + per-auction breakdown. Polling on 90s.
+
+Frontend: Wallet иконка + сума след "Настройки", показва се **само**
+ако user-ът има активни авторизации. Връзка към `/my-bids`.
+
+### 3. `/my-bids` страница (`MyBidsPage.jsx`)
+Нов endpoint: `POST /api/stripe/authorizations/{id}/release` — манuално
+освобождаване на preauth. Ограничения:
+- Не може да се освободи докато user-ът е leading bidder на LIVE търг
+- Може винаги ако търгът е приключил или не си водещ
+- Идемпотентен — повторно извикване на already-released връща `{ok: true, already_released: true}`
+
+Страницата показва:
+- Summary header: total available / total limit
+- Per-row: thumbnail, title, leading/outbid status, current bid, available credit
+- 3 бутона на ред: **Наддай повече** (deep-link `?bid=1`), **Виж търга**, **Освободи кредит**
+
+### 4. Merged „higher preauth" с bidding overlay (`AuctionDetailPage.jsx`)
+Премахнати 2 отделни pitches. Сега има **един** context-aware блок с
+3 режима:
+- `credit && typed ≤ limit` → зелен badge „Активен кредит" + Управи
+- `credit && typed > limit` → ЖЪЛТ prompt „Необходим е по-голям лимит"
+  с текущия vs typed и click → BiddingCreditModal
+- `!credit` → компактен pitch „Преавторизирай се"
+
+Потребителят вижда **точно** действието което текущото му наддаване
+изисква — няма hunting из widget-и.
+
+**Verified**:
+- `curl /my-credits` → 200 с правилна структура ✓
+- `curl /release/xxx` → 404 (non-existent) ✓
+- Screenshot потвърди MyBidsPage рендер + CarVertical бутон с правилен
+  VIN в URL-а ✓
