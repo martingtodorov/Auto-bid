@@ -8,7 +8,7 @@ import json as _json
 from html import escape as _esc
 
 from fastapi import APIRouter, HTTPException, Request, Response
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, RedirectResponse
 
 from deps import db
 from services import og_image
@@ -311,18 +311,45 @@ async def sitemap_images_xml(request: Request):
 
 
 @router.get("/og/auction/{auction_id}.png")
-async def og_auction_image(auction_id: str):
+async def og_auction_image(auction_id: str, request: Request):
     """Dynamic Open Graph PNG for a single auction. English text only.
 
     URL is shaped as `.png` so social crawlers don't second-guess the
     Content-Type (some cache the URL extension). Cached in memory +
     on-disk by (id, current_bid, ends_at_minute) so every new bid
     produces a fresh image the next time the share link is scraped.
+
+    Fallback: if our template generator throws (e.g. corrupted cover,
+    Pillow decode error, font missing), we 302-redirect to the
+    auction's own headline image. That still gives the user a
+    listing-specific share preview instead of the generic homepage
+    `/og-default.jpg`, which conveys nothing about the listing.
     """
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     if not a:
         raise HTTPException(status_code=404, detail="Auction not found")
-    png = await og_image.build_or_cache(a)
+    try:
+        png = await og_image.build_or_cache(a)
+    except Exception as e:
+        # Template generation is best-effort; never let a Pillow stack
+        # trace surface as a 500 to a Facebook crawler — fall back to
+        # the headline image so the share card still shows the car.
+        import logging as _l
+        _l.getLogger(__name__).warning(
+            "og: dynamic build failed for %s, redirecting to headline image: %s",
+            auction_id, e,
+        )
+        headline = og_image.headline_image_url(a)
+        if headline:
+            if not headline.startswith("http"):
+                proto = request.headers.get("x-forwarded-proto", "https")
+                host = request.headers.get("host") or request.url.hostname or ""
+                if host:
+                    headline = f"{proto}://{host}{headline}"
+            return RedirectResponse(url=headline, status_code=302)
+        # No cover at all → re-raise so the share route's static
+        # `/og-default.jpg` fallback kicks in via the meta-tag layer.
+        raise HTTPException(status_code=502, detail="OG image unavailable")
     # Long edge cache is safe — the cache key already embeds the bid +
     # ends_at minute, so new versions get a new URL-less file behind
     # the scenes but the public URL stays the same. We give Cloudflare
@@ -393,6 +420,8 @@ async def share_auction(auction_id: str, request: Request):
             # Stored URL may be absolute (S3) or relative (/api/uploads/...).
             image = stored_og if stored_og.startswith("http") else f"{frontend_base}{stored_og}"
         else:
+            # Lazy generator — and if THAT fails it 302-redirects to
+            # the auction's headline image (see og_auction_image route).
             image = f"{frontend_base}/api/og/auction/{resolved_id}.png"
         json_ld = f'<script type="application/ld+json">{_json_ld_vehicle(a, target)}</script>'
 

@@ -375,6 +375,20 @@ def _uploads_public_base() -> str:
     return (os.environ.get("PUBLIC_UPLOAD_BASE") or "/api/uploads").rstrip("/")
 
 
+def headline_image_url(auction: dict) -> str:
+    """Return the auction's headline (first available) image URL.
+    Used as a graceful fallback for the OG share image when our
+    template generator fails — far better UX than the homepage's
+    static `/og-default.jpg`, which gives no signal about *which*
+    listing was shared."""
+    for bucket in ("thumbnails", "images"):
+        items = auction.get(bucket) or []
+        for c in items:
+            if c and isinstance(c, str):
+                return c
+    return ""
+
+
 async def build_and_persist(auction: dict) -> str:
     """Generate the OG PNG and store it in the uploads directory.
 
@@ -392,7 +406,7 @@ async def build_and_persist(auction: dict) -> str:
     """
     aid = str(auction.get("id") or "")
     if not aid:
-        return auction.get("og_image_url") or "/og-default.jpg"
+        return auction.get("og_image_url") or headline_image_url(auction) or "/og-default.jpg"
 
     root = _uploads_root()
     og_dir = os.path.join(root, "og")
@@ -439,8 +453,14 @@ async def build_and_persist(auction: dict) -> str:
     except Exception as e:
         logger.warning("og: persist failed for %s: %s", aid, e)
         # Surface the existing URL if we already had one; otherwise the
-        # static fallback. The route still renders valid meta tags.
-        return auction.get("og_image_url") or "/og-default.jpg"
+        # auction's headline image (better signal than the static
+        # homepage default — the share preview at least shows the right
+        # car). Final fallback is `/og-default.jpg`.
+        return (
+            auction.get("og_image_url")
+            or headline_image_url(auction)
+            or "/og-default.jpg"
+        )
 
     # Cache-buster from updated_at (fallback to file mtime). Social
     # platforms like Facebook are aggressive about caching og:image by
