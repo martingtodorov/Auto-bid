@@ -1017,11 +1017,6 @@ export default function AuctionDetailPage() {
                       <div className="text-xs leading-relaxed">
                         <div className="font-semibold text-[hsl(var(--accent-ink))]">{t("auction.buyer_fee_label")} {formatEUR(preauthPreview)}</div>
                         <div className="text-[hsl(var(--ink-muted))] mt-0.5">{t("auction.buyer_fee_detail", { pct: settings.buyer_fee_pct, min: settings.buyer_fee_min_eur, max: settings.buyer_fee_max_eur })}</div>
-                        {vatRate > 0 && bidAmountGross > 0 && (
-                          <div className="text-[hsl(var(--ink-muted))] mt-1">
-                            {t("auction.buyer_fee_on_gross", "Изчислено върху цена с ДДС: {{gross}}", { gross: formatEUR(bidAmountGross) })}
-                          </div>
-                        )}
                       </div>
                     </div>
 
@@ -1115,7 +1110,6 @@ export default function AuctionDetailPage() {
                         {t("auction.without_vat_label", "Без ДДС")}: <span className="text-[hsl(var(--ink))]">{formatEUR(a.buy_now_eur)}</span>
                       </div>
                     )}
-                    <p className="text-xs text-[hsl(var(--ink-muted))] mt-2">{t("auction.buy_now_hint", "Купувайте веднага без да чакате края на търга. Резервът се счита за изпълнен.")}</p>
                     {(() => {
                       const grossPrice = vatRate > 0 ? grossOf(a.buy_now_eur) : Number(a.buy_now_eur || 0);
                       const buyNowFee = buyerFeeFor(grossPrice);
