@@ -70,6 +70,7 @@
     "watchlist": "Watchlist",
     "my_listings": "My listings",
     "my_bids": "My bids",
+    "bidding_credit": "Bidding credit",
     "credits": "Credits",
     "credits_hint": "{{count}} active authorizations",
     "credits_none": "No active authorizations",

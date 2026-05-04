@@ -5,7 +5,7 @@ import { api, formatEUR } from "../lib/apiClient";
 import { formatError } from "../lib/auth";
 import { useSiteSettings, computeBuyerFee } from "../lib/settings";
 
-export default function BiddingCreditModal({ auctionId, currentBid, currentCredit, onClose, onSaved }) {
+export default function BiddingCreditModal({ auctionId, currentBid, currentCredit, prefillAmount, onClose, onSaved }) {
   const { t } = useTranslation();
   const settings = useSiteSettings();
 
@@ -31,7 +31,11 @@ export default function BiddingCreditModal({ auctionId, currentBid, currentCredi
     : Math.ceil(baseMin);
 
   const [amount, setAmount] = useState(() => {
-    const seed = currentCredit?.max_amount_eur || Math.max(minAllowed + 5000, 10000);
+    // When opened from the "Наддай" button, `prefillAmount` is the typed bid
+    // (already normalised to NET). Seeding the input with it collapses the
+    // previous two-step flow ("enter max → confirm fee") into a single decision:
+    // "I want to bid €X, lock 2 %".
+    const seed = prefillAmount || currentCredit?.max_amount_eur || Math.max(minAllowed + 5000, 10000);
     return Math.max(seed, minAllowed);
   });
   // If the server returns a higher min later, bump the input up automatically

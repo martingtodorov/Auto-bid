@@ -6,7 +6,6 @@ import { useTranslation } from "react-i18next";
 import { api, API_BASE, formatEUR, formatLocal, formatKM, timeLeft, formatTimeLeft, intlLocale } from "../lib/apiClient";
 import { translateEnum } from "../lib/carTranslations";
 import { useAuth, formatError } from "../lib/auth";
-import PreauthModal from "../components/PreauthModal";
 import BiddingCreditModal from "../components/BiddingCreditModal";
 import AuctionCard from "../components/AuctionCard";
 import NegotiationPortal from "../components/NegotiationPortal";
@@ -33,7 +32,7 @@ export default function AuctionDetailPage() {
   const [error, setError] = useState("");
   const [placing, setPlacing] = useState(false);
   const [buyingNow, setBuyingNow] = useState(false);
-  const [showPreauth, setShowPreauth] = useState(false);
+  const [showCredit, setShowCredit] = useState(false);
   const [wsStatus, setWsStatus] = useState("connecting");
   const [watching, setWatching] = useState(false);
   const [notFound, setNotFound] = useState(false);
@@ -42,7 +41,6 @@ export default function AuctionDetailPage() {
   const [vinErr, setVinErr] = useState("");
   const [related, setRelated] = useState([]);
   const [credit, setCredit] = useState(null);
-  const [showCredit, setShowCredit] = useState(false);
   const [nextBid, setNextBid] = useState({ min_next_eur: 0, buyer_fee_eur: 150, step_eur: 100 });
   const titleRef = useRef(null);
   const wsRef = useRef(null);
@@ -267,15 +265,18 @@ export default function AuctionDetailPage() {
       setError(`${t("auction.min_bid_error", "Минималното следващо наддаване е")} €${minDisplay.toLocaleString()}`);
       return;
     }
+    // If the user's existing bidding-credit already covers this bid, fire
+    // the bid off directly — no modal needed. Otherwise we now always fall
+    // into `BiddingCreditModal` (previously the bid-only `PreauthModal`
+    // was shown for this case; the two flows have been merged into one).
     if (credit && Number(credit.max_amount_eur) >= netAmt) {
       confirmBid(null);
       return;
     }
-    setShowPreauth(true);
+    setShowCredit(true);
   };
 
   const confirmBid = async (paymentMethodId) => {
-    setShowPreauth(false);
     setPlacing(true);
     try {
       const typed = Number(bidAmount);
@@ -576,30 +577,19 @@ export default function AuctionDetailPage() {
           </div>
         </div>
       )}
-      <PreauthModal
-        open={showPreauth}
-        onClose={() => setShowPreauth(false)}
-        bidAmount={bidAmount}
-        auctionId={id}
-        onPaidWithSavedCard={async (authId) => {
-          setShowPreauth(false);
-          setPlacing(true);
-          try {
-            const typed = Number(bidAmount);
-            const netAmt = vatRate > 0 ? Math.round(typed / (1 + vatRate / 100)) : typed;
-            await api.post(`/auctions/${id}/bids`, { amount_eur: netAmt, payment_method_id: authId });
-            await load();
-          } catch (e) {
-            setError(formatError(e));
-          } finally {
-            setPlacing(false);
-          }
-        }}
-      />
+      {/* PreauthModal has been replaced by BiddingCreditModal as the
+          single unified entry point for card authorization. The modal
+          below handles both "no credit yet" and "increase limit" flows,
+          pre-filling the typed bid amount when opened from the bid form. */}
       {showCredit && a && (
         <BiddingCreditModal
           auctionId={id}
           currentBid={a.current_bid_eur}
+          prefillAmount={(() => {
+            const typed = Number(bidAmount);
+            if (!typed) return null;
+            return vatRate > 0 ? Math.round(typed / (1 + vatRate / 100)) : typed;
+          })()}
           currentCredit={credit}
           onClose={() => setShowCredit(false)}
           onSaved={(c) => setCredit(c)}
@@ -1069,23 +1059,13 @@ export default function AuctionDetailPage() {
                           </button>
                         );
                       }
-                      // No credit yet — compact pitch. User can still just
-                      // press "Наддай" and the normal PreauthModal path runs.
-                      return (
-                        <button
-                          onClick={() => setShowCredit(true)}
-                          className="mt-3 w-full rounded-card border border-dashed border-[hsl(var(--accent))]/40 bg-[hsl(var(--accent-soft))]/50 hover:bg-[hsl(var(--accent-soft))] p-3 text-left transition"
-                          data-testid="credit-open-btn"
-                        >
-                          <div className="flex items-center gap-2 text-xs">
-                            <Zap size={13} className="text-[hsl(var(--accent))] shrink-0" />
-                            <div>
-                              <div className="font-semibold text-[hsl(var(--accent-ink))]">{t("auction.bid_no_new_tx")}</div>
-                              <div className="text-[hsl(var(--ink-muted))] mt-0.5">{t("auction.preauth_larger_amount", "Преавторизирай се за по-голяма сума →")}</div>
-                            </div>
-                          </div>
-                        </button>
-                      );
+                      // No credit yet — no standalone pitch. The "Наддай"
+                      // button already routes into BiddingCreditModal
+                      // (merged flow), so a separate CTA here would be
+                      // duplicative noise. We also don't render the old
+                      // `bid_no_new_tx` copy any more — that prompt lived
+                      // on the same CTA which has been removed.
+                      return null;
                     })()}
 
                     {error && <p className="text-xs text-[hsl(var(--danger))] mt-2" data-testid="bid-error">{error}</p>}

@@ -2228,3 +2228,37 @@ Frontend: Wallet иконка + сума след "Настройки", пока
 - `curl /release/xxx` → 404 (non-existent) ✓
 - Screenshot потвърди MyBidsPage рендер + CarVertical бутон с правилен
   VIN в URL-а ✓
+
+## 2026-05-04 — Mobile username+credit inline + merged bid modals
+
+**Request 1**: В mobile menu добавен наличен кредит в един ред с username
+— под лейбъл "Наддавателен кредит".
+
+**Fix** (`Nav.jsx`):
+- `mobile-nav-dashboard` link-ът вече е `flex items-center justify-between`.
+- Username отляво (truncate при дълги имена), отдясно 2-линиен credit
+  display: overline "Наддавателен кредит" + сумата в monospace.
+- Показва се винаги когато има `credits` отговор (дори при `0 €`).
+- i18n: `nav.bidding_credit` ключ в BG/EN/RO.
+
+**Request 2**: Merge на двете overlay-и — BiddingCreditModal (който
+избира max amount) + PreauthModal (бил per-bid). Махнат и бутонът
+"Наддай без нови транзакции".
+
+**Fix**:
+- `BiddingCreditModal` получи нов prop `prefillAmount` — когато е даден,
+  сетва го като seed стойност за input-а. Това позволява бутонът
+  "Наддай" да отваря същия модал с вече попълнена сума на наддаване
+  (като ново заключване / увеличаване).
+- `AuctionDetailPage`:
+  - `placeBid()` flow сега отваря `BiddingCreditModal` вместо `PreauthModal`
+    (когато credit-ът не покрива typed amount).
+  - `confirmBid(payment_method_id)` остана за случая "credit вече покрива".
+  - Standalone pitch с "bid_no_new_tx" бутонът **премахнат** — вече
+    няма duplicative CTA. "Наддай" е единствения entry point към модала.
+  - Import на `PreauthModal` премахнат.
+  - `PreauthModal.jsx` изцяло изтрит (вече не се използва).
+
+**Net effect**: Потребителят сега вижда единствен модал за
+авторизация с ясно едно действие — "Това е колкото ще наддавам,
+блокирайте 2% на картата".

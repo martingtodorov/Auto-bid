@@ -70,6 +70,7 @@
     "watchlist": "Favorite",
     "my_listings": "Anunțurile mele",
     "my_bids": "Licitațiile mele",
+    "bidding_credit": "Credit de licitație",
     "credits": "Credite",
     "credits_hint": "{{count}} autorizații active",
     "credits_none": "Nicio autorizație activă",

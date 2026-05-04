@@ -288,8 +288,16 @@ export default function Nav() {
                     {t("nav.admin")}
                   </Link>
                 )}
-                <Link to="/dashboard" onClick={closeMobile} className="block py-2 text-sm" data-testid="mobile-nav-dashboard">
-                  {user.name}
+                <Link to="/dashboard" onClick={closeMobile} className="flex items-center justify-between gap-3 py-2" data-testid="mobile-nav-dashboard">
+                  <span className="text-sm font-medium truncate">{user.name}</span>
+                  {credits && (
+                    <span className="text-xs text-right shrink-0" data-testid="mobile-nav-user-credits">
+                      <span className="block text-[10px] uppercase tracking-wide text-[hsl(var(--ink-muted))]">
+                        {t("nav.bidding_credit", "Наддавателен кредит")}
+                      </span>
+                      <span className="font-semibold tabular-nums">{formatEUR(credits.total_available_eur)}</span>
+                    </span>
+                  )}
                 </Link>
                 <Link to="/my-listings" onClick={closeMobile} className="block py-2 text-sm" data-testid="mobile-nav-my-listings">{t("nav.my_listings")}</Link>
                 <Link to="/my-bids" onClick={closeMobile} className="block py-2 text-sm" data-testid="mobile-nav-my-bids">{t("nav.my_bids", "Моите наддавания")}</Link>
