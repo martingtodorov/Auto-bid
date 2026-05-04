@@ -1019,40 +1019,50 @@ export default function AuctionDetailPage() {
                       </div>
                     </div>
 
-                    {/* Unified bidding-credit status + action.
-                        Replaces the previous split UI (standalone "create credit"
-                        pitch on idle + separate "manage" badge on active) with a
-                        single context-aware block that:
-                          • shows the active credit summary when present,
-                          • dynamically switches to "Нужен е по-голям лимит"
-                            when the typed bid exceeds it, pre-filling the
-                            increase modal with the required amount,
-                          • otherwise shows a compact pitch to pre-authorize.
-                        The result: the user sees exactly the one action the
-                        current typed bid requires — no hunting across widgets. */}
+                    {/* Account-level credit pitch.
+                        Account credit is universal — the user tops up
+                        once and bids on any auction. We show one of:
+                          • A compact "У вас има €X на разположение"
+                            badge when they have enough credit for the
+                            typed bid,
+                          • "Заредете още" prompt when the typed bid
+                            exceeds available credit,
+                          • A subtle pitch to top-up when no credit is
+                            yet authorized. */}
                     {user && (() => {
                       const typedNet = (() => {
                         const v = Number(bidAmount);
                         if (!v) return 0;
                         return vatRate > 0 ? Math.round(v / (1 + vatRate / 100)) : v;
                       })();
-                      const needsIncrease = !!credit && typedNet > 0 && typedNet > Number(credit.max_amount_eur || 0);
-                      if (credit && !needsIncrease) {
+                      const myCurrent = a.high_bidder_id === user?.id ? Number(a.current_bid_eur || 0) : 0;
+                      const delta = Math.max(0, typedNet - myCurrent);
+                      const available = Number(accountCredit?.total_available_eur || 0);
+                      const limit = Number(accountCredit?.total_limit_eur || 0);
+                      const needsTopUp = typedNet > 0 && delta > available + 0.5;
+
+                      if (limit === 0) {
                         return (
-                          <div className="mt-3 p-3 rounded-card bg-white border border-[hsl(var(--accent))]/40 flex items-start justify-between gap-2" data-testid="credit-active-badge">
-                            <div className="text-xs leading-relaxed">
-                              <div className="font-semibold text-[hsl(var(--accent))] flex items-center gap-1.5">
-                                <Zap size={12} /> {t("auction.active_credit_short")} · {formatEUR(credit.max_amount_eur)}
+                          <button
+                            onClick={() => setShowCredit(true)}
+                            className="mt-3 w-full rounded-card border border-[hsl(var(--accent))]/40 bg-[hsl(var(--accent-soft))]/60 hover:bg-[hsl(var(--accent-soft))] p-3 text-left transition"
+                            data-testid="credit-pitch"
+                          >
+                            <div className="flex items-center gap-2 text-xs">
+                              <Zap size={13} className="text-[hsl(var(--accent))] shrink-0" />
+                              <div>
+                                <div className="font-semibold text-[hsl(var(--accent))]">
+                                  {t("auction.credit_pitch_title", "Заредете наддавателен кредит")}
+                                </div>
+                                <div className="text-[hsl(var(--ink-muted))] mt-0.5">
+                                  {t("auction.credit_pitch_body", "Универсален — работи на всеки търг.")}
+                                </div>
                               </div>
-                              <div className="text-[hsl(var(--ink-muted))] mt-0.5">{t("auction.up_to_credit_hint")}</div>
                             </div>
-                            <button onClick={() => setShowCredit(true)} className="text-xs font-semibold text-[hsl(var(--accent))] hover:underline shrink-0" data-testid="credit-manage-btn">
-                              {t("auction.credit_manage", "Управи")}
-                            </button>
-                          </div>
+                          </button>
                         );
                       }
-                      if (needsIncrease) {
+                      if (needsTopUp) {
                         return (
                           <button
                             onClick={() => setShowCredit(true)}
@@ -1063,12 +1073,12 @@ export default function AuctionDetailPage() {
                               <TrendingUp size={13} className="text-amber-700 shrink-0" />
                               <div>
                                 <div className="font-semibold text-amber-800">
-                                  {t("auction.credit_need_increase_title", "Необходим е по-голям лимит")}
+                                  {t("auction.credit_topup_needed", "Недостатъчен кредит — заредете още")}
                                 </div>
                                 <div className="text-[hsl(var(--ink-muted))] mt-0.5">
-                                  {t("auction.credit_need_increase_body", "Текущ лимит {{cur}} → Вашето наддаване {{typed}}. Кликнете, за да увеличите.", {
-                                    cur: formatEUR(credit.max_amount_eur),
-                                    typed: formatEUR(typedNet),
+                                  {t("auction.credit_topup_body", "Налично {{avail}} → Вашето наддаване иска {{need}}. Кликнете да заредите.", {
+                                    avail: formatEUR(available),
+                                    need: formatEUR(delta),
                                   })}
                                 </div>
                               </div>
@@ -1076,13 +1086,24 @@ export default function AuctionDetailPage() {
                           </button>
                         );
                       }
-                      // No credit yet — no standalone pitch. The "Наддай"
-                      // button already routes into BiddingCreditModal
-                      // (merged flow), so a separate CTA here would be
-                      // duplicative noise. We also don't render the old
-                      // `bid_no_new_tx` copy any more — that prompt lived
-                      // on the same CTA which has been removed.
-                      return null;
+                      // Has credit and it covers — show a discreet badge.
+                      return (
+                        <div className="mt-3 p-2.5 rounded-card bg-[hsl(var(--accent-soft))]/40 border border-[hsl(var(--accent))]/20 text-xs flex items-center justify-between" data-testid="credit-active-badge">
+                          <div className="flex items-center gap-1.5 text-[hsl(var(--accent))]">
+                            <Zap size={12} />
+                            <span className="font-semibold">
+                              {t("auction.credit_available_short", "Налично")}: {formatEUR(available)} / {formatEUR(limit)}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => setShowCredit(true)}
+                            className="text-xs font-semibold text-[hsl(var(--accent))] hover:underline"
+                            data-testid="credit-manage-btn"
+                          >
+                            {t("auction.credit_topup_short", "Зареди още")}
+                          </button>
+                        </div>
+                      );
                     })()}
 
                     {error && <p className="text-xs text-[hsl(var(--danger))] mt-2" data-testid="bid-error">{error}</p>}
