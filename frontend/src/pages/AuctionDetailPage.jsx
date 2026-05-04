@@ -308,16 +308,25 @@ export default function AuctionDetailPage() {
     setShowBidConfirm(true);
   };
 
-  const confirmBid = async (paymentMethodId) => {
+  const confirmBid = async (overrideNet) => {
     setPlacing(true);
     try {
-      const typed = Number(bidAmount);
-      const netAmt = vatRate > 0 ? Math.round(typed / (1 + vatRate / 100)) : typed;
-      const payload = { amount_eur: netAmt };
-      if (paymentMethodId) payload.payment_method_id = paymentMethodId;
-      await api.post(`/auctions/${id}/bids`, payload);
+      // The modal passes the user-edited net amount. Fall back to the
+      // form value when a non-modal flow (e.g. credit-backed quick
+      // confirm path) calls without an argument.
+      let netAmt = Number(overrideNet);
+      if (!netAmt) {
+        const typed = Number(bidAmount);
+        netAmt = vatRate > 0 ? Math.round(typed / (1 + vatRate / 100)) : typed;
+      } else {
+        netAmt = Math.round(netAmt);
+      }
+      await api.post(`/auctions/${id}/bids`, { amount_eur: netAmt });
       // refresh auction so user sees updated current_bid immediately
       await load();
+      // Refresh the global credit counter so the bid's commitment is
+      // reflected in the nav wallet without waiting for the 90-s poll.
+      window.dispatchEvent(new Event("credits-updated"));
     } catch (e) {
       setError(formatError(e));
     } finally {
@@ -602,14 +611,11 @@ export default function AuctionDetailPage() {
           amountGross={pendingBid.gross}
           amountNet={pendingBid.net}
           vatRate={vatRate}
-          credit={{
-            // Adapt the new account-level summary to the modal's
-            // existing prop shape so we don't have to refactor the
-            // overlay just for a label change.
-            max_amount_eur: Number(accountCredit?.total_limit_eur || 0),
-            preauth_amount_eur: Number(accountCredit?.total_hold_eur || 0),
-          }}
-          onConfirm={() => confirmBid(null)}
+          stepEur={bidStepFor(a.current_bid_eur)}
+          minNet={nextBid.min_next_eur || (Math.floor(a.current_bid_eur) + bidStepFor(a.current_bid_eur))}
+          accountCredit={accountCredit}
+          currentLeadByMe={a.high_bidder_id === user?.id ? Number(a.current_bid_eur || 0) : 0}
+          onConfirm={(netAmount) => confirmBid(netAmount)}
           onTopUp={() => {
             setShowBidConfirm(false);
             setShowCredit(true);
@@ -629,9 +635,6 @@ export default function AuctionDetailPage() {
             <h1 ref={titleRef} className="hidden lg:block font-serif text-3xl lg:text-5xl mt-3 tracking-tight leading-tight">{a.title}</h1>
             <div className="mt-3 text-sm text-[hsl(var(--ink-muted))] flex items-center gap-4 flex-wrap">
               <span>{a.year} · {formatKM(a.mileage_km)} · {translateEnum(a.fuel, "fuel", lng)} · {translateEnum(a.city, "city", lng)}{a.country ? `, ${a.country}` : ""}</span>
-              <span className={`flex items-center gap-1.5 text-xs ${wsStatus === "connected" ? "text-[hsl(var(--accent))]" : "text-[hsl(var(--ink-muted))]"}`} data-testid="ws-status">
-                <Wifi size={11} /> {wsStatus === "connected" ? t("auction.live") : wsStatus === "connecting" ? t("auction.connecting") : t("auction.offline")}
-              </span>
             </div>
 
             {/*
