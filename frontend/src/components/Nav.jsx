@@ -7,6 +7,7 @@ import { api, formatEUR } from "../lib/apiClient";
 import LanguageSwitcher from "./LanguageSwitcher";
 import ThemeToggle from "./ThemeToggle";
 import NotificationBell from "./NotificationBell";
+import CreditsOverlay from "./CreditsOverlay";
 import { brandTldForLang } from "../i18n";
 
 export default function Nav() {
@@ -36,6 +37,18 @@ export default function Nav() {
   // the displayed available balance stays roughly in sync with bidding
   // activity without hammering Stripe. Polling stops while logged out.
   const [credits, setCredits] = useState(null);
+  const [creditsOpen, setCreditsOpen] = useState(false);
+  // Re-fetch helper that we expose to children of the credits overlay
+  // (release/top-up actions need to invalidate this cache so the
+  // counter goes to "0 € / 0 €" the moment the user releases the only
+  // hold from inside the modal).
+  const refreshCredits = useCallback(async () => {
+    if (!user) return;
+    try {
+      const { data } = await api.get("/stripe/authorizations/my-credits");
+      setCredits(data);
+    } catch (_e) { /* keep last known value on transient errors */ }
+  }, [user]);
   useEffect(() => {
     if (!user) { setCredits(null); return; }
     let mounted = true;
@@ -49,6 +62,10 @@ export default function Nav() {
     const t = setInterval(fetchCredits, 90_000);
     return () => { mounted = false; clearInterval(t); };
   }, [user]);
+  const openCredits = () => {
+    closeMobile();
+    setCreditsOpen(true);
+  };
   const brandTld = brandTldForLang(i18n.resolvedLanguage || i18n.language);
 
   // Desktop primary links. `Търгове` is rendered as a dropdown
@@ -187,18 +204,17 @@ export default function Nav() {
                       <Link to="/settings" className="block px-4 py-2 text-sm hover:bg-[hsl(var(--bg))] transition-colors" data-testid="nav-menu-settings">
                         {t("nav.settings")}
                       </Link>
-                      {/* Preauthorization credit — always shown when the
-                          endpoint succeeds, even if 0. The summary is
-                          the source of truth for bidding power, so users
-                          want to see "€0" just as much as a positive
-                          number (it confirms they currently have no
-                          holds locking up their card). */}
+                      {/* Bidding credit — opens the CreditsOverlay
+                          (release / top-up actions inline). The block
+                          is always rendered when the API responded so
+                          users see "0 €" too — confirms no holds. */}
                       {credits && (
                         <>
                           <div className="border-t border-[hsl(var(--line))] my-1" />
-                          <Link
-                            to="/my-bids"
-                            className="block px-4 py-2 hover:bg-[hsl(var(--bg))] transition-colors"
+                          <button
+                            type="button"
+                            onClick={openCredits}
+                            className="w-full text-left block px-4 py-2 hover:bg-[hsl(var(--bg))] transition-colors"
                             data-testid="nav-menu-credits"
                           >
                             <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-[hsl(var(--ink-muted))]">
@@ -213,7 +229,7 @@ export default function Nav() {
                                 ? t("nav.credits_hint", "{{count}} активни авторизации", { count: credits.count })
                                 : t("nav.credits_none", "Няма активни авторизации")}
                             </div>
-                          </Link>
+                          </button>
                         </>
                       )}
                     </div>
@@ -292,24 +308,30 @@ export default function Nav() {
                   <span className="text-sm font-medium truncate">{user.name}</span>
                 </Link>
                 {credits && (
-                  <Link
-                    to="/my-bids"
-                    onClick={closeMobile}
-                    className="flex items-center justify-between gap-3 py-2 -my-1 px-2 rounded-md hover:bg-[hsl(var(--surface))]"
+                  <button
+                    type="button"
+                    onClick={openCredits}
+                    className="w-full text-left flex items-start justify-between gap-3 py-2 -my-1 px-2 rounded-md hover:bg-[hsl(var(--surface))]"
                     data-testid="mobile-nav-user-credits"
                   >
-                    <span className="text-[10px] uppercase tracking-wide text-[hsl(var(--ink-muted))]">
-                      {t("nav.bidding_credit", "Наддавателен кредит")}
-                    </span>
-                    <span className="text-sm font-semibold tabular-nums" data-testid="mobile-nav-credits-value">
-                      {formatEUR(credits.total_available_eur)}<span className="text-[hsl(var(--ink-muted))] font-normal">/{formatEUR(credits.total_limit_eur)}</span>
-                    </span>
-                  </Link>
+                    <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-[hsl(var(--ink-muted))]">
+                      <Wallet size={11} /> {t("nav.bidding_credit", "Наддавателен кредит")}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-sm font-semibold tabular-nums" data-testid="mobile-nav-credits-value">
+                        {formatEUR(credits.total_available_eur)}<span className="text-[hsl(var(--ink-muted))] font-normal">/{formatEUR(credits.total_limit_eur)}</span>
+                      </div>
+                      <div className="text-[10px] text-[hsl(var(--ink-muted))]">
+                        {credits.count > 0
+                          ? t("nav.credits_hint", "{{count}} активни авторизации", { count: credits.count })
+                          : t("nav.credits_none", "Няма активни авторизации")}
+                      </div>
+                    </div>
+                  </button>
                 )}
                 <Link to="/my-listings" onClick={closeMobile} className="block py-2 text-sm" data-testid="mobile-nav-my-listings">{t("nav.my_listings")}</Link>
                 <Link to="/my-bids" onClick={closeMobile} className="block py-2 text-sm" data-testid="mobile-nav-my-bids">{t("nav.my_bids", "Моите наддавания")}</Link>
                 <Link to="/watchlist" onClick={closeMobile} className="block py-2 text-sm" data-testid="mobile-nav-watchlist">{t("nav.watchlist")}</Link>
-                <Link to="/inbox" onClick={closeMobile} className="block py-2 text-sm" data-testid="mobile-nav-inbox">{t("nav.notifications", t("inbox.title", "Известия"))}</Link>
                 <Link to="/settings" onClick={closeMobile} className="block py-2 text-sm" data-testid="mobile-nav-settings">{t("nav.settings")}</Link>
               </div>
             )}
@@ -326,6 +348,12 @@ export default function Nav() {
             </div>
           </div>
         </div>
+      )}
+      {creditsOpen && (
+        <CreditsOverlay
+          onClose={() => setCreditsOpen(false)}
+          onChanged={refreshCredits}
+        />
       )}
     </header>
   );
