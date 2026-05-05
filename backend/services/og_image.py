@@ -390,95 +390,20 @@ def headline_image_url(auction: dict) -> str:
 
 
 async def build_and_persist(auction: dict) -> str:
-    """Generate the OG PNG and store it in the uploads directory.
+    """Return the auction's headline image URL — used as the per-auction
+    OG share preview.
 
-    Returns the public URL including a `?v={updated_at_epoch}` cache
-    buster so Facebook/WhatsApp/Telegram refetch the image whenever the
-    auction changes (new bid, new title, etc.) even though the path
-    itself stays stable for SEO.
+    The previous implementation composed a custom Pillow PNG (title +
+    bid + featured badge overlay) and stored it under
+    `<UPLOAD_DIR>/og/<id>.png`. We removed that pipeline because the
+    rendered images behaved inconsistently across social platforms
+    (Facebook would aggressively cache stale versions, WhatsApp would
+    crop the bid badge, Telegram would re-encode and lose typography).
 
-    Path layout: `<UPLOAD_DIR>/og/<auction_id>.png`
-    Public URL:  `<PUBLIC_UPLOAD_BASE>/og/<auction_id>.png?v=<epoch>`
-
-    Raises no exceptions — on any failure we log and return the
-    auction's existing `og_image_url` (if any) or the static fallback
-    (`/og-default.jpg`). Callers can rely on always getting a string.
+    The car's actual headline photo turns out to be the most reliable
+    share preview — every platform handles it correctly the first time.
+    The legacy `og_image_url` field is still updated so the share route
+    can read it directly without recomputing.
     """
-    aid = str(auction.get("id") or "")
-    if not aid:
-        return auction.get("og_image_url") or headline_image_url(auction) or "/og-default.jpg"
-
-    root = _uploads_root()
-    og_dir = os.path.join(root, "og")
-    out_path = os.path.join(og_dir, f"{aid}.png")
-    public_base = _uploads_public_base()
-
-    # VAT-inclusive listings must show the gross price on the share
-    # card (same rule as build_or_cache above — see "prices WITH VAT"
-    # policy). Compute gross once so the Pillow composition gets the
-    # final user-visible figure.
-    raw_bid = float(
-        auction.get("current_bid_eur") or auction.get("starting_bid_eur") or 0
-    )
-    if auction.get("vat_status") == "vat_inclusive":
-        try:
-            rate = float(auction.get("vat_rate_pct") or 0)
-            current_bid = round(raw_bid * (1 + rate / 100.0), 2)
-        except Exception:
-            current_bid = raw_bid
-    else:
-        current_bid = raw_bid
-    cover_url = (auction.get("thumbnails") or auction.get("images") or [None])[0]
-    try:
-        cover_bytes = await _fetch_image(cover_url) if cover_url else None
-        title = auction.get("title") or " ".join(
-            str(auction.get(k) or "") for k in ("year", "make", "model")
-        ).strip() or "Auto&Bid auction"
-        featured = bool(auction.get("featured"))
-        bid_label = (
-            f"€{int(current_bid):,}".replace(",", "\u202f") if current_bid > 0 else None
-        )
-        bid_count = int(auction.get("bid_count") or 0)
-        bid_sub = f"· {bid_count} bids" if bid_count and bid_label else None
-
-        png = await asyncio.to_thread(
-            _compose_image,
-            cover_bytes, title, featured, bid_label, bid_sub,
-        )
-        os.makedirs(og_dir, exist_ok=True)
-        tmp = out_path + ".tmp"
-        with open(tmp, "wb") as f:
-            f.write(png)
-        os.replace(tmp, out_path)
-    except Exception as e:
-        logger.warning("og: persist failed for %s: %s", aid, e)
-        # Surface the existing URL if we already had one; otherwise the
-        # auction's headline image (better signal than the static
-        # homepage default — the share preview at least shows the right
-        # car). Final fallback is `/og-default.jpg`.
-        return (
-            auction.get("og_image_url")
-            or headline_image_url(auction)
-            or "/og-default.jpg"
-        )
-
-    # Cache-buster from updated_at (fallback to file mtime). Social
-    # platforms like Facebook are aggressive about caching og:image by
-    # URL, so we never reuse the same querystring after a republish.
-    ver = auction.get("updated_at") or auction.get("created_at")
-    if hasattr(ver, "timestamp"):
-        ver_int = int(ver.timestamp())
-    elif isinstance(ver, str):
-        try:
-            ver_int = int(
-                datetime.fromisoformat(ver.replace("Z", "+00:00")).timestamp()
-            )
-        except Exception:
-            ver_int = int(os.path.getmtime(out_path))
-    else:
-        try:
-            ver_int = int(os.path.getmtime(out_path))
-        except Exception:
-            ver_int = int(time.time())
-
-    return f"{public_base}/og/{aid}.png?v={ver_int}"
+    headline = headline_image_url(auction)
+    return headline or auction.get("og_image_url") or "/og-default.jpg"

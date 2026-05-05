@@ -312,54 +312,27 @@ async def sitemap_images_xml(request: Request):
 
 @router.get("/og/auction/{auction_id}.png")
 async def og_auction_image(auction_id: str, request: Request):
-    """Dynamic Open Graph PNG for a single auction. English text only.
+    """Per-auction OG image — now redirects to the auction's headline
+    image. The custom Pillow template was removed because the rendered
+    PNG was inconsistent across social platforms (Facebook stale cache,
+    Telegram cropping the bid badge). The car's actual photo is the
+    most reliable share preview.
 
-    URL is shaped as `.png` so social crawlers don't second-guess the
-    Content-Type (some cache the URL extension). Cached in memory +
-    on-disk by (id, current_bid, ends_at_minute) so every new bid
-    produces a fresh image the next time the share link is scraped.
-
-    Fallback: if our template generator throws (e.g. corrupted cover,
-    Pillow decode error, font missing), we 302-redirect to the
-    auction's own headline image. That still gives the user a
-    listing-specific share preview instead of the generic homepage
-    `/og-default.jpg`, which conveys nothing about the listing.
+    The route is kept for backwards compatibility with any external
+    links / crawler caches that still reference the `.png` URL.
     """
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     if not a:
         raise HTTPException(status_code=404, detail="Auction not found")
-    try:
-        png = await og_image.build_or_cache(a)
-    except Exception as e:
-        # Template generation is best-effort; never let a Pillow stack
-        # trace surface as a 500 to a Facebook crawler — fall back to
-        # the headline image so the share card still shows the car.
-        import logging as _l
-        _l.getLogger(__name__).warning(
-            "og: dynamic build failed for %s, redirecting to headline image: %s",
-            auction_id, e,
-        )
-        headline = og_image.headline_image_url(a)
-        if headline:
-            if not headline.startswith("http"):
-                proto = request.headers.get("x-forwarded-proto", "https")
-                host = request.headers.get("host") or request.url.hostname or ""
-                if host:
-                    headline = f"{proto}://{host}{headline}"
-            return RedirectResponse(url=headline, status_code=302)
-        # No cover at all → re-raise so the share route's static
-        # `/og-default.jpg` fallback kicks in via the meta-tag layer.
-        raise HTTPException(status_code=502, detail="OG image unavailable")
-    # Long edge cache is safe — the cache key already embeds the bid +
-    # ends_at minute, so new versions get a new URL-less file behind
-    # the scenes but the public URL stays the same. We give Cloudflare
-    # 5 min to absorb traffic spikes during viral shares, then
-    # revalidate.
-    return Response(
-        content=png,
-        media_type="image/png",
-        headers={"Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600"},
-    )
+    headline = og_image.headline_image_url(a)
+    if not headline:
+        raise HTTPException(status_code=404, detail="Auction has no image")
+    if not headline.startswith("http"):
+        proto = request.headers.get("x-forwarded-proto", "https")
+        host = request.headers.get("host") or request.url.hostname or ""
+        if host:
+            headline = f"{proto}://{host}{headline}"
+    return RedirectResponse(url=headline, status_code=302)
 
 
 @router.get("/share/auction/{auction_id}", response_class=PlainTextResponse)
@@ -409,20 +382,18 @@ async def share_auction(auction_id: str, request: Request):
     else:
         title = f"{a.get('title','')} — autoandbid.com"
         description = (a.get("description") or "")[:280]
-        # Prefer the eagerly-generated OG image stored on the auction doc
-        # (populated at publish time — see `admin_approve` in server.py).
-        # This guarantees Facebook / WhatsApp / Telegram see the custom
-        # car-card image on the *first* share, not after 3-4 attempts
-        # while the lazy generator warmed up. Fall back to the live
-        # generator endpoint only if the stored URL is missing.
-        stored_og = a.get("og_image_url")
-        if stored_og:
-            # Stored URL may be absolute (S3) or relative (/api/uploads/...).
-            image = stored_og if stored_og.startswith("http") else f"{frontend_base}{stored_og}"
+        # Use the auction's headline (first) image directly as the share
+        # preview. The previous custom-template renderer (Pillow PNG with
+        # title + bid overlays) was unreliable across social platforms —
+        # Facebook/WhatsApp would sometimes cache an outdated version,
+        # Telegram would crop the bid badge weirdly, and the eager
+        # generator added a second-long publish delay. Just sending the
+        # car's actual photo is the most predictable outcome.
+        cover = og_image.headline_image_url(a)
+        if cover:
+            image = cover if cover.startswith("http") else f"{frontend_base}{cover}"
         else:
-            # Lazy generator — and if THAT fails it 302-redirects to
-            # the auction's headline image (see og_auction_image route).
-            image = f"{frontend_base}/api/og/auction/{resolved_id}.png"
+            image = f"{frontend_base}/og-default.jpg"
         json_ld = f'<script type="application/ld+json">{_json_ld_vehicle(a, target)}</script>'
 
     html = f"""<!DOCTYPE html>
@@ -436,9 +407,6 @@ async def share_auction(auction_id: str, request: Request):
 <meta property="og:title" content="{_esc(title)}">
 <meta property="og:description" content="{_esc(description)}">
 <meta property="og:image" content="{_esc(image)}">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
-<meta property="og:image:type" content="image/png">
 <meta property="og:url" content="{_esc(target)}">
 <meta property="og:locale" content="bg_BG">
 <meta name="twitter:card" content="summary_large_image">
