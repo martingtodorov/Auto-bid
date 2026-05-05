@@ -156,16 +156,61 @@ export default function MyBidsPage() {
                 key={c.auction_id}
                 type="button"
                 onClick={() => navigate(auctionUrl({ id: c.auction_id, slug: c.auction_slug, title: c.auction_title }))}
-                className="w-full text-left flex items-center gap-4 p-4 rounded-card border border-[hsl(var(--line))] hover:border-[hsl(var(--accent))]"
+                className="w-full text-left flex items-center gap-4 p-4 rounded-card border border-emerald-300 bg-emerald-50/40 hover:border-emerald-500"
                 data-testid={`my-bids-commit-${c.auction_id}`}
               >
                 {c.auction_thumb && (
                   <img src={c.auction_thumb} alt="" className="w-20 h-14 object-cover rounded shrink-0" loading="lazy" />
                 )}
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold line-clamp-1">{c.auction_title}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold line-clamp-1">{c.auction_title}</span>
+                    <span className="text-[10px] uppercase tracking-wide font-bold shrink-0 px-1.5 py-0.5 rounded bg-emerald-600 text-white">
+                      {t("inbox.bid_leading", "Водите")}
+                    </span>
+                  </div>
                   <div className="text-xs text-[hsl(var(--ink-muted))] tabular-nums mt-0.5">
                     {formatEUR(c.current_bid_eur)} · <Clock size={10} className="inline" /> {new Date(c.ends_at).toLocaleString()}
+                  </div>
+                </div>
+                <ExternalLink size={14} className="text-[hsl(var(--ink-muted))]" />
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* OUTBID — auctions where the user has bid but is currently
+          outbid. Credit is freed automatically; user can re-enter
+          without losing their authorization. */}
+      {summary && summary.outbid_bids && summary.outbid_bids.length > 0 && (
+        <section className="mb-10" data-testid="my-bids-outbid">
+          <h2 className="font-serif text-2xl mb-4">{t("my_bids.outbid_title", "Надминати наддавания")}</h2>
+          <div className="space-y-3">
+            {summary.outbid_bids.map((c) => (
+              <button
+                key={c.auction_id}
+                type="button"
+                onClick={() => navigate(auctionUrl({ id: c.auction_id, slug: c.auction_slug, title: c.auction_title }))}
+                className="w-full text-left flex items-center gap-4 p-4 rounded-card border border-amber-300 bg-amber-50/40 hover:border-amber-500"
+                data-testid={`my-bids-outbid-${c.auction_id}`}
+              >
+                {c.auction_thumb && (
+                  <img src={c.auction_thumb} alt="" className="w-20 h-14 object-cover rounded shrink-0" loading="lazy" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold line-clamp-1">{c.auction_title}</span>
+                    <span className="text-[10px] uppercase tracking-wide font-bold shrink-0 px-1.5 py-0.5 rounded bg-amber-600 text-white">
+                      {t("inbox.bid_outbid", "Надминати")}
+                    </span>
+                  </div>
+                  <div className="text-xs text-[hsl(var(--ink-muted))] tabular-nums mt-0.5">
+                    {t("inbox.current_vs_yours", "Текущ {{cur}} · ваш {{my}}", {
+                      cur: formatEUR(c.current_bid_eur),
+                      my: formatEUR(c.user_max_bid_eur),
+                    })}
+                    {" · "}<Clock size={10} className="inline" /> {new Date(c.ends_at).toLocaleString()}
                   </div>
                 </div>
                 <ExternalLink size={14} className="text-[hsl(var(--ink-muted))]" />

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Bell, Check, CheckCheck, Shield, Trash2 } from "lucide-react";
+import { Bell, Check, CheckCheck, Gavel, Trash2, AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, formatEUR } from "../lib/apiClient";
 import { resolveNotification } from "../lib/notifications";
@@ -17,7 +17,7 @@ export default function NotificationBell() {
   const [closing, setClosing] = useState(false);
   const [unread, setUnread] = useState(0);
   const [items, setItems] = useState([]);
-  const [preauths, setPreauths] = useState([]);
+  const [activeBids, setActiveBids] = useState([]);
   const [loading, setLoading] = useState(false);
   const ref = useRef(null);
 
@@ -47,14 +47,14 @@ export default function NotificationBell() {
     if (!user) return;
     setLoading(true);
     try {
-      // Run inbox + preauths in parallel — both feed the panel content.
-      const [inboxResp, preauthsResp] = await Promise.all([
+      // Run inbox + active-bids in parallel — both feed the panel content.
+      const [inboxResp, bidsResp] = await Promise.all([
         api.get("/inbox?limit=20"),
         api.get("/me/preauths").catch(() => ({ data: [] })),
       ]);
       setItems(Array.isArray(inboxResp.data?.items) ? inboxResp.data.items : []);
       setUnread(Number(inboxResp.data?.unread || 0));
-      setPreauths(Array.isArray(preauthsResp.data) ? preauthsResp.data : []);
+      setActiveBids(Array.isArray(bidsResp.data) ? bidsResp.data : []);
     } catch (e) {}
     finally { setLoading(false); }
   }, [user]);
@@ -157,46 +157,56 @@ export default function NotificationBell() {
             </div>
           </div>
           <div className="flex-1 overflow-y-auto">
-            {/* Active pre-authorizations always pinned at the very top.
-                User asked: "available preauth 12/20" semantics. */}
-            {preauths.length > 0 && (
+            {/* Active bids (leading + outbid) always pinned at the very
+                top. Outbid auctions are surfaced visibly so the user can
+                jump back in with one click. */}
+            {activeBids.length > 0 && (
               <div
-                className="border-b border-[hsl(var(--line))] bg-emerald-50/60"
-                data-testid="preauth-section"
+                className="border-b border-[hsl(var(--line))]"
+                data-testid="active-bids-section"
               >
-                <div className="px-4 pt-3 pb-1 flex items-center gap-1.5 overline text-emerald-800">
-                  <Shield size={12} />
+                <div className="px-4 pt-3 pb-1 flex items-center gap-1.5 overline text-[hsl(var(--ink-muted))]">
+                  <Gavel size={12} />
                   <span>{t("inbox.active_bids_title", "Активни наддавания")}</span>
                 </div>
-                {preauths.map((p) => {
+                {activeBids.map((b) => {
+                  const leading = !!b.is_leading;
+                  const tone = leading
+                    ? "bg-emerald-50/70 hover:bg-emerald-100/80 border-l-2 border-l-emerald-500"
+                    : "bg-amber-50/70 hover:bg-amber-100/80 border-l-2 border-l-amber-500";
                   return (
                     <Link
-                      key={p.auction_id}
-                      to={auctionUrl({ id: p.auction_id, title: p.auction_title })}
+                      key={b.auction_id}
+                      to={auctionUrl({ id: b.auction_id, slug: b.auction_slug, title: b.auction_title })}
                       onClick={closePanel}
-                      className="block px-4 py-3 hover:bg-emerald-100/70 transition-colors"
-                      data-testid={`preauth-row-${p.auction_id}`}
+                      className={`block px-4 py-3 transition-colors ${tone}`}
+                      data-testid={`active-bid-row-${b.auction_id}`}
                     >
                       <div className="flex items-baseline justify-between gap-2 mb-1">
-                        <span className="text-sm font-semibold text-emerald-900 truncate">
-                          {p.auction_title}
+                        <span className="text-sm font-semibold text-[hsl(var(--ink))] truncate">
+                          {b.auction_title}
                         </span>
                         <span
-                          className="font-mono text-sm shrink-0 tabular-nums text-emerald-900"
-                          data-testid={`preauth-amount-${p.auction_id}`}
+                          className={`text-[10px] uppercase tracking-wide font-bold shrink-0 px-1.5 py-0.5 rounded ${
+                            leading ? "bg-emerald-600 text-white" : "bg-amber-600 text-white"
+                          }`}
+                          data-testid={`active-bid-status-${b.auction_id}`}
                         >
-                          {formatEUR(p.max_amount_eur)}
+                          {leading
+                            ? t("inbox.bid_leading", "Водите")
+                            : t("inbox.bid_outbid", "Надминати")}
                         </span>
                       </div>
-                      <div className="text-[11px] text-emerald-800/80">
-                        {t("inbox.active_bid_leading", "Водите това наддаване")}
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-                        {t("inbox.preauth_available", "Налично")}: {pct}%
+                      <div className="flex items-center justify-between gap-2 text-[11px] text-[hsl(var(--ink-muted))]">
+                        <span className="flex items-center gap-1">
+                          {!leading && <AlertTriangle size={10} className="text-amber-600" />}
+                          {leading
+                            ? t("inbox.your_bid", "Вашият бид: {{amt}}", { amt: formatEUR(b.user_max_bid_eur) })
+                            : t("inbox.current_vs_yours", "Текущ {{cur}} · ваш {{my}}", {
+                                cur: formatEUR(b.current_bid_eur),
+                                my: formatEUR(b.user_max_bid_eur),
+                              })}
+                        </span>
                       </div>
                     </Link>
                   );
@@ -204,7 +214,7 @@ export default function NotificationBell() {
               </div>
             )}
             {loading && <div className="p-6 text-center text-sm text-[hsl(var(--ink-muted))]">…</div>}
-            {!loading && items.length === 0 && preauths.length === 0 && (
+            {!loading && items.length === 0 && activeBids.length === 0 && (
               <div className="p-8 text-center text-sm text-[hsl(var(--ink-muted))]" data-testid="inbox-empty">
                 {t("inbox.empty", "Нямате известия")}
               </div>

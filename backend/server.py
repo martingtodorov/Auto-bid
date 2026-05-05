@@ -1880,39 +1880,77 @@ async def import_from_mobile_bg(request: Request, payload: MobileBgImport):
 # ---- Bids ----
 @api.get("/me/preauths")
 async def my_preauths(user: dict = Depends(get_current_user)):
-    """Return all auctions where the user is currently the leading bidder.
+    """Return all live auctions where the user has placed a bid — both
+    auctions where they are *currently leading* and those where they have
+    been *outbid*. Powers the notification bell's "Active bids" pinned
+    section.
 
-    Powers the notification bell's "active bids" pinned section. After
-    the migration to a universal account-level credit pool there is no
-    longer a per-auction `bidding_credits` row to read — instead we
-    surface the user's live commitments (leading bids on live auctions),
-    which is the relevant signal for the bell anyway.
+    For each auction:
+      - `is_leading` — True if user is currently the high bidder
+      - `user_max_bid_eur` — user's highest bid on the auction
+      - `current_bid_eur` — auction's current high bid (== user's bid
+        when they are leading; higher when outbid)
 
-    Each row carries the auction's bid amount as both `max_amount_eur`
-    (committed) and `available_eur` so existing UI consumers don't break.
+    Backwards-compat fields (`max_amount_eur`, `available_eur`,
+    `used_eur`) preserved for existing consumers.
     """
+    # 1) Pull every live auction the user has at least one bid on (PG).
+    from services import bidding as bidding_svc
+    bids = await bidding_svc.list_user_bids(user["id"], limit=500)
+    if not bids:
+        return []
+
+    # Dedupe by auction_id, keeping the highest amount the user bid.
+    user_max: dict[str, float] = {}
+    for b in bids:
+        aid = b.get("auction_id")
+        amt = float(b.get("amount_eur") or 0)
+        if aid and amt > user_max.get(aid, 0.0):
+            user_max[aid] = amt
+
+    # 2) Fetch matching live auctions from Mongo (status, current bid,
+    #    title, ends_at, leader).
     cursor = db.auctions.find(
-        {"high_bidder_id": user["id"], "status": "live", "is_archived": {"$ne": True}},
-        {"_id": 0, "id": 1, "title": 1, "current_bid_eur": 1, "status": 1, "ends_at": 1},
+        {
+            "id": {"$in": list(user_max.keys())},
+            "status": "live",
+            "is_archived": {"$ne": True},
+        },
+        {
+            "_id": 0, "id": 1, "title": 1, "slug": 1,
+            "current_bid_eur": 1, "high_bidder_id": 1,
+            "status": 1, "ends_at": 1, "images": 1,
+        },
     )
-    out = []
+    out: list[dict] = []
     async for a in cursor:
-        bid = float(a.get("current_bid_eur") or 0)
-        if bid <= 0:
-            continue
+        aid = a["id"]
+        my = float(user_max.get(aid, 0.0))
+        cur = float(a.get("current_bid_eur") or 0)
+        is_leading = (a.get("high_bidder_id") == user["id"])
+        thumb = None
+        imgs = a.get("images") or []
+        if imgs:
+            first = imgs[0]
+            thumb = first.get("url") if isinstance(first, dict) else first
         out.append({
-            "auction_id": a["id"],
+            "auction_id": aid,
             "auction_title": a.get("title") or "—",
+            "auction_slug": a.get("slug"),
             "auction_status": a.get("status"),
-            "max_amount_eur": bid,
-            "used_eur": bid,
-            # `available_eur` retained for backwards-compat with the
-            # NotificationBell progress bar; for active leads it equals
-            # the bid (100% committed).
-            "available_eur": bid,
+            "auction_thumb": thumb,
+            "is_leading": is_leading,
+            "user_max_bid_eur": my,
+            "current_bid_eur": cur,
             "ends_at": a.get("ends_at"),
+            # Backwards-compat fields:
+            "max_amount_eur": my,
+            "used_eur": my,
+            "available_eur": my,
         })
-    out.sort(key=lambda x: x.get("ends_at") or "")
+    # Sort: leading first (so "your active leads" sit on top), then
+    # outbid. Within each group, soonest-ending first.
+    out.sort(key=lambda x: (not x.get("is_leading"), x.get("ends_at") or ""))
     return out
 
 

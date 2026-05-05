@@ -888,9 +888,11 @@ def build_stripe_router(db, get_current_user):
         )
         commitments = []
         committed_total = 0.0
+        leading_ids: set[str] = set()
         async for a in commit_cursor:
             cb = float(a.get("current_bid_eur") or 0)
             committed_total += cb
+            leading_ids.add(a["id"])
             commitments.append({
                 "auction_id": a["id"],
                 "auction_title": a.get("title", ""),
@@ -899,6 +901,44 @@ def build_stripe_router(db, get_current_user):
                 "ends_at": a.get("ends_at"),
                 "current_bid_eur": round(cb, 2),
             })
+
+        # 2b. Live auctions where the user has bid but is currently
+        #     outbid. Pulled from the PG bids table (source of truth)
+        #     and enriched with Mongo metadata. The credit attached to
+        #     these is already mathematically free (committed == leading
+        #     bids only), but the user wants visibility on auctions they
+        #     can re-enter without losing their hold.
+        from services import bidding as bidding_svc
+        user_bids = await bidding_svc.list_user_bids(user["id"], limit=500)
+        # Highest bid per auction the user has placed.
+        user_max: dict[str, float] = {}
+        for b in user_bids:
+            aid = b.get("auction_id")
+            amt = float(b.get("amount_eur") or 0)
+            if aid and aid not in leading_ids and amt > user_max.get(aid, 0.0):
+                user_max[aid] = amt
+        outbid_bids: list[dict] = []
+        if user_max:
+            outbid_cursor = db.auctions.find(
+                {"id": {"$in": list(user_max.keys())},
+                 "status": "live",
+                 "is_archived": {"$ne": True}},
+                {"_id": 0, "id": 1, "title": 1, "slug": 1,
+                 "current_bid_eur": 1, "ends_at": 1,
+                 "thumbnails": 1, "images": 1},
+            )
+            async for a in outbid_cursor:
+                outbid_bids.append({
+                    "auction_id": a["id"],
+                    "auction_title": a.get("title", ""),
+                    "auction_slug": a.get("slug"),
+                    "auction_thumb": (a.get("thumbnails") or a.get("images") or [None])[0],
+                    "ends_at": a.get("ends_at"),
+                    "current_bid_eur": round(float(a.get("current_bid_eur") or 0), 2),
+                    "user_max_bid_eur": round(user_max[a["id"]], 2),
+                })
+            # Soonest-ending first — most actionable.
+            outbid_bids.sort(key=lambda x: x.get("ends_at") or "")
 
         available_total = max(0.0, authorized_total - committed_total)
 
@@ -917,6 +957,7 @@ def build_stripe_router(db, get_current_user):
         return {
             "holds": out_holds,
             "commitments": commitments,
+            "outbid_bids": outbid_bids,
             "count": len([h for h in out_holds if h["authorization_status"] == "active"]),
             "total_limit_eur": round(authorized_total, 2),
             "total_hold_eur": round(sum(h["hold_eur"] for h in out_holds), 2),
