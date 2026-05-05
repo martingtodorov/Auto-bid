@@ -423,14 +423,14 @@ export default function SellPage() {
                 value={importUrl}
                 onChange={(e) => setImportUrl(e.target.value)}
                 placeholder="https://www.mobile.bg/obiava-..."
-                className="flex-1 border border-[hsl(var(--line))] h-11 px-3 text-sm bg-[hsl(var(--surface))] rounded-card"
+                className="w-full sm:flex-1 border border-[hsl(var(--line))] h-11 px-3 text-sm bg-[hsl(var(--surface))] rounded-card"
                 data-testid="import-url-input"
               />
               <button
                 type="button"
                 onClick={importMobileBg}
                 disabled={importing}
-                className="btn btn-accent !py-2 !px-5 shrink-0"
+                className="btn btn-accent h-11 !py-0 !px-5 shrink-0 w-full sm:w-auto"
                 data-testid="import-url-btn"
               >
                 {importing ? t("sell.import_loading") : t("sell.import_cta")}

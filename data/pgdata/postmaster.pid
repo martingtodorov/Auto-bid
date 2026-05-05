@@ -1,8 +1,8 @@
-2192
+2139
 /app/data/pgdata
-1778013892
+1778020431
 5432
 /var/run/postgresql
 localhost
-   524576         4
+   393504         4
 ready   
