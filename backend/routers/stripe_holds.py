@@ -840,6 +840,49 @@ def build_stripe_router(db, get_current_user):
         )
         return doc or {}
 
+    @router.get("/authorizations/expiring")
+    async def my_expiring_credit(user: dict = Depends(get_current_user)):
+        """Return whether the user has an account-level hold that's
+        within 24 hours of expiring AND failed auto-extension. Powers
+        the in-app banner that asks the user to add/update a card.
+
+        Response:
+            {
+              "has_expiring": bool,
+              "reason": "no_saved_pm" | "card_declined" | null,
+              "expires_at": ISO timestamp of the soonest-expiring hold,
+              "hold_id": str (the underlying authorization id),
+            }
+        """
+        now = datetime.now(timezone.utc)
+        threshold_iso = (now + timedelta(hours=24)).isoformat()
+        # Find the soonest-expiring active hold for this user.
+        hold = await db.bid_authorizations.find_one(
+            {
+                "user_id": user["id"],
+                "auction_id": None,
+                "authorization_status": "active",
+                "authorization_expires_at": {"$lte": threshold_iso},
+            },
+            {"_id": 0, "id": 1, "authorization_expires_at": 1},
+            sort=[("authorization_expires_at", 1)],
+        )
+        if not hold:
+            return {"has_expiring": False, "reason": None, "expires_at": None, "hold_id": None}
+        # Look up the most recent lifecycle alert for this hold to
+        # tell the UI *why* extension failed (so we show the right copy).
+        alert = await db.lifecycle_alerts_sent.find_one(
+            {"user_id": user["id"], "hold_id": hold["id"]},
+            {"_id": 0, "reason": 1},
+            sort=[("created_at", -1)],
+        )
+        return {
+            "has_expiring": True,
+            "reason": (alert or {}).get("reason"),
+            "expires_at": hold.get("authorization_expires_at"),
+            "hold_id": hold["id"],
+        }
+
     @router.get("/authorizations/my-credits")
     async def my_credits_summary(user: dict = Depends(get_current_user)):
         """Account-level credit summary (UNIVERSAL POOL).

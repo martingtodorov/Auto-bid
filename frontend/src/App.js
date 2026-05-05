@@ -12,6 +12,7 @@ import MaintenanceBanner from "./components/MaintenanceBanner";
 import ScrollToTop from "./components/ScrollToTop";
 import VerifyEmailBanner from "./components/VerifyEmailBanner";
 import TwoFactorPromptBanner from "./components/TwoFactorPromptBanner";
+import CreditExpiringBanner from "./components/CreditExpiringBanner";
 
 // ─── Eagerly-loaded pages (initial render path) ──────────────────────────────
 // Landing + public listing pages are served to anonymous users in >90 % of
@@ -72,6 +73,7 @@ function App() {
           <MaintenanceBanner />
           <VerifyEmailBanner />
           <TwoFactorPromptBanner />
+          <CreditExpiringBanner />
           <LiveTicker />
           <Nav />
           <OnboardingCta />

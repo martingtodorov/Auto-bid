@@ -1,4 +1,11 @@
 {
+  "credit_expiring": {
+    "body_default": "Creditul de licitare expiră în curând. Adăugați un card ca să îl putem reînnoi automat.",
+    "body_no_pm": "Creditul de licitare expiră în 24 ore. Adăugați un card pentru a continua să licitați.",
+    "body_declined": "Cardul a refuzat prelungirea. Creditul expiră în 24 ore — actualizați cardul.",
+    "add_card_cta": "Adaugă card",
+    "dismiss": "Mai târziu"
+  },
   "twofa_prompt": {
     "body": "Protejează-ți contul cu autentificare în doi factori.",
     "cta": "Activează 2FA"

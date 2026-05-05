@@ -166,6 +166,50 @@ async def _release_old_hold(db, auth_id: str, *, reason: str) -> None:
     )
 
 
+async def _emit_expiring_alert(db, user: dict, *, reason: str, hold_id: str) -> None:
+    """Send an in-app notification + Web Push when the auto-extend
+    couldn't roll over a hold. Idempotent per (user, hold) — tracked via
+    `lifecycle_alerts_sent` collection so the user isn't spammed if the
+    loop sweeps the same hold across multiple ticks.
+
+    `reason` ∈ {"no_saved_pm", "card_declined", "stripe_error"}.
+    """
+    try:
+        sent = await db.lifecycle_alerts_sent.find_one(
+            {"user_id": user["id"], "hold_id": hold_id, "reason": reason},
+            {"_id": 0, "id": 1},
+        )
+        if sent:
+            return
+        await db.lifecycle_alerts_sent.insert_one({
+            "id": str(uuid4()),
+            "user_id": user["id"],
+            "hold_id": hold_id,
+            "reason": reason,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        # Pick the right push template based on failure reason.
+        tmpl = "credit_expiring_no_pm" if reason == "no_saved_pm" else "credit_expiring_declined"
+        # Use the inbox notify_user helper so the user gets BOTH an
+        # in-app notification (badge on the bell) and a Web Push, and
+        # the bell's "/inbox" history records it.
+        from routers.inbox import notify_user as _notify_user
+        await _notify_user(
+            db,
+            user_id=user["id"],
+            type="credit_expiring",
+            data={"reason": reason},
+            link="/settings",
+            push_template_id=tmpl,
+            push_fmt={},
+            push_kind=None,  # operational alert — bypass user opt-out
+        )
+    except Exception:
+        logger.exception("[lifecycle] failed to emit expiring alert for user=%s hold=%s",
+                         user.get("id"), hold_id)
+
+
+
 async def extend_expiring_authorizations(db) -> dict:
     """Scan for active account-level holds expiring within `EXTEND_BEFORE_HOURS`
     and attempt to roll them over to a fresh authorization.
@@ -212,7 +256,7 @@ async def extend_expiring_authorizations(db) -> dict:
             continue
         if not user.get("stripe_default_payment_method_id"):
             counters["skipped_no_pm"] += 1
-            # TODO: send "action required" email — handled out-of-band by caller.
+            await _emit_expiring_alert(db, user, reason="no_saved_pm", hold_id=old["id"])
             continue
 
         new_doc = await _create_offsession_hold(
@@ -225,6 +269,8 @@ async def extend_expiring_authorizations(db) -> dict:
         )
         if not new_doc:
             counters["failed"] += 1
+            # Most common reason: card declined / SCA challenge required.
+            await _emit_expiring_alert(db, user, reason="card_declined", hold_id=old["id"])
             continue
 
         await _release_old_hold(db, old["id"], reason="auto_extend_replaced")

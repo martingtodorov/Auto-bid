@@ -132,6 +132,35 @@ TEMPLATES: dict[str, dict[str, dict[str, str]]] = {
         "en": {"title": "New message · {user}", "body": "{preview}"},
         "ro": {"title": "Mesaj nou · {user}", "body": "{preview}"},
     },
+    # ── Credit lifecycle (auto-extend failure) ─────────────────────────────
+    "credit_expiring_no_pm": {
+        "bg": {
+            "title": "Кредитът ви изтича след 24 часа",
+            "body": "Не успяхме да обновим автоматично авторизацията. Добавете карта, за да продължите да наддавате.",
+        },
+        "en": {
+            "title": "Your bidding credit expires in 24 hours",
+            "body": "We couldn't auto-extend the hold. Add a card to keep bidding.",
+        },
+        "ro": {
+            "title": "Creditul de licitare expiră în 24 ore",
+            "body": "Nu am putut prelungi automat autorizarea. Adăugați un card pentru a continua.",
+        },
+    },
+    "credit_expiring_declined": {
+        "bg": {
+            "title": "Картата отхвърли подновяването",
+            "body": "Кредитът ви изтича след 24 часа. Обновете картата си, за да продължите да наддавате.",
+        },
+        "en": {
+            "title": "Card declined extension",
+            "body": "Your bidding credit expires in 24 hours. Update your card to keep bidding.",
+        },
+        "ro": {
+            "title": "Cardul a refuzat prelungirea",
+            "body": "Creditul expiră în 24 ore. Actualizați cardul pentru a continua.",
+        },
+    },
 }
 
 

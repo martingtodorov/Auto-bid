@@ -1,4 +1,11 @@
 {
+  "credit_expiring": {
+    "body_default": "Your bidding credit expires soon. Add a card so we can auto-renew it.",
+    "body_no_pm": "Your bidding credit expires in 24 hours. Add a card to keep bidding.",
+    "body_declined": "Your card declined the extension. Your credit expires in 24 hours — please update your card.",
+    "add_card_cta": "Add card",
+    "dismiss": "Later"
+  },
   "twofa_prompt": {
     "body": "Secure your account with two-factor authentication.",
     "cta": "Enable 2FA"

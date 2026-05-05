@@ -1,0 +1,112 @@
+{
+  "summary": "Iteration 18: Credit Expiring Banner & Lifecycle Alert Features Testing Complete. All 23 backend tests pass. Frontend UI verified with seeded data - banner displays correctly with proper copy variants, dismiss functionality, and navigation to /settings.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration18_credit_expiring.py",
+    "/app/test_reports/pytest/pytest_iteration18.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "GET /api/stripe/authorizations/expiring endpoint correctly returns {has_expiring, reason, expires_at, hold_id}",
+    "_emit_expiring_alert in stripe_lifecycle.py is idempotent via lifecycle_alerts_sent.find_one check",
+    "notify_user integration with push_template_id works correctly (credit_expiring_no_pm, credit_expiring_declined)",
+    "CreditExpiringBanner.jsx has correct data-testid attributes and fetches /stripe/authorizations/expiring on mount + every 10 min",
+    "Banner correctly renders three copy variants based on reason: no_saved_pm, card_declined, or default",
+    "Dismiss functionality uses localStorage key 'ab.credit_expiring_dismissed_until' for 12h dismissal",
+    "Banner is wired in App.js between TwoFactorPromptBanner and LiveTicker"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration18_credit_expiring.py"
+  ],
+  "success_rate": {
+    "backend": "100% (23/23 tests passed)",
+    "frontend": "100% (all UI elements verified with seeded data)"
+  },
+  "test_credentials": "admin@autoandbid.com / Nero08787, sectest_user@test.bg / sectest123",
+  "seed_data_creation": "Created expiring hold + lifecycle_alerts_sent row for testing, then cleaned up",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 18 validated the Credit Expiring Banner feature. Backend: GET /api/stripe/authorizations/expiring returns {has_expiring, reason, expires_at, hold_id}. When user has no expiring holds → has_expiring=false. When seeded with active account-level hold (auction_id=null, authorization_status='active') expiring within 24h AND lifecycle_alerts_sent row with reason='no_saved_pm' → returns has_expiring=true, reason='no_saved_pm'. Frontend: CreditExpiringBanner.jsx fetches on mount + every 10 min, renders ONLY when has_expiring=true and not dismissed. Three copy variants: no_saved_pm, card_declined, default. Has data-testid='credit-expiring-banner', 'credit-expiring-add-card' (links to /settings), 'credit-expiring-dismiss' (sets localStorage for 12h). Banner is wired in App.js between TwoFactorPromptBanner and LiveTicker. i18n keys verified in bg.json, en.json, ro.json. Push templates credit_expiring_no_pm and credit_expiring_declined exist with BG/EN/RO translations.",
+  "tests_executed": {
+    "backend_api_tests": [
+      "GET /api/healthz → 200",
+      "GET /api/readyz → 200",
+      "GET /api/stripe/authorizations/expiring (no auth) → 401",
+      "GET /api/stripe/authorizations/expiring (auth) → 200, returns {has_expiring, reason, expires_at, hold_id}",
+      "GET /api/stripe/authorizations/expiring (no holds) → has_expiring=false, reason=null",
+      "GET /api/stripe/authorizations/expiring (with seeded data) → has_expiring=true, reason='no_saved_pm'",
+      "GET /api/stripe/authorizations/my-credits (no auth) → 401",
+      "GET /api/stripe/authorizations/my-credits (auth) → 200, returns {holds[], commitments[], outbid_bids[]}",
+      "GET /api/me/preauths (no auth) → 401",
+      "GET /api/me/preauths (auth) → 200, returns list",
+      "POST /api/admin/stripe/lifecycle/scan (no auth) → 401",
+      "POST /api/admin/stripe/lifecycle/scan (user auth) → 401/403",
+      "POST /api/admin/stripe/lifecycle/scan (admin auth) → 200, returns {scanned, extended, failed, skipped_no_pm}",
+      "POST /api/auctions/{id}/bids (no auth) → 401",
+      "GET /api/auctions?status=live → 200",
+      "GET /api/stripe/config → 200, returns {configured, mode, hold_percent, hold_min_eur, hold_max_eur, ttl_days}",
+      "Push templates credit_expiring_no_pm and credit_expiring_declined verified in push_templates.py",
+      "i18n keys credit_expiring.* verified in en.json, bg.json, ro.json",
+      "_emit_expiring_alert function exists in stripe_lifecycle.py",
+      "extend_expiring_authorizations function exists in stripe_lifecycle.py",
+      "CreditExpiringBanner.jsx has correct data-testid attributes",
+      "CreditExpiringBanner imported and rendered in App.js between TwoFactorPromptBanner and LiveTicker"
+    ],
+    "frontend_ui_tests": [
+      "Homepage loads correctly for anonymous user (banner NOT visible)",
+      "Login flow works for test user (sectest_user@test.bg)",
+      "Banner NOT visible when user has no expiring credit",
+      "Banner VISIBLE when user has expiring credit (seeded data)",
+      "Banner shows correct copy for no_saved_pm reason: 'Your bidding credit expires in 24 hours. Add a card to keep bidding.'",
+      "Add card button has data-testid='credit-expiring-add-card' and links to /settings",
+      "Dismiss button has data-testid='credit-expiring-dismiss'",
+      "Dismiss functionality works - banner removed from DOM",
+      "localStorage key 'ab.credit_expiring_dismissed_until' set on dismiss",
+      "Add card button navigates to /settings",
+      "MyBidsPage (/my-bids) loads with data-testid='my-bids-page'",
+      "Settings page loads correctly"
+    ]
+  },
+  "verified_features": {
+    "expiring_endpoint": {
+      "status": "VERIFIED",
+      "details": "GET /api/stripe/authorizations/expiring returns correct structure. When no expiring holds → has_expiring=false. When seeded with expiring hold + alert → has_expiring=true, reason='no_saved_pm', expires_at and hold_id populated."
+    },
+    "emit_expiring_alert_idempotency": {
+      "status": "VERIFIED (code structure)",
+      "details": "_emit_expiring_alert checks lifecycle_alerts_sent.find_one before inserting. Second call with same (user, hold, reason) is a no-op."
+    },
+    "notify_user_integration": {
+      "status": "VERIFIED (code structure)",
+      "details": "_emit_expiring_alert calls routers.inbox.notify_user with type='credit_expiring', link='/settings', push_template_id='credit_expiring_no_pm' or 'credit_expiring_declined', push_kind=None to bypass user opt-out."
+    },
+    "credit_expiring_banner": {
+      "status": "VERIFIED",
+      "details": "CreditExpiringBanner fetches /stripe/authorizations/expiring on mount + every 10 min. Renders ONLY when has_expiring=true and not dismissed. Three copy variants based on reason. Has correct data-testid attributes. Dismiss sets localStorage for 12h."
+    },
+    "app_js_integration": {
+      "status": "VERIFIED",
+      "details": "CreditExpiringBanner imported and rendered in App.js between TwoFactorPromptBanner and LiveTicker."
+    },
+    "i18n_keys": {
+      "status": "VERIFIED",
+      "details": "credit_expiring.body_default, body_no_pm, body_declined, add_card_cta, dismiss exist in bg.json, en.json, ro.json."
+    },
+    "regression_endpoints": {
+      "status": "VERIFIED",
+      "details": "GET /api/me/preauths, GET /api/stripe/authorizations/my-credits (with outbid_bids[]), POST /api/admin/stripe/lifecycle/scan, POST /api/auctions/{id}/bids all working correctly."
+    }
+  },
+  "mocked_apis": {
+    "note": "Stripe is in TEST MODE. Real off-session PI roundtrips fail in dev. Test focuses on logic/structure validation, not actual Stripe interactions.",
+    "affected_features": ["extend_expiring_authorizations (actual Stripe calls)", "_create_offsession_hold (actual Stripe calls)"]
+  }
+}
