@@ -35,3 +35,40 @@
 ### Tested
 - Backend: testing_agent_v3_fork, 29/29 PASS, success_rate: 100%
 - Frontend smoke: homepage loads cleanly with featured listings, no console errors.
+
+## 2026-05-05 — Iteration 16: Active Bids (leading + outbid) + Mobile Credits + Leaderboard i18n
+
+### Backend
+- `GET /api/me/preauths` rewritten — пуска заявка към PG за всички бидове
+  на потребителя, дедупира по auction_id, обогатява от Mongo и връща
+  всеки live търг с `is_leading: bool`, `user_max_bid_eur`,
+  `current_bid_eur`. Връща и leading и outbid аукционите. Запазени са
+  backwards-compat полетата `max_amount_eur`, `available_eur`, `used_eur`.
+- `GET /api/stripe/authorizations/my-credits` — добавено ново поле
+  `outbid_bids[]` (auctions where user has bid but is currently outbid).
+  Кредитът остава непокътнат — потребителят може да наддава отново
+  без нов Stripe charge.
+
+### Frontend
+- `NotificationBell.jsx` пълно пренаписан (counter-fixed broken JSX от
+  предишната сесия). Section data-testid="active-bids-section" показва
+  и leading (зелен badge "Водите/Leading/În frunte"), и outbid (амбър
+  badge "Надминати/Outbid/Depășit") с visual delineation чрез
+  border-l-2.
+- `MyBidsPage.jsx` — нова section data-testid="my-bids-outbid" показва
+  outbid аукциони с amber styling, Текущ/Ваш bid pricing.
+- `CreditsOverlay.jsx` — вече използва `createPortal(document.body)`
+  с `fixed inset-0 z-[60]` → центрира коректно както на десктоп, така
+  и на мобилно (verified в test_report).
+
+### i18n (BG/RO/EN)
+- `inbox.active_bids_title`, `inbox.bid_leading`, `inbox.bid_outbid`,
+  `inbox.your_bid`, `inbox.current_vs_yours` — нови ключове.
+- `my_bids.outbid_title` — нов ключ.
+- `leaderboard.*` — пълно намерение (subtitle, all_time, month,
+  tab_reputation/sellers/commenters/bidders, metric_*, empty, meta_*).
+
+### Tested
+- testing_agent_v3_fork (iteration_16.json) — 18/18 backend PASS,
+  11/11 frontend UI verified, 0 critical, 0 action items.
+
