@@ -112,3 +112,19 @@
 
 ### Tested
 - testing_agent_v3_fork (iteration_18.json) — 23/23 backend + UI verified, 0 critical, 0 action items.
+
+## 2026-05-05 — Iteration 19: Removed custom OG image template
+
+### Backend
+- `routers/seo.py /share/auction/{id}` — `og:image` и `twitter:image` сега сочат директно към headline image на търга (`headline_image_url(auction)`). Премахнати `og:image:width/height/type=image/png` meta tags (защото headline снимките могат да са JPG/WebP в различни размери).
+- `routers/seo.py /og/auction/{id}.png` — превърнат от Pillow generator в 302 redirect към headline image (backwards-compat за crawler caches).
+- `services/og_image.py build_and_persist` — опростен до `return headline_image_url(auction)`. Никакви Pillow композиции, файлове на диск, cache busters. Pillow-related helper-и (`build_or_cache`, `_compose_image`) остават в файла за бъдеща употреба, но никой не ги извиква.
+- Fallback chain: headline → `og_image_url` (legacy) → `/og-default.jpg`.
+
+### Защо
+- Pillow-rendered PNG-ите се държаха непредсказуемо: Facebook кешираше остарели версии, WhatsApp обрязваше bid badge-а, Telegram re-encoded-ваше типографията. Реалната снимка на колата е най-надеждното social preview.
+
+### Tested
+- testing_agent_v3_fork (iteration_19.json) — 14/14 backend, 0 issues.
+- Manual smoke: `og:image` вече сочи към `mobistatic4.focus.bg/.../11774653575320034_hr.webp` (реалния headline на live auction).
+
