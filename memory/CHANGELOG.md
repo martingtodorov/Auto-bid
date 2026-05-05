@@ -95,3 +95,20 @@
 - testing_agent_v3_fork (iteration_17.json) — 19/19 backend + 13/13 frontend, 0 critical, 0 action items.
 - Stripe TEST MODE: actual roundtrip blocked в dev; production има валидни keys в backend.env.
 
+
+
+## 2026-05-05 — Iteration 18: Credit Expiring Banner + Push Notifications
+
+### Backend
+- Нов helper `_emit_expiring_alert` в `services/stripe_lifecycle.py`. Идемпотентен (collection `lifecycle_alerts_sent`), извиква `routers.inbox.notify_user(type='credit_expiring', link='/settings', push_template_id=…, push_kind=None)` за in-app notification + Web Push (bypass opt-out защото е operational alert).
+- `extend_expiring_authorizations` emit-ва alert при `no_saved_pm` и `card_declined` пътищата.
+- Push templates `credit_expiring_no_pm`, `credit_expiring_declined` (BG/EN/RO).
+- Нов endpoint `GET /api/stripe/authorizations/expiring` → `{has_expiring, reason, expires_at, hold_id}`. Reason идва от най-скорошния `lifecycle_alerts_sent` row.
+
+### Frontend
+- Нов компонент `CreditExpiringBanner.jsx` (червена ивица под header). 3 copy варианта (no_saved_pm / card_declined / default). CTA → `/settings`. Dismiss → localStorage за 12h. Poll 10 мин.
+- Wired в `App.js` между TwoFactorPromptBanner и LiveTicker.
+- i18n `credit_expiring.*` (BG/EN/RO).
+
+### Tested
+- testing_agent_v3_fork (iteration_18.json) — 23/23 backend + UI verified, 0 critical, 0 action items.
