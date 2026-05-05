@@ -1,6 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { Mail, Phone, MapPin, Clock } from "lucide-react";
+import { Mail, Phone, Clock } from "lucide-react";
 import InfoPage, { InfoSection } from "../components/InfoPage";
 import MarkdownBody from "../components/MarkdownBody";
 import HtmlBody from "../components/HtmlBody";
@@ -16,7 +16,7 @@ export default function ContactsPage() {
   const custom = pickCmsContent(settings, "contacts_content", i18n.language);
   useInfoPageSeo({
     title: `Контакти — ${brand}`,
-    description: `Свържете се с екипа на ${brand} — contact@autoandbid.com, тел. +359 87 827 9269, ул. Карнеги 11А, София.`,
+    description: `Свържете се с екипа на ${brand} — contact@autoandbid.com, тел. +359 87 827 9269.`,
     path: "/contacts",
     crumb: "Контакти",
   });
@@ -28,14 +28,12 @@ export default function ContactsPage() {
 }
 
 function DefaultContacts() {
-  const mapsUrl = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent("ул. Карнеги 11А, София, България");
   return (
     <>
       <p className="text-lg text-[hsl(var(--ink-muted))]">Нашият екип отговаря в рамките на 1 работен ден.</p>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <ContactCard icon={Mail} label="Имейл" value="contact@autoandbid.com" href="mailto:contact@autoandbid.com" note="За общи запитвания и поддръжка" />
         <ContactCard icon={Phone} label="Телефон" value="+359 87 827 9269" href="tel:+359878279269" note="Понеделник–Петък · 10:00–17:00" />
-        <ContactCard icon={MapPin} label="Адрес" value="ул. Карнеги 11А, София, България" href={mapsUrl} external note="Отвори в Google Maps · срещи по предварителна уговорка" />
         <ContactCard icon={Clock} label="Работно време" value="Пн–Пт: 10:00–17:00" note="Събота и неделя — почивни" />
       </div>
       <InfoSection title="Специализирани запитвания">

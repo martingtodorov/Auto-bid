@@ -89,11 +89,6 @@ const CONTACTS_BG = `<p class="text-lg text-[hsl(var(--ink-muted))]">Нашия�
     <div class="mt-3 font-serif text-xl">+359 87 827 9269</div>
     <div class="mt-1 text-xs text-[hsl(var(--ink-muted))]">Понеделник–Петък · 10:00–17:00</div>
   </a>
-  <a href="https://www.google.com/maps/search/?api=1&amp;query=ул.+Карнеги+11А,+София" target="_blank" rel="noopener noreferrer" class="block rounded-card border border-[hsl(var(--line))] bg-white p-5 transition hover:border-[hsl(var(--accent))]">
-    <div class="overline text-[hsl(var(--ink-muted))]">Адрес</div>
-    <div class="mt-3 font-serif text-xl">ул. Карнеги 11А, София, България</div>
-    <div class="mt-1 text-xs text-[hsl(var(--ink-muted))]">Отвори в Google Maps · срещи по предварителна уговорка</div>
-  </a>
   <div class="block rounded-card border border-[hsl(var(--line))] bg-white p-5">
     <div class="overline text-[hsl(var(--ink-muted))]">Работно време</div>
     <div class="mt-3 font-serif text-xl">Пн–Пт: 10:00–17:00</div>
