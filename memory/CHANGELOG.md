@@ -72,3 +72,26 @@
 - testing_agent_v3_fork (iteration_16.json) — 18/18 backend PASS,
   11/11 frontend UI verified, 0 critical, 0 action items.
 
+
+## 2026-05-05 — Iteration 17: Quick re-bid + WebSocket live updates + Stripe lifecycle
+
+### Frontend (A + B)
+- Нов helper `/app/frontend/src/lib/bidUtils.js` — `bidStepFor`, `minNextBid`. Shared между AuctionDetailPage и MyBidsPage.
+- `MyBidsPage.jsx`:
+  - Quick re-bid button под всяка карта (commitments + outbid_bids) `my-bids-quickbid-<auction_id>`. Click → `GET /auctions/{id}/next-bid` → `window.confirm` → `POST /auctions/{id}/bids`.
+  - WebSocket multi-subscription: per auction_id отваря WS към `/api/ws/auctions/{id}`. На `bid` event → debounced reload (500ms). Замества polling.
+- i18n `my_bids.quick_bid_cta`, `quick_bid_confirm`, `bid_placed` (BG/RO/EN).
+
+### Backend (C + D)
+- Нов модул `/app/backend/services/stripe_lifecycle.py`:
+  - `_create_offsession_hold` — нов PI с `off_session=True, confirm=True, capture_method=manual` срещу запазена PM.
+  - `extend_expiring_authorizations` — сканира active account-level holds expiring в следващите 24h, заключва чрез `extension_locked_until` (6h), reissue нов hold, освобождава стария.
+  - `capture_and_reissue` — partial-capture на buyer fee → marks old captured → re-issues нов hold за непохарченото (универсалният credit pool остава funded). Stripe auto-releases при partial-capture.
+  - `start_worker` / `stop_worker` — фонов цикъл (3600s, initial delay 60s).
+- `_auction_finalizer_loop` sold branch → след per-auction capture loop сега ползва `capture_and_reissue` за account-level holds на winner-a (sorted oldest-first).
+- Нов admin endpoint `POST /api/admin/stripe/lifecycle/scan` (admin-only).
+
+### Tested
+- testing_agent_v3_fork (iteration_17.json) — 19/19 backend + 13/13 frontend, 0 critical, 0 action items.
+- Stripe TEST MODE: actual roundtrip blocked в dev; production има валидни keys в backend.env.
+
