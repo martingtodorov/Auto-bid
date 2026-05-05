@@ -1880,47 +1880,39 @@ async def import_from_mobile_bg(request: Request, payload: MobileBgImport):
 # ---- Bids ----
 @api.get("/me/preauths")
 async def my_preauths(user: dict = Depends(get_current_user)):
-    """Return all of the user's currently active pre-authorizations with
-    headroom info, used by the notification panel to surface live status:
-        [{auction_id, auction_title, max_amount_eur, used_eur, available_eur}]
-    Sorted by largest available amount first.
+    """Return all auctions where the user is currently the leading bidder.
+
+    Powers the notification bell's "active bids" pinned section. After
+    the migration to a universal account-level credit pool there is no
+    longer a per-auction `bidding_credits` row to read — instead we
+    surface the user's live commitments (leading bids on live auctions),
+    which is the relevant signal for the bell anyway.
+
+    Each row carries the auction's bid amount as both `max_amount_eur`
+    (committed) and `available_eur` so existing UI consumers don't break.
     """
-    creds = await db.bidding_credits.find(
-        {"user_id": user["id"], "status": "authorized"},
-        {"_id": 0},
-    ).to_list(50)
-    if not creds:
-        return []
-    auction_ids = [c["auction_id"] for c in creds]
-    auctions = await db.auctions.find(
-        {"id": {"$in": auction_ids}},
-        {"_id": 0, "id": 1, "title": 1, "status": 1, "is_archived": 1},
-    ).to_list(len(auction_ids))
-    a_map = {a["id"]: a for a in auctions}
-    from services import bidding as _bidding
+    cursor = db.auctions.find(
+        {"high_bidder_id": user["id"], "status": "live", "is_archived": {"$ne": True}},
+        {"_id": 0, "id": 1, "title": 1, "current_bid_eur": 1, "status": 1, "ends_at": 1},
+    )
     out = []
-    for c in creds:
-        a = a_map.get(c["auction_id"]) or {}
-        # Skip archived/finalized auctions — preauth is no longer relevant there.
-        if a.get("is_archived") or a.get("status") in ("archived", "cancelled"):
+    async for a in cursor:
+        bid = float(a.get("current_bid_eur") or 0)
+        if bid <= 0:
             continue
-        max_amt = float(c.get("max_amount_eur") or 0)
-        if max_amt <= 0:
-            continue
-        try:
-            used = await _bidding.get_user_highest_bid_amount(c["auction_id"], user["id"])
-        except Exception:
-            used = 0.0
-        used = max(0.0, min(used, max_amt))
         out.append({
-            "auction_id": c["auction_id"],
-            "auction_title": a.get("title") or c.get("auction_title") or "—",
+            "auction_id": a["id"],
+            "auction_title": a.get("title") or "—",
             "auction_status": a.get("status"),
-            "max_amount_eur": max_amt,
-            "used_eur": used,
-            "available_eur": max(0.0, max_amt - used),
+            "max_amount_eur": bid,
+            "used_eur": bid,
+            # `available_eur` retained for backwards-compat with the
+            # NotificationBell progress bar; for active leads it equals
+            # the bid (100% committed).
+            "available_eur": bid,
+            "ends_at": a.get("ends_at"),
         })
-    out.sort(key=lambda x: x["available_eur"], reverse=True)
+    out.sort(key=lambda x: x.get("ends_at") or "")
     return out
 
 

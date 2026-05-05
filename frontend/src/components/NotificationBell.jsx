@@ -166,12 +166,9 @@ export default function NotificationBell() {
               >
                 <div className="px-4 pt-3 pb-1 flex items-center gap-1.5 overline text-emerald-800">
                   <Shield size={12} />
-                  <span>{t("inbox.preauth_title", "Активни преавторизации")}</span>
+                  <span>{t("inbox.active_bids_title", "Активни наддавания")}</span>
                 </div>
                 {preauths.map((p) => {
-                  const pct = p.max_amount_eur > 0
-                    ? Math.max(0, Math.min(100, Math.round((p.available_eur / p.max_amount_eur) * 100)))
-                    : 0;
                   return (
                     <Link
                       key={p.auction_id}
@@ -188,16 +185,17 @@ export default function NotificationBell() {
                           className="font-mono text-sm shrink-0 tabular-nums text-emerald-900"
                           data-testid={`preauth-amount-${p.auction_id}`}
                         >
-                          {formatEUR(p.available_eur)} / {formatEUR(p.max_amount_eur)}
+                          {formatEUR(p.max_amount_eur)}
                         </span>
                       </div>
-                      <div className="h-1.5 rounded-full bg-emerald-200/70 overflow-hidden">
-                        <div
-                          className="h-full bg-emerald-600 transition-all"
-                          style={{ width: `${pct}%` }}
-                        />
+                      <div className="text-[11px] text-emerald-800/80">
+                        {t("inbox.active_bid_leading", "Водите това наддаване")}
                       </div>
-                      <div className="text-[11px] text-emerald-800/80 mt-1">
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
                         {t("inbox.preauth_available", "Налично")}: {pct}%
                       </div>
                     </Link>
