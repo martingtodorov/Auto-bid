@@ -1,11 +1,14 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Wallet, ExternalLink, Plus, X, Clock } from "lucide-react";
+import { Wallet, ExternalLink, Plus, X, Clock, Gavel } from "lucide-react";
 import { api, formatEUR } from "../lib/apiClient";
 import { formatError, useAuth } from "../lib/auth";
 import { auctionUrl } from "../lib/auctionUrl";
+import { minNextBid } from "../lib/bidUtils";
 import TopUpCreditModal from "../components/TopUpCreditModal";
+
+const API_BASE = process.env.REACT_APP_BACKEND_URL;
 
 /**
  * /my-bids — детайлен преглед на акаунтния наддавателен кредит.
@@ -27,6 +30,9 @@ export default function MyBidsPage() {
   const [releasing, setReleasing] = useState({});
   const [toast, setToast] = useState("");
   const [showTopUp, setShowTopUp] = useState(false);
+  const [bidding, setBidding] = useState({});  // { auction_id: bool }
+  const wsRefs = useRef({});  // { auction_id: WebSocket }
+  const reloadTimer = useRef(null);
 
   const load = useCallback(async () => {
     try {
@@ -39,6 +45,14 @@ export default function MyBidsPage() {
       setLoading(false);
     }
   }, []);
+
+  // Debounced reload — multiple WS events within 500ms collapse into one
+  // network round-trip. Prevents thundering-herd when many bids land in
+  // quick succession (sniping window).
+  const debouncedReload = useCallback(() => {
+    if (reloadTimer.current) clearTimeout(reloadTimer.current);
+    reloadTimer.current = setTimeout(() => { load(); }, 500);
+  }, [load]);
 
   useEffect(() => { if (user) load(); else setLoading(false); }, [user, load]);
 
@@ -79,6 +93,78 @@ export default function MyBidsPage() {
       setReleasing((r) => ({ ...r, [hold.authorization_id]: false }));
     }
   };
+
+  // Quick re-bid — fire from a card row directly. Asks for confirmation
+  // (window.confirm) showing the next minimum bid. Backend authoritative
+  // on min_next, so we re-fetch /next-bid to get the exact server number
+  // (avoids stale state if WS event hasn't arrived yet).
+  const quickBid = async (auctionId, auctionTitle, currentBid) => {
+    setBidding((b) => ({ ...b, [auctionId]: true }));
+    try {
+      // 1. Pull authoritative next-bid from server.
+      let next;
+      try {
+        const r = await api.get(`/auctions/${auctionId}/next-bid`);
+        next = r.data;
+      } catch (e) {
+        next = { min_next_eur: minNextBid(currentBid) };
+      }
+      const amount = Number(next?.min_next_eur || minNextBid(currentBid));
+      // 2. Confirm with the user.
+      const ok = window.confirm(
+        t("my_bids.quick_bid_confirm",
+          "Наддай {{amt}} на {{title}}?",
+          { amt: formatEUR(amount), title: auctionTitle }),
+      );
+      if (!ok) return;
+      // 3. Submit. Backend re-validates min on its side under FOR UPDATE.
+      await api.post(`/auctions/${auctionId}/bids`, { amount_eur: amount });
+      setToast(t("my_bids.bid_placed", "Наддаването е изпратено: {{amt}}", { amt: formatEUR(amount) }));
+      window.dispatchEvent(new Event("credits-updated"));
+      // WS event will reload too, but force one in case WS is slow/down.
+      load();
+    } catch (e) {
+      setErr(formatError(e));
+    } finally {
+      setBidding((b) => ({ ...b, [auctionId]: false }));
+    }
+  };
+
+  // Subscribe to WebSocket events for every auction the user has stake
+  // in (commitments + outbid). On any `bid` event we debounced-reload
+  // /my-credits. This replaces a polling timer with push-based updates.
+  const auctionIds = useMemo(() => {
+    if (!summary) return [];
+    const ids = new Set();
+    (summary.commitments || []).forEach((c) => c.auction_id && ids.add(c.auction_id));
+    (summary.outbid_bids || []).forEach((c) => c.auction_id && ids.add(c.auction_id));
+    return Array.from(ids);
+  }, [summary]);
+
+  useEffect(() => {
+    if (!user || !auctionIds.length || !API_BASE) return;
+    const wsUrl = API_BASE.replace(/^http/, "ws");
+    const opened = {};
+    auctionIds.forEach((id) => {
+      try {
+        const ws = new WebSocket(`${wsUrl}/api/ws/auctions/${id}`);
+        ws.onmessage = (ev) => {
+          try {
+            const msg = JSON.parse(ev.data);
+            if (msg.type === "bid") debouncedReload();
+          } catch (e) {}
+        };
+        ws.onerror = () => {};
+        opened[id] = ws;
+      } catch (e) {}
+    });
+    wsRefs.current = opened;
+    return () => {
+      Object.values(opened).forEach((w) => { try { w.close(); } catch (e) {} });
+      wsRefs.current = {};
+      if (reloadTimer.current) { clearTimeout(reloadTimer.current); reloadTimer.current = null; }
+    };
+  }, [auctionIds, user, debouncedReload]);
 
   if (!user) {
     return (
@@ -151,31 +237,56 @@ export default function MyBidsPage() {
         <section className="mb-10" data-testid="my-bids-commitments">
           <h2 className="font-serif text-2xl mb-4">{t("my_bids.committed_title", "Активни наддавания")}</h2>
           <div className="space-y-3">
-            {summary.commitments.map((c) => (
-              <button
+            {summary.commitments.map((c) => {
+              const next = minNextBid(c.current_bid_eur);
+              const busy = !!bidding[c.auction_id];
+              return (
+              <div
                 key={c.auction_id}
-                type="button"
-                onClick={() => navigate(auctionUrl({ id: c.auction_id, slug: c.auction_slug, title: c.auction_title }))}
-                className="w-full text-left flex items-center gap-4 p-4 rounded-card border border-emerald-300 bg-emerald-50/40 hover:border-emerald-500"
+                className="rounded-card border border-emerald-300 bg-emerald-50/40"
                 data-testid={`my-bids-commit-${c.auction_id}`}
               >
-                {c.auction_thumb && (
-                  <img src={c.auction_thumb} alt="" className="w-20 h-14 object-cover rounded shrink-0" loading="lazy" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold line-clamp-1">{c.auction_title}</span>
-                    <span className="text-[10px] uppercase tracking-wide font-bold shrink-0 px-1.5 py-0.5 rounded bg-emerald-600 text-white">
-                      {t("inbox.bid_leading", "Водите")}
-                    </span>
+                <button
+                  type="button"
+                  onClick={() => navigate(auctionUrl({ id: c.auction_id, slug: c.auction_slug, title: c.auction_title }))}
+                  className="w-full text-left flex items-center gap-4 p-4 hover:bg-emerald-50/70 rounded-card"
+                >
+                  {c.auction_thumb && (
+                    <img src={c.auction_thumb} alt="" className="w-20 h-14 object-cover rounded shrink-0" loading="lazy" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold line-clamp-1">{c.auction_title}</span>
+                      <span className="text-[10px] uppercase tracking-wide font-bold shrink-0 px-1.5 py-0.5 rounded bg-emerald-600 text-white">
+                        {t("inbox.bid_leading", "Водите")}
+                      </span>
+                    </div>
+                    <div className="text-xs text-[hsl(var(--ink-muted))] tabular-nums mt-0.5">
+                      {formatEUR(c.current_bid_eur)} · <Clock size={10} className="inline" /> {new Date(c.ends_at).toLocaleString()}
+                    </div>
                   </div>
-                  <div className="text-xs text-[hsl(var(--ink-muted))] tabular-nums mt-0.5">
-                    {formatEUR(c.current_bid_eur)} · <Clock size={10} className="inline" /> {new Date(c.ends_at).toLocaleString()}
-                  </div>
+                  <ExternalLink size={14} className="text-[hsl(var(--ink-muted))]" />
+                </button>
+                {/* Quick re-bid (up the leading bid by one step). Useful
+                    when the user wants to deter snipers in the closing
+                    minutes without leaving the My Bids page. */}
+                <div className="px-4 pb-3 -mt-1">
+                  <button
+                    type="button"
+                    onClick={() => quickBid(c.auction_id, c.auction_title, c.current_bid_eur)}
+                    disabled={busy}
+                    className="w-full btn btn-primary inline-flex items-center justify-center gap-1.5 !py-2 text-sm"
+                    data-testid={`my-bids-quickbid-${c.auction_id}`}
+                  >
+                    <Gavel size={13} />
+                    {busy
+                      ? t("common.processing", "Обработва…")
+                      : t("my_bids.quick_bid_cta", "Наддай {{amt}}", { amt: formatEUR(next) })}
+                  </button>
                 </div>
-                <ExternalLink size={14} className="text-[hsl(var(--ink-muted))]" />
-              </button>
-            ))}
+              </div>
+              );
+            })}
           </div>
         </section>
       )}
@@ -187,35 +298,57 @@ export default function MyBidsPage() {
         <section className="mb-10" data-testid="my-bids-outbid">
           <h2 className="font-serif text-2xl mb-4">{t("my_bids.outbid_title", "Надминати наддавания")}</h2>
           <div className="space-y-3">
-            {summary.outbid_bids.map((c) => (
-              <button
+            {summary.outbid_bids.map((c) => {
+              const next = minNextBid(c.current_bid_eur);
+              const busy = !!bidding[c.auction_id];
+              return (
+              <div
                 key={c.auction_id}
-                type="button"
-                onClick={() => navigate(auctionUrl({ id: c.auction_id, slug: c.auction_slug, title: c.auction_title }))}
-                className="w-full text-left flex items-center gap-4 p-4 rounded-card border border-amber-300 bg-amber-50/40 hover:border-amber-500"
+                className="rounded-card border border-amber-300 bg-amber-50/40"
                 data-testid={`my-bids-outbid-${c.auction_id}`}
               >
-                {c.auction_thumb && (
-                  <img src={c.auction_thumb} alt="" className="w-20 h-14 object-cover rounded shrink-0" loading="lazy" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold line-clamp-1">{c.auction_title}</span>
-                    <span className="text-[10px] uppercase tracking-wide font-bold shrink-0 px-1.5 py-0.5 rounded bg-amber-600 text-white">
-                      {t("inbox.bid_outbid", "Надминати")}
-                    </span>
+                <button
+                  type="button"
+                  onClick={() => navigate(auctionUrl({ id: c.auction_id, slug: c.auction_slug, title: c.auction_title }))}
+                  className="w-full text-left flex items-center gap-4 p-4 hover:bg-amber-50/70 rounded-card"
+                >
+                  {c.auction_thumb && (
+                    <img src={c.auction_thumb} alt="" className="w-20 h-14 object-cover rounded shrink-0" loading="lazy" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold line-clamp-1">{c.auction_title}</span>
+                      <span className="text-[10px] uppercase tracking-wide font-bold shrink-0 px-1.5 py-0.5 rounded bg-amber-600 text-white">
+                        {t("inbox.bid_outbid", "Надминати")}
+                      </span>
+                    </div>
+                    <div className="text-xs text-[hsl(var(--ink-muted))] tabular-nums mt-0.5">
+                      {t("inbox.current_vs_yours", "Текущ {{cur}} · ваш {{my}}", {
+                        cur: formatEUR(c.current_bid_eur),
+                        my: formatEUR(c.user_max_bid_eur),
+                      })}
+                      {" · "}<Clock size={10} className="inline" /> {new Date(c.ends_at).toLocaleString()}
+                    </div>
                   </div>
-                  <div className="text-xs text-[hsl(var(--ink-muted))] tabular-nums mt-0.5">
-                    {t("inbox.current_vs_yours", "Текущ {{cur}} · ваш {{my}}", {
-                      cur: formatEUR(c.current_bid_eur),
-                      my: formatEUR(c.user_max_bid_eur),
-                    })}
-                    {" · "}<Clock size={10} className="inline" /> {new Date(c.ends_at).toLocaleString()}
-                  </div>
+                  <ExternalLink size={14} className="text-[hsl(var(--ink-muted))]" />
+                </button>
+                <div className="px-4 pb-3 -mt-1">
+                  <button
+                    type="button"
+                    onClick={() => quickBid(c.auction_id, c.auction_title, c.current_bid_eur)}
+                    disabled={busy}
+                    className="w-full btn btn-primary inline-flex items-center justify-center gap-1.5 !py-2 text-sm"
+                    data-testid={`my-bids-quickbid-${c.auction_id}`}
+                  >
+                    <Gavel size={13} />
+                    {busy
+                      ? t("common.processing", "Обработва…")
+                      : t("my_bids.quick_bid_cta", "Наддай {{amt}}", { amt: formatEUR(next) })}
+                  </button>
                 </div>
-                <ExternalLink size={14} className="text-[hsl(var(--ink-muted))]" />
-              </button>
-            ))}
+              </div>
+              );
+            })}
           </div>
         </section>
       )}

@@ -4938,6 +4938,9 @@ async def on_startup():
     asyncio.create_task(_auction_finalizer_loop())
     # Start background scheduler for "ending soon" notifications (≈1h before end)
     asyncio.create_task(_ending_soon_loop())
+    # Stripe authorization lifecycle worker (7-day auto-extend)
+    from services import stripe_lifecycle
+    stripe_lifecycle.start_worker(db)
 
 
 async def _seed_makes():
@@ -5244,18 +5247,27 @@ async def _finalize_expired_auctions_once():
             {"$set": {"status": "released", "released_at": now_iso}},
         )
         # Stripe holds:
-        #   • Winner's authorization → capture immediately (settle the buyer's premium hold)
-        #   • Losers' authorizations → keep ACTIVE for 24h grace, then auto-release
+        #   • Per-auction winner authorization → capture immediately
+        #     (legacy flow, only fires when auction was bid via the
+        #     deprecated per-auction hold model).
+        #   • Account-level winner credit → partial-capture buyer fee
+        #     and IMMEDIATELY re-issue a fresh hold for the unspent
+        #     remainder so the universal credit pool stays funded for
+        #     other auctions (Stripe auto-releases on partial-capture).
+        #   • Losers' authorizations → keep ACTIVE for 24h grace, then
+        #     auto-release.
         try:
             from routers.stripe_holds import capture_authorization as _capture_auth
+            from services.stripe_lifecycle import capture_and_reissue as _capture_reissue
             grace_until = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+            # 1) Per-auction holds tied to *this* auction.
             async for sa in db.bid_authorizations.find(
                 {"auction_id": auction_id, "authorization_status": "active"}, {"_id": 0, "id": 1, "user_id": 1}
             ):
                 if sa["user_id"] == a["high_bidder_id"]:
                     try:
                         await _capture_auth(db, sa["id"])
-                        logger.info("[stripe] captured winner hold %s for auction %s", sa["id"], auction_id)
+                        logger.info("[stripe] captured winner per-auction hold %s for auction %s", sa["id"], auction_id)
                     except Exception as e:
                         logger.error("[stripe] winner capture failed for %s: %s", sa["id"], e)
                 else:
@@ -5266,6 +5278,42 @@ async def _finalize_expired_auctions_once():
                                   "updated_at": now_iso}},
                     )
                     logger.info("[stripe] loser %s scheduled to release at %s", sa["id"], grace_until)
+            # 2) Universal credit pool: partial-capture buyer fee from
+            #    the winner's account-level hold(s) and re-issue the
+            #    rest. Walk holds oldest-first so we drain the closest-
+            #    to-expiry authorizations first.
+            buyer_fee = round(_buyer_fee_on_auction(current_bid, a), 2)
+            remaining_fee = buyer_fee
+            account_holds_cursor = db.bid_authorizations.find(
+                {"user_id": a["high_bidder_id"], "auction_id": None,
+                 "authorization_status": "active"},
+                {"_id": 0, "id": 1, "amount_authorized_eur": 1, "bidding_limit_eur": 1,
+                 "created_at": 1},
+                sort=[("created_at", 1)],
+            )
+            async for hold in account_holds_cursor:
+                if remaining_fee <= 0.01:
+                    break
+                hold_amount = float(hold.get("amount_authorized_eur") or 0)
+                take = min(remaining_fee, hold_amount)
+                try:
+                    result = await _capture_reissue(
+                        db, auth_id=hold["id"], capture_amount_eur=take,
+                    )
+                    logger.info(
+                        "[stripe] capture+reissue auction=%s hold=%s captured=%s reissued=%s",
+                        auction_id, hold["id"], result.get("captured_eur"), result.get("reissued_id"),
+                    )
+                    remaining_fee = round(remaining_fee - float(result.get("captured_eur") or 0), 2)
+                except Exception as e:
+                    logger.error("[stripe] capture+reissue failed for hold %s: %s", hold["id"], e)
+                    # Move on to next hold to avoid blocking finalization.
+                    continue
+            if remaining_fee > 0.5:
+                logger.warning(
+                    "[stripe] auction %s winner %s short on account credit by €%.2f — manual reconciliation needed",
+                    auction_id, a["high_bidder_id"], remaining_fee,
+                )
         except Exception as e:
             logger.warning("[stripe] capture/grace pipeline failed for %s: %s", auction_id, e)
         # Notify winner
@@ -5446,6 +5494,19 @@ async def admin_bid_outbox_retry(event_id: str, _admin: dict = Depends(require_a
     if not ok:
         raise HTTPException(status_code=404, detail="Събитието не е намерено")
     return {"ok": True}
+
+
+@api.post("/admin/stripe/lifecycle/scan")
+async def admin_run_lifecycle_scan(_admin: dict = Depends(require_admin)):
+    """Manually trigger the Stripe authorization extension scan.
+
+    Returns counters: scanned / extended / failed / skipped_no_pm.
+    Useful for forcing a sweep before the next hourly tick (e.g.
+    after deploying or to test in staging). The scheduled background
+    worker runs hourly regardless.
+    """
+    from services import stripe_lifecycle
+    return await stripe_lifecycle.extend_expiring_authorizations(db)
 
 
 @api.get("/health")
@@ -5852,4 +5913,9 @@ async def shutdown_db_client():
             await asyncio.wait_for(app.state._outbox_task, timeout=5.0)
     except Exception as e:
         logger.warning("Outbox worker shutdown: %s", e)
+    try:
+        from services import stripe_lifecycle
+        stripe_lifecycle.stop_worker()
+    except Exception as e:
+        logger.warning("Stripe lifecycle worker shutdown: %s", e)
     client.close()
