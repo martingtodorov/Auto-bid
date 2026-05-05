@@ -110,6 +110,72 @@ html[data-theme="dark"] .text-gray-700 { color: hsl(var(--ink-muted)) !important
 html[data-theme="dark"] .text-gray-800,
 html[data-theme="dark"] .text-gray-900 { color: hsl(var(--ink)) !important; }
 
+/* ---------------------------------------------------------------- */
+/* Semantic-state palettes (amber / emerald / red / blue / yellow). */
+/* Components use Tailwind's *-50/100 backgrounds for "warning",     */
+/* "success", "error" tints (e.g. credit-shortfall banners, outbid  */
+/* cards, leading-bid pills). On a black page these read as near-   */
+/* white blocks of light, which destroys the dark-theme experience  */
+/* and traps the dark *-700/800 text on a near-white field. Repaint */
+/* every state into a translucent tint of the same hue so:          */
+/*   - the surface still sits a few shades above the page bg,        */
+/*   - the foreground stays the bright shade for legibility,         */
+/*   - the original semantic colour signal is preserved.             */
+/* ---------------------------------------------------------------- */
+html[data-theme="dark"] .bg-amber-50,
+html[data-theme="dark"] .bg-amber-100         { background-color: rgb(120 53 15 / 0.25) !important; }
+html[data-theme="dark"] .bg-amber-50\/40       { background-color: rgb(120 53 15 / 0.22) !important; }
+html[data-theme="dark"] .bg-amber-50\/70,
+html[data-theme="dark"] .bg-amber-100\/80     { background-color: rgb(120 53 15 / 0.32) !important; }
+html[data-theme="dark"] .hover\:bg-amber-50:hover,
+html[data-theme="dark"] .hover\:bg-amber-50\/70:hover,
+html[data-theme="dark"] .hover\:bg-amber-100:hover,
+html[data-theme="dark"] .hover\:bg-amber-100\/80:hover { background-color: rgb(120 53 15 / 0.40) !important; }
+html[data-theme="dark"] .border-amber-300,
+html[data-theme="dark"] .border-amber-400\/50,
+html[data-theme="dark"] .hover\:border-amber-500:hover { border-color: rgb(245 158 11 / 0.55) !important; }
+html[data-theme="dark"] .text-amber-700,
+html[data-theme="dark"] .text-amber-800       { color: rgb(252 211 77) !important; }
+
+html[data-theme="dark"] .bg-emerald-50,
+html[data-theme="dark"] .bg-emerald-100         { background-color: rgb(6 78 59 / 0.30) !important; }
+html[data-theme="dark"] .bg-emerald-50\/40,
+html[data-theme="dark"] .bg-emerald-50\/70,
+html[data-theme="dark"] .bg-emerald-100\/80    { background-color: rgb(6 78 59 / 0.30) !important; }
+html[data-theme="dark"] .hover\:bg-emerald-50:hover,
+html[data-theme="dark"] .hover\:bg-emerald-50\/70:hover,
+html[data-theme="dark"] .hover\:bg-emerald-100:hover,
+html[data-theme="dark"] .hover\:bg-emerald-100\/80:hover { background-color: rgb(6 78 59 / 0.45) !important; }
+html[data-theme="dark"] .border-emerald-300,
+html[data-theme="dark"] .hover\:border-emerald-500:hover { border-color: rgb(16 185 129 / 0.55) !important; }
+html[data-theme="dark"] .text-emerald-700,
+html[data-theme="dark"] .text-emerald-800     { color: rgb(110 231 183) !important; }
+
+html[data-theme="dark"] .bg-red-50,
+html[data-theme="dark"] .bg-red-100           { background-color: rgb(127 29 29 / 0.28) !important; }
+html[data-theme="dark"] .border-red-200,
+html[data-theme="dark"] .border-red-300       { border-color: rgb(248 113 113 / 0.45) !important; }
+html[data-theme="dark"] .text-red-700,
+html[data-theme="dark"] .text-red-800,
+html[data-theme="dark"] .text-red-900         { color: rgb(252 165 165) !important; }
+html[data-theme="dark"] .text-red-800\/70     { color: rgb(252 165 165 / 0.7) !important; }
+
+html[data-theme="dark"] .bg-blue-50,
+html[data-theme="dark"] .bg-blue-100          { background-color: rgb(30 58 138 / 0.30) !important; }
+html[data-theme="dark"] .border-blue-200,
+html[data-theme="dark"] .border-blue-300      { border-color: rgb(96 165 250 / 0.45) !important; }
+html[data-theme="dark"] .text-blue-700,
+html[data-theme="dark"] .text-blue-800,
+html[data-theme="dark"] .text-blue-900        { color: rgb(147 197 253) !important; }
+
+html[data-theme="dark"] .bg-yellow-50,
+html[data-theme="dark"] .bg-yellow-100        { background-color: rgb(113 63 18 / 0.28) !important; }
+html[data-theme="dark"] .border-yellow-200,
+html[data-theme="dark"] .border-yellow-300    { border-color: rgb(250 204 21 / 0.45) !important; }
+html[data-theme="dark"] .text-yellow-700,
+html[data-theme="dark"] .text-yellow-800,
+html[data-theme="dark"] .text-yellow-900      { color: rgb(253 224 71) !important; }
+
 /* ---- Cookie consent banner — dark-mode override -------------------- */
 /* Light mode keeps the original near-black bg + white text. Dark mode  */
 /* would otherwise render `bg-[hsl(var(--ink))]` as near-WHITE (since   */
