@@ -20,6 +20,7 @@ import AdminUnsoldTab from "../components/AdminUnsoldTab";
 import AdminChatPanel from "../components/AdminChatPanel";
 import { auctionUrl } from "../lib/auctionUrl";
 import { grossEUR } from "../lib/vat";
+import { useSiteSettings } from "../lib/settings";
 import AdminHealthTab from "../components/AdminHealthTab";
 
 const STATUS_LABELS = {
@@ -51,6 +52,9 @@ export default function AdminPage() {
   // Tab counters — one aggregate request drives every badge. Auto-refreshes
   // on mount and after any admin action via loadCounters().
   const [counters, setCounters] = useState({});
+  const settings = useSiteSettings();
+  // Динамичен процент комисионна от админ настройките; fallback на 2%.
+  const commissionPct = Number(settings?.buyer_fee_pct ?? 2);
 
   const loadCounters = useCallback(async () => {
     try { const { data } = await api.get("/admin/counters"); setCounters(data || {}); }
@@ -607,7 +611,7 @@ export default function AdminPage() {
                   <span>Обява</span>
                   <span>Купувач</span>
                   <span>Финална цена</span>
-                  <span>Комисионна 2%</span>
+                  <span>Комисионна {commissionPct}%</span>
                   <span>Действие</span>
                 </div>
                 {sold.map((a) => {
