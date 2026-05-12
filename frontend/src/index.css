@@ -413,12 +413,30 @@ textarea.input { resize: vertical; min-height: 80px; }
                 box-shadow .3s cubic-bezier(0.4, 0, 0.2, 1),
                 border-color .3s ease;
 }
-.card-editorial:hover {
-    transform: translateY(-4px);
-    border-color: hsl(var(--ink) / 0.2);
-    box-shadow: 0 20px 40px -20px hsl(var(--ink) / 0.15);
+
+/* Hover lift + image zoom are SCOPED to real-pointer devices.
+ *
+ * On touchscreens the browser fires :hover on tap and the state sticks
+ * until the next tap elsewhere — which broke the mobile swipe carousel
+ * in two ways:
+ *   1. translateY(-4px) on tap caused a vertical jiggle right when the
+ *      user started a horizontal pan.
+ *   2. `card-img img { transform: scale(1.06) }` animated every visible
+ *      slide for 700ms, fighting the snap-x carousel for paint time
+ *      and producing a noticeably janky swipe.
+ *
+ * `@media (hover: hover) and (pointer: fine)` keeps the desktop hover
+ * effect intact for users with a real mouse, while letting mobile users
+ * pan the carousel without competing animations stealing the GPU.
+ */
+@media (hover: hover) and (pointer: fine) {
+    .card-editorial:hover {
+        transform: translateY(-4px);
+        border-color: hsl(var(--ink) / 0.2);
+        box-shadow: 0 20px 40px -20px hsl(var(--ink) / 0.15);
+    }
+    .card-editorial:hover .card-img img { transform: scale(1.06); }
 }
-.card-editorial:hover .card-img img { transform: scale(1.06); }
 
 .card-img {
     overflow: hidden;

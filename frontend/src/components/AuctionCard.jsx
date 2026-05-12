@@ -34,6 +34,15 @@ export default function AuctionCard({ auction, compact = false, priority = false
   const [tl, setTl] = useState(() => timeLeft(auction.ends_at));
   const [activeSlide, setActiveSlide] = useState(0);
   const scrollerRef = useRef(null);
+  // Track whether the most recent pointer interaction was a horizontal
+  // swipe (vs a tap). On mobile the inner scroll-snap container handles
+  // the pan, but when the user lifts their finger the browser fires a
+  // `click` that bubbles up to the outer <Link> — which would navigate
+  // to the detail page mid-swipe, killing the carousel UX. We watch the
+  // touch deltas and call `preventDefault()` on that synthetic click
+  // when movement exceeded the tap threshold.
+  const touchStartRef = useRef(null);
+  const isSwipingRef = useRef(false);
 
   useEffect(() => {
     if (auction.status === "sold" || auction.status === "ended") return;
@@ -107,6 +116,16 @@ export default function AuctionCard({ auction, compact = false, priority = false
       to={auctionUrl(auction)}
       className="card-editorial block group"
       data-testid={`auction-card-${auction.id}`}
+      onClickCapture={(e) => {
+        // Suppress the synthetic click that follows a horizontal swipe
+        // — otherwise the outer <Link> hijacks the gesture and the user
+        // never sees slide 2+.
+        if (isSwipingRef.current) {
+          e.preventDefault();
+          e.stopPropagation();
+          isSwipingRef.current = false;
+        }
+      }}
     >
       <div
         className="card-img aspect-[4/3] bg-[hsl(var(--surface))] relative overflow-hidden"
@@ -125,6 +144,19 @@ export default function AuctionCard({ auction, compact = false, priority = false
                 // edge gestures.
                 touchAction: "pan-x",
                 scrollbarWidth: "none",
+              }}
+              onTouchStart={(e) => {
+                const t = e.touches[0];
+                touchStartRef.current = { x: t.clientX, y: t.clientY, t: Date.now() };
+                isSwipingRef.current = false;
+              }}
+              onTouchMove={(e) => {
+                const start = touchStartRef.current;
+                if (!start) return;
+                const t = e.touches[0];
+                // Threshold of 6px feels like the sweet spot — under
+                // 6px is firmly a tap, over 6px is a deliberate pan.
+                if (Math.abs(t.clientX - start.x) > 6) isSwipingRef.current = true;
               }}
               data-testid={`auction-card-swiper-${auction.id}`}
             >
