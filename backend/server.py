@@ -648,22 +648,51 @@ _LIST_MONGO_PROJECTION = {
 
 def _list_shape(a: dict) -> dict:
     """Project a public auction dict to the minimal subset needed for list
-    cards. Keeps only the first 4 images (the AuctionCard mobile-swipe
-    carousel shows 4 photos + a "View full auction" CTA at slide 5, so
-    anything beyond the first 4 is dead weight here).
-
-    Before iteration 22 this trimmed to 1 image, which broke the swipe
-    carousel for ALL legacy auctions — the card silently fell back to
-    its single-image branch when `slides.length <= 1`. Now we ship the
-    first 4 entries so the swipe deck always has fodder.
+    cards. The AuctionCard mobile-swipe carousel shows 4 photos + a
+    "View full auction" CTA at slide 5, in the order:
+      slide 1: main (cover)
+      slide 2: best exterior
+      slide 3-4: first two interior shots
+    so we must include at least one variant from each category — naïve
+    `variants[:4]` would slice off all interior shots if the auction had
+    ≥4 exteriors (the common case), leaving slides 3-4 to fall back to
+    extra exteriors.
     """
     out = {k: a[k] for k in _LIST_KEEP if k in a}
     imgs = a.get("images") or []
     thumbs = a.get("thumbnails") or []
     out["images"] = imgs[:4]
     out["thumbnails"] = thumbs[:4] if thumbs else []
+
+    # Category-aware variant projection: pull up to 1 main + 1 exterior
+    # + 2 interior + 2 fillers so the frontend picker has fodder for
+    # every preview slot. Preserve sourceIndex so the picker still keys
+    # them stably.
     variants = a.get("images_variants") or []
-    out["images_variants"] = variants[:4]
+    by_cat: dict[str, list[dict]] = {}
+    for v in variants:
+        by_cat.setdefault((v.get("category") or "other"), []).append(v)
+    picked: list[dict] = []
+    seen = set()
+    def _push_n(cat: str, n: int) -> None:
+        for v in by_cat.get(cat, [])[:n]:
+            sha = v.get("sha")
+            if sha in seen:
+                continue
+            seen.add(sha)
+            picked.append(v)
+    _push_n("main", 1)
+    _push_n("exterior", 1)
+    _push_n("interior", 2)
+    # Fillers — preserve original order; skip anything we already picked.
+    for v in variants:
+        if len(picked) >= 6:
+            break
+        if v.get("sha") in seen:
+            continue
+        seen.add(v.get("sha"))
+        picked.append(v)
+    out["images_variants"] = picked[:6]
     return out
 
 
