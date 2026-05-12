@@ -685,7 +685,8 @@
   },
   "seo": {
     "all_auctions_title": "All auctions",
-    "all_auctions_description": "Browse all active car auctions — filter by make, year, fuel and price."
+    "all_auctions_description": "Browse all active car auctions — filter by make, year, fuel and price.",
+    "auction_prefix": "Auction"
   },
   "inbox": {
     "overline": "Inbox",

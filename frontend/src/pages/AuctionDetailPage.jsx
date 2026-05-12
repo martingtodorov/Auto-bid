@@ -162,26 +162,51 @@ export default function AuctionDetailPage() {
     if (!a) return;
     const url = window.location.href;
     const origin = window.location.origin;
+    const lang = (i18n.resolvedLanguage || i18n.language || "bg").slice(0, 2);
     const breadcrumbs = buildBreadcrumbs([
       { name: t("nav.home", "Home"), url: origin + "/" },
       { name: t("nav.auctions", "Auctions"), url: origin + "/auctions" },
       { name: a.title, url },
     ]);
     const vehicle = buildVehicleJsonLd(a, url);
-    const brand = brandNameForLang(i18n.resolvedLanguage || i18n.language);
+    const brand = brandNameForLang(lang);
+
+    // ---- Locale-aware title / description ---------------------------------
+    // Fallback verige: Gemini cache (`title_<lang>` / `seo_description_<lang>`)
+    // → пълно описание на локала → BG оригинал.
+    const auctionPrefix = t("seo.auction_prefix", "Auction");
+    const titleLocalized = a[`title_${lang}`] || a.title || "";
+    const finalTitle = `${auctionPrefix} ${titleLocalized} — ${brand}`;
+    const finalDescription =
+      a[`seo_description_${lang}`] ||
+      (a[`description_${lang}`] || "").slice(0, 280) ||
+      (a.description || "").slice(0, 280);
+
+    // ---- Cross-domain alternates (hreflang) -------------------------------
+    // Същият path се сервира на трите TLD-та; DomainDetector ще избере
+    // правилния език при посещение от crawler / потребител.
+    const path = window.location.pathname + window.location.search;
+    const alternates = {
+      bg: `https://autoandbid.bg${path}`,
+      en: `https://autoandbid.com${path}`,
+      ro: `https://autoandbid.ro${path}`,
+    };
+
     setPageMeta({
-      title: `${a.title} — ${brand}`,
-      description: a.description,
+      title: finalTitle,
+      description: finalDescription,
       // Dynamic per-auction OG image (English, with Auto&Bid wordmark,
       // time remaining + current bid). Backend endpoint returns a
       // 1200×630 PNG keyed on bid + ends_at so crawlers see fresh
       // numbers after each bid.
       image: `${API_BASE}/og/auction/${a.id}.png`,
       url,
+      locale: lang,
+      alternates,
       jsonLd: combineJsonLd(vehicle, breadcrumbs),
     });
     return () => resetPageMeta();
-  }, [a]);
+  }, [a, i18n.language, i18n.resolvedLanguage]);
 
   const toggleWatch = async () => {
     if (!user) { navigate("/login?next=/auctions/" + id); return; }

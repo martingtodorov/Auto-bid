@@ -2262,3 +2262,36 @@ Frontend: Wallet иконка + сума след "Настройки", пока
 **Net effect**: Потребителят сега вижда единствен модал за
 авторизация с ясно едно действие — "Това е колкото ще наддавам,
 блокирайте 2% на картата".
+
+
+---
+
+## 12 May 2026 — Locale-aware SEO title prefix + frontend hreflang (DONE)
+
+**Цел**: Auction detail title-ите да започват с локализирана дума „Търг / Licitație / Auction" преди марката, и SPA-та да emit-ва hreflang + og:locale + html.lang за трите езика (по аналогия с backend `/api/share/auction/{id}`).
+
+**Frontend (`/app/frontend/src/pages/AuctionDetailPage.jsx`):**
+- `useEffect` за SEO meta вече използва verige fallback:
+  - Title: `seo.auction_prefix` + `a.title_<lang>` → `a.title` + " — " + brand-per-lang
+  - Description: `a.seo_description_<lang>` → `a.description_<lang>[:280]` → `a.description[:280]`
+- Подава `locale` (за `<html lang>` + `og:locale`) и `alternates: {bg, en, ro}` на `setPageMeta()`.
+- `useEffect` deps: `[a, i18n.language, i18n.resolvedLanguage]` — преоценява при смяна на език.
+
+**Backend (`/app/backend/routers/seo.py`):**
+- SSR title (`/api/share/auction/{id}`) сега също включва prefix-а:
+  - `prefix = {"bg": "Търг", "en": "Auction", "ro": "Licitație"}[resolved_lang]`
+  - `title = f"{prefix} {title_localized} — {brand}"`
+
+**i18n**: нов ключ `seo.auction_prefix` в bg/en/ro локалите.
+
+**Verified end-to-end (Playwright + curl):**
+- BG: `Търг BMW M2 ... — Auto&Bid.bg` · `og:locale=bg_BG` · `html.lang=bg` · 4 hreflang таг(а)
+- RO: `Licitație BMW M2 ... — Auto&Bid.ro` · `og:locale=ro_RO` · `html.lang=ro`
+- EN: `Auction BMW M2 ... — Auto&Bid.com` · `og:locale=en_US` · `html.lang=en`
+- SSR endpoint връща съответните prefix-и + локализирани описания (вкл. EN Gemini cache).
+
+**Файлове:**
+- `/app/frontend/src/pages/AuctionDetailPage.jsx`
+- `/app/backend/routers/seo.py`
+- `/app/frontend/src/i18n/locales/{bg,ro,en}.json`
+

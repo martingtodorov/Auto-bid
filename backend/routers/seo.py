@@ -462,7 +462,8 @@ async def share_auction(
         # make/model line so it's safe across locales).
         title_localized = a.get(f"title_{resolved_lang}") or a.get("title") or ""
         brand = {"bg": "autoandbid.bg", "en": "autoandbid.com", "ro": "autoandbid.ro"}[resolved_lang]
-        title = f"{title_localized} — {brand}"
+        prefix = {"bg": "Търг", "en": "Auction", "ro": "Licitație"}[resolved_lang]
+        title = f"{prefix} {title_localized} — {brand}"
         # Description: prefer the short SEO snippet (cached as
         # `seo_description_<lang>` at approve time, ≤280 chars).
         # Fallback chain: full localised description → full BG
