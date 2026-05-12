@@ -208,7 +208,14 @@ export default function AuctionCard({ auction, compact = false, priority = false
                   key={idx}
                   className={`block w-1.5 h-1.5 rounded-full transition-all ${
                     idx === activeSlide
-                      ? (s.kind === "cta" ? "bg-[hsl(var(--accent))] w-3" : "bg-white w-3")
+                      ? (s.kind === "cta"
+                          ? "bg-[hsl(var(--accent))] w-3"
+                          // Use an arbitrary `#ffffff` value (not the
+                          // `bg-white` class) so the dark-theme
+                          // `.bg-white` remap defined in index.css
+                          // can't catch it — pagination dots must stay
+                          // crisp-white on both themes.
+                          : "bg-[#ffffff] w-3")
                       : "bg-white/50"
                   }`}
                   aria-hidden="true"
