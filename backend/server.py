@@ -18,7 +18,7 @@ import bcrypt
 import jwt
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Query, WebSocket, WebSocketDisconnect, Response
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Query, WebSocket, WebSocketDisconnect, Response, UploadFile, File
 from fastapi.responses import PlainTextResponse
 from starlette.middleware.cors import CORSMiddleware
 import re
@@ -1340,6 +1340,167 @@ async def _ensure_seo_translations(auction_id: str, a: dict) -> dict:
     if patch:
         await db.auctions.update_one({"id": auction_id}, {"$set": patch})
     return patch
+
+_video_upload_in_flight: set[str] = set()  # user_ids actively uploading
+
+@api.post("/sell/video-upload")
+@limiter.limit("5/minute")
+async def upload_sell_video(
+    request: Request,
+    file: UploadFile = File(...),
+    user: dict = Depends(require_verified_email),
+):
+    """Sell-flow video upload with production guardrails.
+
+    Pipeline:
+      1. Reject if the user already has an in-flight upload (1 concurrent / user).
+      2. Reject if the user has exceeded their hourly / daily quota
+         (admins + verified dealers are exempt).
+      3. Stream up to 100 MB into a temp file. Anything bigger → 413.
+      4. Validate magic bytes (`ftyp` / EBML / RIFF) — cheap content sniff
+         so a renamed `.exe` never reaches ffprobe.
+      5. Probe duration with ffprobe → reject if > 60 s.
+      6. Move to /opt/autobids/uploads/videos/<sha>/source.<ext>.
+      7. Extract a poster JPG synchronously (cheap, 1 frame).
+      8. Enqueue AV1 transcode on the **single-worker queue**. The
+         request returns immediately with the original URL; the URL is
+         swapped to the AV1 version once the encoder finishes.
+    """
+    import tempfile
+    from services import video_processing as vp
+    from services import video_queue as vq
+
+    is_admin = user.get("role") in ("admin", "moderator")
+    is_dealer = bool(user.get("is_verified_dealer"))
+    bypass_limits = is_admin or is_dealer
+    uid = user["id"]
+
+    # ---- (1) Concurrent-upload guard ---------------------------------------
+    if uid in _video_upload_in_flight:
+        raise HTTPException(
+            status_code=429,
+            detail="Имате друго видео в процес на качване. Изчакайте го да приключи.",
+        )
+
+    # ---- (2) Hourly / daily quota (Mongo-backed, skipped for admins/dealers)
+    if not bypass_limits:
+        now = datetime.now(timezone.utc)
+        one_hour_ago = (now - timedelta(hours=1)).isoformat()
+        one_day_ago = (now - timedelta(hours=24)).isoformat()
+        hourly = await db.video_upload_log.count_documents(
+            {"user_id": uid, "created_at": {"$gte": one_hour_ago}}
+        )
+        if hourly >= 3:
+            raise HTTPException(
+                status_code=429,
+                detail="Достигнат е лимитът от 3 видеа на час. Опитайте по-късно.",
+            )
+        daily = await db.video_upload_log.count_documents(
+            {"user_id": uid, "created_at": {"$gte": one_day_ago}}
+        )
+        if daily >= 10:
+            raise HTTPException(
+                status_code=429,
+                detail="Достигнат е лимитът от 10 видеа на ден. Опитайте утре.",
+            )
+
+    if not file or not file.filename:
+        raise HTTPException(status_code=400, detail="No file uploaded")
+
+    # ---- (3) Stream to temp file (≤100 MB) ---------------------------------
+    _video_upload_in_flight.add(uid)
+    tmp = tempfile.NamedTemporaryFile(
+        delete=False,
+        prefix="vidup_",
+        suffix=os.path.splitext(file.filename)[1] or ".bin",
+    )
+    tmp_path = tmp.name
+    total = 0
+    try:
+        while True:
+            chunk = await file.read(1024 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > vp.MAX_VIDEO_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Видеото е по-голямо от {vp.MAX_VIDEO_BYTES // (1024*1024)} MB",
+                )
+            tmp.write(chunk)
+        tmp.close()
+
+        # ---- (4-7) Validate + persist + poster ---------------------------------
+        try:
+            meta, av1_target = vp.process_uploaded_video(tmp_path, file.filename)
+        except ValueError as e:
+            logger.warning("video upload rejected for user=%s file=%s: %s", uid, file.filename, e)
+            raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        # Clean up tmp on validation failure
+        if os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError as e:
+                logger.warning("failed to cleanup tmp video %s: %s", tmp_path, e)
+        raise
+    except Exception:
+        if os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+        logger.exception("video upload crashed for user=%s file=%s", uid, file.filename)
+        raise HTTPException(status_code=500, detail="Качването пропадна, опитайте отново.")
+    finally:
+        _video_upload_in_flight.discard(uid)
+        if not tmp.closed:
+            tmp.close()
+
+    # ---- (8) Audit log + enqueue AV1 transcode -----------------------------
+    try:
+        await db.video_upload_log.insert_one({
+            "user_id": uid,
+            "sha": meta.get("sha"),
+            "duration_seconds": meta.get("video_duration_seconds"),
+            "size_bytes": total,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception as e:  # noqa: BLE001
+        logger.warning("video_upload_log insert failed: %s", e)
+
+    if av1_target and not os.path.exists(av1_target):
+        sha = meta.get("sha")
+        source_path = os.path.join(
+            vp.VIDEOS_DIR, sha[:2], sha[2:4], sha,
+            f"source{os.path.splitext(file.filename)[1].lower()}",
+        )
+        original_url = meta["video_url"]
+        av1_url = meta.get("av1_url_when_ready")
+
+        async def _on_av1_done(ok: bool):
+            if not ok:
+                return
+            # Attach AV1 URL as an *additional* field — NEVER overwrite
+            # `video_url`. Safari/Firefox still default to H.264, and the
+            # `<source>` MIME fallback chain in `<AuctionVideo>` picks
+            # AV1 only when the browser advertises support.
+            try:
+                await db.auctions.update_many(
+                    {"video_url": original_url},
+                    {"$set": {"video_url_av1": av1_url}},
+                )
+            except Exception as e:  # noqa: BLE001
+                logger.warning("AV1 attach failed for sha=%s: %s", sha, e)
+
+        await vq.enqueue(source_path, av1_target, vp.transcode_to_av1, _on_av1_done)
+
+    return {
+        "video_url": meta["video_url"],
+        "video_poster_url": meta["video_poster_url"],
+        "video_duration_seconds": meta["video_duration_seconds"],
+    }
+
 
 @api.post("/auctions")
 @limiter.limit("10/minute")
@@ -5150,6 +5311,8 @@ async def on_startup():
     await db.bidding_credits.create_index([("auction_id", 1), ("user_id", 1)])
     await db.makes.create_index("name", unique=True)
     await db.audit_log.create_index([("at", -1)])
+    # Video-upload rate-limit log: per-user query for hourly/daily counts.
+    await db.video_upload_log.create_index([("user_id", 1), ("created_at", -1)])
     # Stripe webhook idempotency dedupe collection (unique on Stripe event id).
     try:
         await db.stripe_processed_events.create_index("id", unique=True)

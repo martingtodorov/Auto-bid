@@ -2363,3 +2363,73 @@ Frontend: Wallet иконка + сума след "Настройки", пока
 **Deploy**: Прилага се при следващия `ansible-playbook deploy_frontend.yml` или ръчно
 `scp` + `systemctl reload nginx` на `ab-front1`.
 
+
+
+---
+
+## 12 May 2026 — Video Upload + Production Guardrails + Client-side AVIF + SEO P2 (DONE)
+
+### 🎬 Sell-flow Video Upload (≤60s, ≤100MB, one per listing)
+
+**Backend (`/app/backend/services/video_processing.py`, `services/video_queue.py`):**
+- `POST /api/sell/video-upload` (verified-email only). Streams ≤100MB into temp file, magic-bytes sniff (`ftyp` / EBML / RIFF), ffprobe duration ≤60s, persists to `/opt/autobids/uploads/videos/<sha[:2]>/<sha[2:4]>/<sha>/source.<ext>`.
+- Synchronous poster JPEG extraction (frame at t=1s).
+- Async AV1 transcode (`libsvtav1 preset=8 crf=32` + `libopus` audio) queued on a **single-worker asyncio queue** with 180s hard timeout. Encoder runs at most 1 job at a time — won't pin all cores.
+- Models gained: `video_url`, `video_url_av1`, `video_poster_url`, `video_duration_seconds` (in `AuctionCreate` + `AuctionUpdate` + `AdminAuctionUpdate`).
+
+**Guardrails (production):**
+1. Verified email required (`require_verified_email` dep).
+2. Max 1 concurrent upload per user (in-process set).
+3. Hourly limit 3 / daily 10 (Mongo-backed `video_upload_log` collection with compound index). **Admin + verified dealers exempt.**
+4. Hard caps: 100MB body limit in nginx (`location = /api/sell/video-upload`) + backend streaming check.
+5. Magic-bytes check rejects renamed non-video payloads.
+6. Failed uploads → temp file cleaned, structured log entry.
+7. AV1 transcode timeout 180s; on timeout partial output deleted.
+8. AV1 URL is attached as separate `video_url_av1` (NEVER overwrites `video_url`) so Safari / Firefox still get H.264.
+
+**Frontend:**
+- `VideoUploader.jsx` — file picker, client-side duration probe (HTML5 `<video>` metadata), upload progress bar, poster preview with play overlay, retry/remove controls.
+- `AuctionVideo.jsx` — poster + centered play button overlay; on click renders native `<video>` with `<source>` MIME chain (AV1 first → H.264 fallback). 100% native player, no JS deps.
+- Added to `AuctionDetailPage` after description text (per user spec).
+- i18n keys: `auction.video_section`, `auction.video_badge`, `auction.play_video`, `auction.video_poster_alt`, `sell.video_*`.
+
+**Verified end-to-end**:
+- 10s valid video → 200 OK, AV1 transcoded in ~5s ✅
+- Fake `.mp4` (text content) → 400 "magic bytes" ✅
+- 70s video → 400 "duration exceeds 60s" ✅
+- 4th upload from non-admin user → 429 "hourly limit" ✅
+- Unauthenticated → 401 ✅
+- Playwright detail page → AuctionVideo section + play button + native `<video>` after click ✅
+
+### 🖼️ Client-side AVIF compression for photos (`ImageUploader.jsx`)
+- Feature-detect `canvas.toDataURL("image/avif")` once at module load.
+- When supported (Chrome 105+, Edge, Brave, modern Android) → encode at AVIF q=0.55 (≈ JPEG q=0.82 perceptually, ~40% smaller).
+- Falls back to JPEG silently when AVIF encode fails / browser unsupported.
+- Backend (`image_processing.py`) already accepts any `image/*` MIME — no backend change needed.
+- Typical 25-photo sell submission: ~37 MB → ~22 MB on supported browsers.
+
+### 🔍 SEO P2 fixes
+- **Sitemap dedup**: `_collect_imgs()` now normalizes URLs by stripping size-variant segments (`/big1/`, `/big2/`, `/thumb/`, `/md/`, etc.) before dedup. Eliminates ≈50% duplicate `<image:loc>` entries.
+- **priceValidUntil**: SOLD/ENDED auctions now use `finalized_at + 30 days` instead of stale `ends_at`. LIVE auctions still use `ends_at`. Synced in backend (`routers/seo.py`) and frontend (`lib/seo.js`).
+- Verified: BMW M2 ended auction → `priceValidUntil: 2026-06-11` ✅
+
+### 📁 Files changed
+- `/app/backend/server.py` (+170 LOC video endpoint + index)
+- `/app/backend/services/video_processing.py` (new)
+- `/app/backend/services/video_queue.py` (new)
+- `/app/backend/models.py` (video fields × 3 models)
+- `/app/backend/routers/seo.py` (dedup + priceValidUntil)
+- `/app/frontend/src/components/VideoUploader.jsx` (new)
+- `/app/frontend/src/components/AuctionVideo.jsx` (new)
+- `/app/frontend/src/components/ImageUploader.jsx` (AVIF feature-detect)
+- `/app/frontend/src/pages/SellPage.jsx` (mount uploader after description)
+- `/app/frontend/src/pages/AuctionDetailPage.jsx` (mount AuctionVideo after description)
+- `/app/frontend/src/lib/seo.js` (priceValidUntil parity)
+- `/app/frontend/package.json` (browser-image-compression dep)
+- `/app/deploy/hetzner/nginx/autoandbid.conf` (100MB body cap for `/api/sell/video-upload`)
+- New i18n keys for bg/ro/en.
+
+### 🚀 Deploy
+- Backend: `ansible-playbook -i inventory.ini playbooks/deploy_backend.yml` (or systemctl restart `autobids-backend`). Apt package `ffmpeg` already in role.
+- Frontend: `ansible-playbook -i inventory.ini playbooks/deploy_frontend.yml` (also picks up the new img.autoandbid.bg vhost + 100MB body cap).
+

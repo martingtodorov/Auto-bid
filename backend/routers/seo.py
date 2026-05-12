@@ -143,7 +143,24 @@ def _json_ld_vehicle(a: dict, url: str) -> str:
         "itemCondition": "https://schema.org/UsedCondition",
         "seller": seller,
     }
-    if a.get("ends_at"):
+    # priceValidUntil:
+    #  - LIVE auction → `ends_at` (when bidding closes)
+    #  - SOLD / ENDED → finalized_at + 30 days (post-sale snippet stays
+    #    fresh in Google's cache instead of going stale on the close timestamp)
+    #  - SCHEDULED / OTHER → fall back to ends_at if present
+    if status in ("sold", "ended", "reserve_not_met") and a.get("finalized_at"):
+        try:
+            from datetime import datetime, timedelta
+            fin = a["finalized_at"]
+            if isinstance(fin, str):
+                fin_dt = datetime.fromisoformat(fin.replace("Z", "+00:00"))
+            else:
+                fin_dt = fin
+            offers["priceValidUntil"] = (fin_dt + timedelta(days=30)).isoformat()
+        except Exception:  # noqa: BLE001
+            if a.get("ends_at"):
+                offers["priceValidUntil"] = a.get("ends_at")
+    elif a.get("ends_at"):
         offers["priceValidUntil"] = a.get("ends_at")
 
     data = {
@@ -259,6 +276,15 @@ def _schema_enum(kind: str, value):
 
 
 def _collect_imgs(a: dict, max_count: int) -> list:
+    """Return up to `max_count` unique image URLs for an auction.
+
+    Dedupes by *normalized* path: `…/big1/front.jpg` and `…/front.jpg`
+    collapse to the same logical image so Google sees one URL per shot
+    instead of ~2× duplicates (originals + size variants). Earlier
+    entries win — i.e. the order in `images_exterior` is preserved.
+    """
+    import re
+
     imgs_all = (
         (a.get("images_exterior") or [])
         + (a.get("images_interior") or [])
@@ -266,12 +292,17 @@ def _collect_imgs(a: dict, max_count: int) -> list:
         + (a.get("images_bumper") or [])
         + (a.get("images") or [])
     )
+    # Strip variant/size segments: /big1/, /big2/, /thumb/, /md/, /lg/, /sm/.
+    _variant_re = re.compile(r"/(big\d+|thumb|sm|md|lg|xl|original)/", re.I)
     seen = set()
     clean = []
     for img in imgs_all:
-        if not img or not isinstance(img, str) or img.startswith("data:") or img in seen:
+        if not img or not isinstance(img, str) or img.startswith("data:"):
             continue
-        seen.add(img)
+        normalized = _variant_re.sub("/", img)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
         clean.append(img)
         if len(clean) >= max_count:
             break

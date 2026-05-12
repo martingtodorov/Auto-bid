@@ -72,6 +72,23 @@ export default function ImageUploader({
   // shot), we recompress at q=0.7 and 1280 px as a safety net.
   const TARGET_BYTES = 1.5 * 1024 * 1024; // 1.5 MB upper bound per photo
 
+  // Feature-detect canvas AVIF encoding (Chrome 105+, Edge, Brave, modern
+  // Android). Safari and Firefox still return null/throw — they fall
+  // back to JPEG. AVIF cuts payloads ~40% vs JPEG at equivalent
+  // perceptual quality, so a typical 25-photo sell submission goes
+  // from ~37 MB → ~22 MB on supported browsers without any quality
+  // loss visible to humans.
+  const _supportsAvifEncode = (() => {
+    try {
+      const c = document.createElement("canvas");
+      c.width = c.height = 4;
+      const d = c.toDataURL("image/avif");
+      return typeof d === "string" && d.startsWith("data:image/avif");
+    } catch {
+      return false;
+    }
+  })();
+
   const encodeAtQuality = (img, longEdge, quality) => {
     const canvas = document.createElement("canvas");
     let w = img.width, h = img.height;
@@ -81,10 +98,24 @@ export default function ImageUploader({
     }
     canvas.width = w; canvas.height = h;
     const ctx = canvas.getContext("2d");
-    // White background so transparent PNGs don't show black after JPEG
+    // White background so transparent PNGs don't show black after JPEG/AVIF
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, w, h);
     ctx.drawImage(img, 0, 0, w, h);
+    // AVIF when the browser supports encoding it natively — quality
+    // 0.55 ≈ JPEG 0.82 perceptually but ~40% smaller. Fall back to
+    // JPEG when the encode unexpectedly fails (returns a tiny stub).
+    if (_supportsAvifEncode) {
+      const avifQ = Math.max(0.4, Math.min(0.7, quality - 0.25));
+      try {
+        const avif = canvas.toDataURL("image/avif", avifQ);
+        if (avif && avif.startsWith("data:image/avif") && avif.length > 1024) {
+          return avif;
+        }
+      } catch {
+        /* fall through to JPEG */
+      }
+    }
     return canvas.toDataURL("image/jpeg", quality);
   };
 

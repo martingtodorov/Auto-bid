@@ -15,6 +15,7 @@ import Lightbox from "../components/Lightbox";
 import Avatar from "../components/Avatar";
 import { useSiteSettings, computeBuyerFee } from "../lib/settings";
 import { setPageMeta, resetPageMeta, buildVehicleJsonLd, buildBreadcrumbs, combineJsonLd } from "../lib/seo";
+import AuctionVideo from "../components/AuctionVideo";
 import { brandNameForLang } from "../i18n/index";
 import { auctionUrl } from "../lib/auctionUrl";
 
@@ -872,6 +873,21 @@ export default function AuctionDetailPage() {
                 preTranslated={{ ro: a.description_ro || "", en: a.description_en || "" }}
               />
             </div>
+
+            {a.video_url && (
+              <div className="mt-10" data-testid="auction-video-section">
+                <div className="overline text-[hsl(var(--ink-muted))]">{t("auction.video_section", "Видео на колата")}</div>
+                <h2 className="sr-only">{t("auction.video_section", "Видео на колата")} — {a.title}</h2>
+                <div className="mt-3 max-w-3xl">
+                  <AuctionVideo
+                    src={a.video_url.startsWith("http") ? a.video_url : `${API_BASE}${a.video_url}`}
+                    srcAv1={a.video_url_av1 ? (a.video_url_av1.startsWith("http") ? a.video_url_av1 : `${API_BASE}${a.video_url_av1}`) : null}
+                    poster={a.video_poster_url ? (a.video_poster_url.startsWith("http") ? a.video_poster_url : `${API_BASE}${a.video_poster_url}`) : null}
+                    duration={a.video_duration_seconds}
+                  />
+                </div>
+              </div>
+            )}
 
             {a.status === "reserve_not_met" && (
               <NegotiationPortal auctionId={id} auction={a} />

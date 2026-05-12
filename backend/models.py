@@ -51,6 +51,10 @@ class AuctionCreate(BaseModel):
     images_wheels: List[str] = []
     images_bumper: List[str] = []
     images_interior: List[str] = []
+    video_url: Optional[str] = None  # /api/uploads/videos/... (H.264, universal)
+    video_url_av1: Optional[str] = None  # /api/uploads/videos/... (AV1, smaller; attached async)
+    video_poster_url: Optional[str] = None  # auto-extracted frame for play overlay
+    video_duration_seconds: Optional[float] = None
     starting_bid_eur: float
     reserve_eur: Optional[float] = None
     no_reserve: Optional[bool] = False
@@ -99,6 +103,10 @@ class AuctionUpdate(BaseModel):
     images_wheels: Optional[List[str]] = None
     images_bumper: Optional[List[str]] = None
     images_interior: Optional[List[str]] = None
+    video_url: Optional[str] = None
+    video_url_av1: Optional[str] = None
+    video_poster_url: Optional[str] = None
+    video_duration_seconds: Optional[float] = None
     color: Optional[str] = None
     region: Optional[str] = None
     city: Optional[str] = None
@@ -129,6 +137,10 @@ class AdminAuctionUpdate(BaseModel):
     images_wheels: Optional[List[str]] = None
     images_bumper: Optional[List[str]] = None
     images_interior: Optional[List[str]] = None
+    video_url: Optional[str] = None
+    video_url_av1: Optional[str] = None
+    video_poster_url: Optional[str] = None
+    video_duration_seconds: Optional[float] = None
     starting_bid_eur: Optional[float] = None
     reserve_eur: Optional[float] = None
     no_reserve: Optional[bool] = None

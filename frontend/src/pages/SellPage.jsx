@@ -5,6 +5,7 @@ import { useAuth, formatError } from "../lib/auth";
 import { api } from "../lib/apiClient";
 import { translateEnum } from "../lib/carTranslations";
 import ImageUploader from "../components/ImageUploader";
+import VideoUploader from "../components/VideoUploader";
 
 const FUELS = [
   "Бензин",
@@ -96,6 +97,9 @@ const emptyForm = (user) => ({
   images_wheels: [],
   images_bumper: [],
   images_interior: [],
+  video_url: null,
+  video_poster_url: null,
+  video_duration_seconds: null,
   starting_bid_eur: 5000, reserve_eur: "",
   no_reserve: false,
   buy_now_eur: "",
@@ -755,6 +759,22 @@ export default function SellPage() {
             <Field label={t("sell.form.description")} span={2}>
               <textarea required value={form.description} onChange={(e) => set("description", e.target.value)} rows={6} className="w-full border border-[hsl(var(--line))] p-3 text-sm rounded-card bg-[hsl(var(--surface))]" placeholder={t("sell.form.description_placeholder")} data-testid="sell-description" />
             </Field>
+
+            <div className="md:col-span-2">
+              <VideoUploader
+                value={{
+                  video_url: form.video_url,
+                  video_poster_url: form.video_poster_url,
+                  video_duration_seconds: form.video_duration_seconds,
+                }}
+                onChange={(v) => {
+                  set("video_url", v.video_url);
+                  set("video_poster_url", v.video_poster_url);
+                  set("video_duration_seconds", v.video_duration_seconds);
+                }}
+                onError={(msg) => setErr(msg)}
+              />
+            </div>
 
             {err && <p className="md:col-span-2 text-sm text-[hsl(var(--danger))]" data-testid="sell-error">{err}</p>}
 

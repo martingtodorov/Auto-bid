@@ -179,7 +179,21 @@ export function buildVehicleJsonLd(a, url) {
     itemCondition: "https://schema.org/UsedCondition",
     seller,
   };
-  if (a.ends_at) offer.priceValidUntil = a.ends_at; // ISO timestamp -> auction end
+  // priceValidUntil:
+  //  - LIVE auction → `ends_at`
+  //  - SOLD / ENDED → finalized_at + 30 days (snippet stays fresh
+  //    post-sale instead of going stale on the close timestamp).
+  if (["sold", "ended", "reserve_not_met"].includes(a.status) && a.finalized_at) {
+    try {
+      const fin = new Date(a.finalized_at);
+      fin.setDate(fin.getDate() + 30);
+      offer.priceValidUntil = fin.toISOString();
+    } catch {
+      if (a.ends_at) offer.priceValidUntil = a.ends_at;
+    }
+  } else if (a.ends_at) {
+    offer.priceValidUntil = a.ends_at;
+  }
   if (a.reserve_eur && !a.no_reserve) {
     // Expose reserve as a PriceSpecification range hint (min = current, max = reserve)
     offer.priceSpecification = {
