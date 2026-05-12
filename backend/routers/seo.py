@@ -5,6 +5,7 @@ Extracted from server.py to keep auction/bidding logic focused.
 import os
 import re
 import json as _json
+import json
 from html import escape as _esc
 from typing import Optional
 
@@ -625,3 +626,199 @@ async def share_auction(
 </body>
 </html>"""
     return Response(content=html, media_type="text/html; charset=utf-8")
+
+
+
+# ============================================================================
+# Listing-page SSR (for non-JS crawlers — Bing, Facebook, Twitter, Apple News)
+# ============================================================================
+# Google JS-renders these listings fine on its own, but Bing / Facebook /
+# Twitter / smaller crawlers still need a static HTML snapshot. Nginx
+# rewrites `/(auctions|sales|leaderboard)` → `/api/share/$1` when the
+# UA matches `$is_social_bot`; the response is a fully populated meta
+# page that immediately client-redirects browsers back to the SPA route.
+
+# Static i18n payload — title, description, schema.org type per route.
+# Keep it inline (no DB lookup) so the response is fast and crawlable
+# even if Mongo is unreachable.
+_LISTING_META = {
+    "auctions": {
+        "bg": ("Активни автомобилни търгове · Auto&Bid",
+               "Разгледайте всички активни автомобилни търгове в България — филтрирайте по марка, година, гориво и цена. Уникални оферти всеки ден."),
+        "en": ("Live car auctions · Auto&Bid",
+               "Browse all active car auctions — filter by make, year, fuel and price. New cars added daily across Bulgaria, Romania and EU."),
+        "ro": ("Licitații auto active · Auto&Bid",
+               "Răsfoiește toate licitațiile auto active — filtrează după marcă, an, combustibil și preț. Mașini noi zilnic în România și UE."),
+    },
+    "sales": {
+        "bg": ("Продадени автомобили · Auto&Bid",
+               "Архив на скорошните продажби — реални финални цени, спецификации и снимки от приключилите търгове. Прозрачно ценообразуване."),
+        "en": ("Sold cars archive · Auto&Bid",
+               "Archive of recently sold vehicles — real final prices, specs and photos from closed auctions. Transparent pricing data."),
+        "ro": ("Arhivă mașini vândute · Auto&Bid",
+               "Arhivă cu mașini vândute recent — prețuri finale reale, specificații și fotografii de la licitații încheiate. Date transparente."),
+    },
+    "leaderboard": {
+        "bg": ("Класация на участниците · Auto&Bid",
+               "Топ купувачи и продавачи в Auto&Bid платформата — спечелени търгове, обем сделки, успеваемост. Социално доказателство в действие."),
+        "en": ("Buyer & seller leaderboard · Auto&Bid",
+               "Top performing buyers and sellers on Auto&Bid — won auctions, transaction volume and success rate. Social proof for serious traders."),
+        "ro": ("Clasament cumpărători & vânzători · Auto&Bid",
+               "Cei mai performanți cumpărători și vânzători de pe Auto&Bid — licitații câștigate, volum de tranzacții și rata de succes."),
+    },
+}
+
+
+def _listing_lang_from_request(request: Request, override: Optional[str]) -> str:
+    """Same locale resolution chain as the auction-share endpoint."""
+    if override in ("bg", "en", "ro"):
+        return override
+    host = (request.headers.get("host") or "").lower()
+    if host.endswith(".bg"):
+        return "bg"
+    if host.endswith(".ro"):
+        return "ro"
+    if host.endswith(".com") or host.endswith(".org") or host.endswith(".net"):
+        return "en"
+    first = (request.headers.get("accept-language") or "").split(",")[0].strip().lower().split("-")[0]
+    if first in ("bg", "en", "ro"):
+        return first
+    return "bg"
+
+
+async def _build_listing_ssr(
+    request: Request,
+    page_key: str,
+    page_path: str,
+    lang: Optional[str] = None,
+    json_ld_extra: Optional[str] = None,
+) -> Response:
+    """Compose a fully-populated meta HTML for one of the listing pages.
+
+    The body contains the title/description + a `meta refresh` to the
+    real SPA URL so a curious human who actually loads it is redirected
+    immediately. Crawlers only read `<head>` so they see the metadata.
+    """
+    resolved_lang = _listing_lang_from_request(request, lang)
+    title, description = _LISTING_META[page_key][resolved_lang]
+    og_locale = {"bg": "bg_BG", "en": "en_US", "ro": "ro_RO"}[resolved_lang]
+    canonical_base = _canonical_base_for_lang(resolved_lang)
+    target = f"{canonical_base}{page_path}"
+    image = f"{canonical_base}/og-default.jpg"
+    tld_map = {"bg": "autoandbid.bg", "en": "autoandbid.com", "ro": "autoandbid.ro"}
+    alt_links = [(code, f"https://{domain}{page_path}") for code, domain in tld_map.items()]
+    alt_links.append(("x-default", f"https://{tld_map['en']}{page_path}"))
+    hreflang_html = "\n".join(
+        f'<link rel="alternate" hreflang="{code}" href="{_esc(href)}">'
+        for code, href in alt_links
+    )
+
+    # Default JSON-LD: WebPage + BreadcrumbList; routes can append
+    # ItemList via `json_ld_extra`.
+    base_jsonld = {
+        "@context": "https://schema.org",
+        "@graph": [
+            {
+                "@type": "WebPage",
+                "name": title,
+                "description": description,
+                "url": target,
+                "inLanguage": resolved_lang,
+            },
+            {
+                "@type": "BreadcrumbList",
+                "itemListElement": [
+                    {"@type": "ListItem", "position": 1, "name": "Auto&Bid", "item": canonical_base},
+                    {"@type": "ListItem", "position": 2, "name": title, "item": target},
+                ],
+            },
+        ],
+    }
+    json_ld_html = f'<script type="application/ld+json">{json.dumps(base_jsonld, ensure_ascii=False)}</script>'
+    if json_ld_extra:
+        json_ld_html += f'\n<script type="application/ld+json">{json_ld_extra}</script>'
+
+    html = f"""<!DOCTYPE html>
+<html lang="{resolved_lang}">
+<head>
+<meta charset="UTF-8">
+<title>{_esc(title)}</title>
+<meta name="description" content="{_esc(description)}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="autoandbid">
+<meta property="og:title" content="{_esc(title)}">
+<meta property="og:description" content="{_esc(description)}">
+<meta property="og:image" content="{_esc(image)}">
+<meta property="og:url" content="{_esc(target)}">
+<meta property="og:locale" content="{og_locale}">
+<meta property="og:locale:alternate" content="bg_BG">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:locale:alternate" content="ro_RO">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{_esc(title)}">
+<meta name="twitter:description" content="{_esc(description)}">
+<meta name="twitter:image" content="{_esc(image)}">
+<link rel="canonical" href="{_esc(target)}">
+{hreflang_html}
+{json_ld_html}
+<meta http-equiv="refresh" content="0; url={_esc(target)}">
+</head>
+<body>
+<h1>{_esc(title)}</h1>
+<p>{_esc(description)}</p>
+<p><a href="{_esc(target)}">{_esc(target)}</a></p>
+<script>window.location.replace({json.dumps(target)});</script>
+</body>
+</html>"""
+    return Response(content=html, media_type="text/html; charset=utf-8")
+
+
+@router.get("/share/auctions", response_class=PlainTextResponse)
+async def share_auctions_listing(request: Request, lang: Optional[str] = Query(None, regex="^(bg|en|ro)$")):
+    """SSR snapshot of the live-auctions listing.
+
+    Adds an ItemList JSON-LD with the top 12 live auctions so Google /
+    Bing can build a rich preview ("X car auctions, starting from …").
+    Crawlers without JS rendering still get all the listing data they
+    need to decide if the page is worth indexing.
+    """
+    cursor = db.auctions.find(
+        {"status": "live", "is_archived": {"$ne": True}},
+        {
+            "_id": 0, "id": 1, "title": 1, "current_bid_eur": 1,
+            "starting_bid_eur": 1, "year": 1, "make": 1, "model": 1,
+        },
+    ).sort("ends_at", 1).limit(12)
+    auctions = await cursor.to_list(12)
+    resolved_lang = _listing_lang_from_request(request, lang)
+    canonical_base = _canonical_base_for_lang(resolved_lang)
+    item_list = {
+        "@context": "https://schema.org",
+        "@type": "ItemList",
+        "numberOfItems": len(auctions),
+        "itemListElement": [
+            {
+                "@type": "ListItem",
+                "position": i + 1,
+                "url": f"{canonical_base}{_auction_slug_url(a)}",
+                "name": a.get("title") or f"{a.get('make','')} {a.get('model','')}".strip(),
+            }
+            for i, a in enumerate(auctions)
+        ],
+    }
+    return await _build_listing_ssr(
+        request, "auctions", "/auctions", lang=lang,
+        json_ld_extra=json.dumps(item_list, ensure_ascii=False),
+    )
+
+
+@router.get("/share/sales", response_class=PlainTextResponse)
+async def share_sales_listing(request: Request, lang: Optional[str] = Query(None, regex="^(bg|en|ro)$")):
+    """SSR snapshot of the sold-cars archive."""
+    return await _build_listing_ssr(request, "sales", "/sales", lang=lang)
+
+
+@router.get("/share/leaderboard", response_class=PlainTextResponse)
+async def share_leaderboard(request: Request, lang: Optional[str] = Query(None, regex="^(bg|en|ro)$")):
+    """SSR snapshot of the buyer/seller leaderboard."""
+    return await _build_listing_ssr(request, "leaderboard", "/leaderboard", lang=lang)

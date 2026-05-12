@@ -2433,3 +2433,56 @@ Frontend: Wallet иконка + сума след "Настройки", пока
 - Backend: `ansible-playbook -i inventory.ini playbooks/deploy_backend.yml` (or systemctl restart `autobids-backend`). Apt package `ffmpeg` already in role.
 - Frontend: `ansible-playbook -i inventory.ini playbooks/deploy_frontend.yml` (also picks up the new img.autoandbid.bg vhost + 100MB body cap).
 
+
+
+---
+
+## 12 May 2026 — SEO P3: SSR meta for listing pages (DONE)
+
+**Цел**: Bing / Facebook / Twitter / Slack / Apple News (всички non-JS crawler-и) да получават
+fully-rendered HTML meta за /auctions, /sales и /leaderboard, не голия SPA index.html.
+
+**Backend (`/app/backend/routers/seo.py`):**
+- Нови endpoints:
+  - `GET /api/share/auctions` — listing + ItemList JSON-LD (top 12 live)
+  - `GET /api/share/sales` — sold archive
+  - `GET /api/share/leaderboard` — buyer/seller leaderboard
+- Shared helper `_build_listing_ssr()` — locale resolution (?lang= → host → Accept-Language → bg),
+  canonical TLD pinning, WebPage + BreadcrumbList JSON-LD, hreflang × 3 + x-default, og/twitter
+  meta, meta-refresh + JS fallback redirect.
+- Inline i18n за заглавия и описания (bg / en / ro) — без DB lookup, така SSR-ът работи дори
+  при недостъпна Mongo.
+
+**Nginx (`/app/deploy/hetzner/nginx/autoandbid.conf`):**
+- 6 нови `location` блока (`/auctions`, `/auctions/`, `/sales`, ... × 2) — всеки прави
+  `if ($is_social_bot = 1) { rewrite ^ /api/share/$page last; }`.
+- Същата UA-based техника, която вече работи за индивидуални auction URL-и. Реални потребители
+  получават React SPA-та през `try_files`; ботовете получават SSR.
+
+**Verified end-to-end (9/9 варианта):**
+| Path / Lang | `<html lang>` | Title (truncated) | Canonical |
+|---|---|---|---|
+| /auctions bg | `bg` | "Активни автомобилни търгове" | autoandbid.bg |
+| /auctions en | `en` | "Live car auctions" | autoandbid.com |
+| /auctions ro | `ro` | "Licitații auto active" | autoandbid.ro |
+| /sales bg | `bg` | "Продадени автомобили" | autoandbid.bg |
+| /sales en | `en` | "Sold cars archive" | autoandbid.com |
+| /sales ro | `ro` | "Arhivă mașini vândute" | autoandbid.ro |
+| /leaderboard bg | `bg` | "Класация на участниците" | autoandbid.bg |
+| /leaderboard en | `en` | "Buyer & seller leaderboard" | autoandbid.com |
+| /leaderboard ro | `ro` | "Clasament cumpărători..." | autoandbid.ro |
+
+ItemList JSON-LD структура валидна; ще се populate автоматично, когато има live търгове.
+
+**nginx syntax check**: `nginx -t` passed ✅
+
+### 🚀 Deploy
+```bash
+cd /app/deploy/hetzner/ansible
+ansible-playbook -i inventory.ini playbooks/deploy_backend.yml
+ansible-playbook -i inventory.ini playbooks/deploy_frontend.yml
+```
+
+След deploy, ботовете попадащи на `https://autoandbid.bg/auctions` ще получат SSR meta.
+Реални потребители продължават с React SPA-та.
+
