@@ -128,3 +128,31 @@
 - testing_agent_v3_fork (iteration_19.json) — 14/14 backend, 0 issues.
 - Manual smoke: `og:image` вече сочи към `mobistatic4.focus.bg/.../11774653575320034_hr.webp` (реалния headline на live auction).
 
+
+## 2026-05-12 — Iteration 20: Image CDN architecture + Mobile swipe + Pinch-zoom
+
+### Backend
+- Нов модул `services/image_variants.py` — генерира 12 варианти на снимка (AVIF q50 / WebP q75 / JPG q82) × 4 размера (200 thumb / 600 card / 1200 gallery / 1920 full). Content-addressed по sha256 → re-uploads безплатни. Disk layout: `<UPLOAD_DIR>/variants/<aa>/<bb>/<sha>/<size>.<ext>`.
+- HEIC support added (pillow_heif 1.3.0) — iOS uploads работят native без user conversion.
+- EXIF auto-rotate чрез `ImageOps.exif_transpose` — phone uploads излизат правилно ориентирани.
+- `public_variant_url()` респектира `IMAGE_CDN_BASE` env var → когато е празно (dev), URLs са relative `/api/uploads/variants/...`; когато е set (production), стават absolute `https://img.autoandbid.com/variants/...`. Готов за CDN subdomain без code промени.
+- `POST /api/auctions` + `POST /api/auctions/import-mobile-bg` сега генерират variants и записват `images_variants[]` на auction документа.
+- `_list_shape` slice-ва `images_variants` до първите 4 (за mobile swipe deck).
+
+### Frontend
+- Нов компонент `Picture.jsx` — AVIF → WebP → JPG fallback chain с retina-aware srcSet (1x/2x density steps). Graceful fallback към plain `<img>` за legacy auctions.
+- `AuctionCard.jsx` пренаписан с horizontal scroll-snap carousel (touch-action: pan-x → не блокира vertical scroll). 4 photo slides + 5th "View full auction" CTA slide (`auction-card-cta-slide`). Pagination dots, IntersectionObserver tracks active slide.
+- `AuctionDetailPage.jsx` hero + thumbstrip ползват `<Picture>` с `priority` за LCP optimization.
+- Premium UX: First image на mobile цена loaded eager + fetchpriority=high; lazy за останалите.
+
+### UX fixes
+- Premium pinch-zoom: премахнат `maximum-scale=1, user-scalable=no` от viewport meta + изтрит gesturestart blocker + double-tap watchdog от `index.js`. iOS Safari + Android Chrome вече позволяват zoom.
+- Sell page image reorder scroll lock: `onDragStart` сетва `body.style.overflow = "hidden"` (HTML5 desktop drag), restored на `onDragEnd`. Mobile touch drag вече има scroll lock от преди.
+
+### i18n (BG/EN/RO)
+- `auction.view_full_auction`: "Виж пълния търг" / "View full auction" / "Vezi licitația completă".
+
+### Tested
+- testing_agent_v3_fork (iteration_20.json) — 27/27 backend, 100% frontend UI verified, 0 issues, 0 action items.
+- Manual smoke: seeded test auction with variants → 4 `<picture>` elements + 1 CTA slide в card, 5 `<picture>` elements в detail. Pinch-zoom потвърден active.
+
