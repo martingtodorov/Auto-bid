@@ -1,6 +1,44 @@
 // Helper to update document meta tags dynamically (client-side)
 // Social media crawlers (FB, Twitter) may not execute JS — use /api/share/{id} for public sharing links.
 
+// --- Schema.org enum mapping (Cyrillic → canonical English) -----------------
+// Google's Rich Results validator rejects Cyrillic enum strings for
+// schema.org Vehicle properties. We map to the canonical English values
+// it expects; unknown inputs fall through unchanged.
+const _SCHEMA_ENUM = {
+  body_type: {
+    "Седан": "Sedan", "Хечбек": "Hatchback", "Хетчбек": "Hatchback",
+    "Купе": "Coupe", "Кабрио": "Convertible", "Кабриолет": "Convertible",
+    "Комби": "Estate", "Джип": "SUV", "Офроуд": "Off-road",
+    "Ван": "Van", "Миниван": "Minivan", "Пикап": "Pickup",
+    "Лимузина": "Limousine", "Родстер": "Roadster",
+  },
+  fuel: {
+    "Бензин": "Petrol", "Дизел": "Diesel", "Хибрид": "Hybrid",
+    "Хибриден": "Hybrid", "Plug-in хибрид": "Plug-in hybrid",
+    "Електричество": "Electric", "Електрически": "Electric",
+    "Газ/Бензин": "LPG/Petrol", "LPG": "LPG", "Метан": "CNG",
+    "Водороден": "Hydrogen",
+  },
+  transmission: {
+    "Автоматик": "Automatic", "Автоматична": "Automatic",
+    "Ръчна": "Manual", "Полуавтоматична": "Semi-automatic",
+    "Tiptronic": "Tiptronic", "Робот": "Automated", "Вариатор": "CVT",
+  },
+  color: {
+    "Бял": "White", "Черен": "Black", "Сив": "Grey", "Сребрист": "Silver",
+    "Червен": "Red", "Син": "Blue", "Зелен": "Green", "Жълт": "Yellow",
+    "Оранжев": "Orange", "Кафяв": "Brown", "Бежов": "Beige",
+    "Златист": "Gold", "Графит": "Graphite",
+    "Тъмно син": "Dark blue", "Тъмно сив": "Dark grey",
+  },
+};
+
+const schemaEnum = (kind, v) => {
+  if (!v || typeof v !== "string") return v;
+  return (_SCHEMA_ENUM[kind] && _SCHEMA_ENUM[kind][v]) || v;
+};
+
 const ensureMeta = (selector, attr, value) => {
   let el = document.head.querySelector(selector);
   if (!el) {
@@ -165,10 +203,10 @@ export function buildVehicleJsonLd(a, url) {
     vehicleModelDate: a.year,
     modelDate: a.year,
     productionDate: a.year ? `${a.year}` : undefined,
-    bodyType: a.body_type,
-    fuelType: a.fuel,
-    vehicleTransmission: a.transmission,
-    color: a.color,
+    bodyType: schemaEnum("body_type", a.body_type),
+    fuelType: schemaEnum("fuel", a.fuel),
+    vehicleTransmission: schemaEnum("transmission", a.transmission),
+    color: schemaEnum("color", a.color),
     image: (a.images || []).slice(0, 6),
     description: (a.description || "").slice(0, 600),
     url,

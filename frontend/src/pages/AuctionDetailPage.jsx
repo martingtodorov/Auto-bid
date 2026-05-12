@@ -545,6 +545,7 @@ export default function AuctionDetailPage() {
                   <div
                     className="font-serif text-[17px] leading-tight truncate text-[hsl(var(--ink))]"
                     data-testid="sticky-title"
+                    aria-hidden="true"
                   >
                     {a.title}
                   </div>
@@ -658,7 +659,7 @@ export default function AuctionDetailPage() {
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
           <div className="lg:col-span-8">
             <div className="overline text-[hsl(var(--accent))]">{a.make} · {translateEnum(a.body_type, "body_type", lng)}</div>
-            <h1 ref={titleRef} className="hidden lg:block font-serif text-3xl lg:text-5xl mt-3 tracking-tight leading-tight">{a.title}</h1>
+            <h1 ref={titleRef} className="font-serif text-2xl sm:text-3xl lg:text-5xl mt-3 tracking-tight leading-tight">{a.title}</h1>
             <div className="mt-3 text-sm text-[hsl(var(--ink-muted))] flex items-center gap-4 flex-wrap">
               <span>{a.year} · {formatKM(a.mileage_km)} · {translateEnum(a.fuel, "fuel", lng)} · {translateEnum(a.city, "city", lng)}{a.country ? `, ${a.country}` : ""}</span>
             </div>
@@ -756,7 +757,7 @@ export default function AuctionDetailPage() {
                             variant={a.images_variants?.[i]}
                             fallbackSrc={thumbSrc}
                             size="thumb"
-                            alt=""
+                            alt={`${a.title} — ${t("auction.photo", "снимка")} ${i + 1}`}
                             className="w-full h-full object-cover"
                           />
                           {isMobileLastVisible && (
@@ -853,6 +854,7 @@ export default function AuctionDetailPage() {
               <h2 className="sr-only">{t("auction.editorial_description")} — {a.title}</h2>
               <DescriptionWithInteriorShots
                 auctionId={id}
+                auctionTitle={a.title}
                 description={a.description}
                 interiorImages={a.images_interior || []}
                 interiorThumbnails={(() => {
@@ -1255,7 +1257,7 @@ export default function AuctionDetailPage() {
   );
 }
 
-function DescriptionWithInteriorShots({ auctionId, description, interiorImages, interiorThumbnails = [], interiorStartIdx = 0, onOpenLightbox, preTranslated = {} }) {
+function DescriptionWithInteriorShots({ auctionId, auctionTitle = "", description, interiorImages, interiorThumbnails = [], interiorStartIdx = 0, onOpenLightbox, preTranslated = {} }) {
   const { t, i18n } = useTranslation();
   const lang = (i18n.language || "bg").slice(0, 2);
   const needsTranslation = lang !== "bg" && !!(description || "").trim();
@@ -1387,7 +1389,7 @@ function DescriptionWithInteriorShots({ auctionId, description, interiorImages, 
           >
             <img
               src={thumbSrc}
-              alt="Interior"
+              alt={`${auctionTitle} — ${t("spec.interior", "интериор")} ${i + 1}`}
               loading="lazy"
               decoding="async"
               className="w-full h-auto object-cover max-h-[480px]"

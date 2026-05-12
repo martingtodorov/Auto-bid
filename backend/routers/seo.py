@@ -72,7 +72,7 @@ async def robots_txt(request: Request):
         "Cache-Control": "public, max-age=3600, no-transform",
         "X-Robots-Tag": "noindex",  # the file itself is not indexed
     }
-    frontend_base = _frontend_base(request)
+    frontend_base = _canonical_base_for_request(request)
     if await _deindex_enabled():
         body = (
             "# Site is in pre-launch deindex mode — search engines stay out.\n"
@@ -156,10 +156,10 @@ def _json_ld_vehicle(a: dict, url: str) -> str:
         "vehicleModelDate": a.get("year"),
         "modelDate": a.get("year"),
         "productionDate": str(a.get("year")) if a.get("year") else None,
-        "bodyType": a.get("body_type"),
-        "fuelType": a.get("fuel"),
-        "vehicleTransmission": a.get("transmission"),
-        "color": a.get("color"),
+        "bodyType": _schema_enum("body_type", a.get("body_type")),
+        "fuelType": _schema_enum("fuel", a.get("fuel")),
+        "vehicleTransmission": _schema_enum("transmission", a.get("transmission")),
+        "color": _schema_enum("color", a.get("color")),
         "mileageFromOdometer": {
             "@type": "QuantitativeValue", "value": a.get("mileage_km"), "unitCode": "KMT",
         } if a.get("mileage_km") else None,
@@ -183,6 +183,79 @@ def _frontend_base(request: Request) -> str:
         or request.headers.get("origin")
         or str(request.base_url).rstrip("/")
     ).rstrip("/")
+
+
+# --- Canonical-per-language domain mapping ------------------------------------
+# Production canonical URLs are pinned to the three TLDs regardless of which
+# host actually answers the request (preview, staging, *.emergentagent.com).
+# When the request *is* on one of the canonical TLDs we respect the language
+# implied by the host (e.g. autoandbid.bg → bg sitemap); otherwise we default
+# to the English `.com` canonical so dev/preview environments never leak into
+# Google's index.
+_LANG_TLD = {"bg": "autoandbid.bg", "en": "autoandbid.com", "ro": "autoandbid.ro"}
+
+
+def _lang_from_host(host: str) -> str:
+    h = (host or "").lower().split(":")[0]
+    if h.endswith("autoandbid.bg"):
+        return "bg"
+    if h.endswith("autoandbid.ro"):
+        return "ro"
+    if h.endswith("autoandbid.com"):
+        return "en"
+    return "en"  # preview / staging / unknown → default English
+
+
+def _canonical_base_for_lang(lang: str) -> str:
+    return f"https://{_LANG_TLD.get(lang, _LANG_TLD['en'])}"
+
+
+def _canonical_base_for_request(request: Request) -> str:
+    """Always returns one of the three production TLDs — never the preview
+    domain. Picks the TLD that matches the inbound `Host:` header; falls
+    back to `autoandbid.com` (English canonical) otherwise."""
+    host = request.headers.get("host", "")
+    return _canonical_base_for_lang(_lang_from_host(host))
+
+
+# --- Schema.org enum mapping (Cyrillic → canonical English) -------------------
+# Google's Rich Results validator rejects Cyrillic enum strings for the
+# Vehicle properties below, so we transliterate them into the canonical
+# English values it expects. Unknown values fall through unchanged.
+_SCHEMA_ENUM = {
+    "body_type": {
+        "Седан": "Sedan", "Хечбек": "Hatchback", "Хетчбек": "Hatchback",
+        "Купе": "Coupe", "Кабрио": "Convertible", "Кабриолет": "Convertible",
+        "Комби": "Estate", "Джип": "SUV", "SUV": "SUV", "Офроуд": "Off-road",
+        "Ван": "Van", "Миниван": "Minivan", "Пикап": "Pickup",
+        "Лимузина": "Limousine", "Родстер": "Roadster",
+    },
+    "fuel": {
+        "Бензин": "Petrol", "Дизел": "Diesel", "Хибрид": "Hybrid",
+        "Хибриден": "Hybrid", "Plug-in хибрид": "Plug-in hybrid",
+        "Електричество": "Electric", "Електрически": "Electric",
+        "Газ/Бензин": "LPG/Petrol", "LPG": "LPG", "Метан": "CNG",
+        "Водороден": "Hydrogen",
+    },
+    "transmission": {
+        "Автоматик": "Automatic", "Автоматична": "Automatic",
+        "Ръчна": "Manual", "Полуавтоматична": "Semi-automatic",
+        "Tiptronic": "Tiptronic", "Робот": "Automated", "Вариатор": "CVT",
+    },
+    "color": {
+        "Бял": "White", "Черен": "Black", "Сив": "Grey", "Сребрист": "Silver",
+        "Червен": "Red", "Син": "Blue", "Зелен": "Green", "Жълт": "Yellow",
+        "Оранжев": "Orange", "Кафяв": "Brown", "Бежов": "Beige",
+        "Златист": "Gold", "Графит": "Graphite",
+        "Тъмно син": "Dark blue", "Тъмно сив": "Dark grey",
+    },
+}
+
+
+def _schema_enum(kind: str, value):
+    if not value or not isinstance(value, str):
+        return value
+    return _SCHEMA_ENUM.get(kind, {}).get(value, value)
 
 
 def _collect_imgs(a: dict, max_count: int) -> list:
@@ -211,7 +284,7 @@ async def sitemap_xml(request: Request):
     if await _deindex_enabled():
         # Pre-launch deindex — pretend we never had one.
         raise HTTPException(status_code=404, detail="Not found")
-    frontend_base = _frontend_base(request)
+    frontend_base = _canonical_base_for_request(request)
     pages = [
         ("", "daily", "1.0"),
         ("/auctions", "hourly", "0.9"),
@@ -291,7 +364,7 @@ async def sitemap_images_xml(request: Request):
     """Dedicated image-only sitemap."""
     if await _deindex_enabled():
         raise HTTPException(status_code=404, detail="Not found")
-    frontend_base = _frontend_base(request)
+    frontend_base = _canonical_base_for_request(request)
     cursor = db.auctions.find(
         {
             "status": {"$in": ["live", "sold", "ended", "reserve_not_met"]},
@@ -410,7 +483,7 @@ async def share_auction(
         frontend_base = f"{proto}://{host_for_lang}"
     # ---- Locale resolution ------------------------------------------
     # Order: explicit `?lang=` > host TLD > Accept-Language header > bg.
-    def _lang_from_host(h: str) -> Optional[str]:
+    def _lang_from_host_local(h: str) -> Optional[str]:
         h = (h or "").lower()
         if h.endswith(".bg"):
             return "bg"
@@ -427,15 +500,19 @@ async def share_auction(
 
     resolved_lang = (
         lang
-        or _lang_from_host(host_for_lang)
+        or _lang_from_host_local(host_for_lang)
         or _lang_from_accept(request.headers.get("accept-language", ""))
         or "bg"
     )
     html_lang = resolved_lang
     og_locale = {"bg": "bg_BG", "en": "en_US", "ro": "ro_RO"}[resolved_lang]
-    # Redirect crawlers to the SEO-friendly slug URL.
+    # Canonical target URL — ALWAYS pinned to the production TLD that
+    # matches `resolved_lang` (autoandbid.bg / .ro / .com). This way
+    # preview/staging hosts never leak into Google's index when crawlers
+    # follow a share preview link.
     base_path = _auction_slug_url(a) if a else f"/auctions/{resolved_id}"
-    target = f"{frontend_base}{base_path}"
+    canonical_base = _canonical_base_for_lang(resolved_lang)
+    target = f"{canonical_base}{base_path}"
     # Cross-domain alternates for the same listing — Google, Bing and
     # Facebook all honour these as long as the URLs resolve.
     tld_map = {"bg": "autoandbid.bg", "en": "autoandbid.com", "ro": "autoandbid.ro"}
@@ -454,7 +531,7 @@ async def share_auction(
         }[resolved_lang]
         title = title_fallback
         description = desc_fallback
-        image = f"{frontend_base}/og-default.jpg"
+        image = f"{canonical_base}/og-default.jpg"
         json_ld = ""
     else:
         # Title: locale-specific cache if present, otherwise raw `title`
@@ -475,9 +552,9 @@ async def share_auction(
         )
         cover = og_image.headline_image_url(a)
         if cover:
-            image = cover if cover.startswith("http") else f"{frontend_base}{cover}"
+            image = cover if cover.startswith("http") else f"{canonical_base}{cover}"
         else:
-            image = f"{frontend_base}/og-default.jpg"
+            image = f"{canonical_base}/og-default.jpg"
         json_ld = f'<script type="application/ld+json">{_json_ld_vehicle(a, target)}</script>'
 
     # Compose hreflang link tags.

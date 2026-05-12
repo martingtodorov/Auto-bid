@@ -2295,3 +2295,46 @@ Frontend: Wallet иконка + сума след "Настройки", пока
 - `/app/backend/routers/seo.py`
 - `/app/frontend/src/i18n/locales/{bg,ro,en}.json`
 
+
+
+
+---
+
+## 12 May 2026 — SEO Audit Fixes (P0 + P1) — DONE
+
+### 🔴 P0 — Preview URL leak → canonical TLD per language
+- Нов helper `_canonical_base_for_lang(lang)` + `_lang_from_host(host)` в `routers/seo.py`.
+- `robots.txt`, `sitemap.xml`, `sitemap-images.xml`, `/api/share/auction/{id}` — всички `<loc>` / canonical / OG image URL-и сега са pinned към `https://autoandbid.{bg|com|ro}`, никога към preview/staging хоста.
+- Auto-detect от `Host:` header: preview/неизвестен хост → defaults към `.com` (English canonical).
+
+### 🔴 P0 — Cyrillic schema.org enums → canonical English
+- Нов `_SCHEMA_ENUM` mapping (body_type / fuel / transmission / color) в `routers/seo.py` + огледален helper в `lib/seo.js`.
+- JSON-LD Vehicle сега emits `bodyType="Coupe"`, `fuelType="Petrol"`, `vehicleTransmission="Automatic"`, `color="White"` — Google Rich Results validator вече ги приема.
+
+### 🔴 P0 — Missing H1 on mobile (mobile-first indexing)
+- `AuctionDetailPage.jsx`: премахнат `hidden lg:block` от `<h1>` → видим на всички viewport-и.
+- Sticky scroll-header `<div data-testid="sticky-title">` маркиран `aria-hidden="true"` за да не дублира H1.
+
+### 🟡 P1 — Generic / empty `alt` attributes
+- Thumbnail `<Picture alt="">` → `alt="{a.title} — снимка {i+1}"` (i18n key `auction.photo`).
+- Interior shots `alt="Interior"` → `alt="{a.title} — интериор {i+1}"` (recycles `spec.interior`).
+- `DescriptionWithInteriorShots` приема нов prop `auctionTitle`.
+
+### Verified end-to-end:
+- `curl /robots.txt` → `Sitemap: https://autoandbid.com/sitemap.xml` ✅
+- `curl /sitemap.xml` → `<loc>https://autoandbid.com/...</loc>` ✅
+- `curl /api/share/auction/{id}?lang=bg|ro|en` → canonical = `https://autoandbid.{tld}/...` ✅
+- Host-aware: `curl -H "Host: autoandbid.bg" /sitemap.xml` → BG canonical URLs ✅
+- Playwright mobile 390px: `h1 count=1 visible=True` + JSON-LD `bodyType=Coupe`, `color=White` ✅
+
+**Файлове:**
+- `/app/backend/routers/seo.py`
+- `/app/frontend/src/lib/seo.js`
+- `/app/frontend/src/pages/AuctionDetailPage.jsx`
+- `/app/frontend/src/i18n/locales/{bg,ro,en}.json`
+
+**Останали SEO backlog (P2-P3):**
+- Image sitemap дублира `big1/` и не-`big1/` URLs (~50% redundancy)
+- `priceValidUntil` остарява след auction end (замяна с `finalized_at + 30d` за sold)
+- Минимална SSR meta за `/auctions`, `/sales`, `/leaderboard` (non-JS crawlers)
+- Cloudflare AI Shield injection в production robots.txt (изисква user dashboard действие)
