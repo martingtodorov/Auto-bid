@@ -1840,6 +1840,41 @@ async def import_from_mobile_bg(request: Request, payload: MobileBgImport):
         if len(images) >= 24:
             break
 
+    # ── Rehost imported images to our own storage ─────────────────────
+    # Without this step the auction would keep `mobistatic*.focus.bg`
+    # URLs forever, which means:
+    #   • we can't watermark or re-compress,
+    #   • mobile.bg can rotate/delete the source any time and nuke our
+    #     gallery,
+    #   • the source CDN sees our buyers' IPs on every view.
+    #
+    # Flow: download each image (parallel, with byte cap and timeout) →
+    # data URL → optimize_many (Pillow re-encode, EXIF stripped, JPEG
+    # q85, ≤1920 px long edge, plus a 400 px thumbnail) → store_images
+    # (sha256-addressed write under /opt/autobids/uploads/auctions/). The
+    # final list is short `/api/uploads/...` paths, NOT the gigantic
+    # data URLs themselves — keeping the import response small.
+    #
+    # Any individual fetch failure transparently keeps the original
+    # https URL — better to ship the listing with an external image
+    # than block the whole import on one flaky CDN slot.
+    thumbnails: list[str] = []
+    if images:
+        try:
+            from storage import fetch_remote_images_as_data_urls, store_image
+            from services.image_processing import optimize_many
+            # 1. Download bytes from the source CDN.
+            data_urls = await fetch_remote_images_as_data_urls(images)
+            # 2. Re-encode (CPU-bound) on the thread pool so we don't
+            #    starve the event loop while Pillow chews on 24 images.
+            web_urls, thumb_urls, _errs = await asyncio.to_thread(optimize_many, data_urls)
+            # 3. Persist both variants — `store_image` is content-addressed
+            #    so re-importing the same listing is free.
+            images = [await asyncio.to_thread(store_image, u) for u in web_urls]
+            thumbnails = [await asyncio.to_thread(store_image, u) for u in thumb_urls]
+        except Exception as _img_e:  # noqa: BLE001
+            logger.warning("[mobile.bg import] rehost failed, keeping URLs: %s", _img_e)
+
     # City: mobile.bg serves everything in Cyrillic. Transliterate to Latin
     # (Gemini → Emergent LLM → deterministic char-map) so the form preset
     # matches the rest of the UI. Country is inferred from the tenant
@@ -1872,6 +1907,7 @@ async def import_from_mobile_bg(request: Request, payload: MobileBgImport):
         "country": country,
         "description": description[:3500] if description else "",
         "images": images,
+        "thumbnails": thumbnails,
         "source_url": url or "",
     }
 

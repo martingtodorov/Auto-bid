@@ -210,3 +210,111 @@ def store_image(data_url: str) -> str:
 def store_images(urls: list[str]) -> list[str]:
     """Bulk convenience — maintains order, filters empties."""
     return [store_image(u) for u in (urls or []) if u]
+
+
+# ---------------------------------------------------------------------------
+# Remote image rehosting
+# ---------------------------------------------------------------------------
+# When the source of an auction is a third-party listing (e.g. mobile.bg
+# importer), the scraper hands us a list of external image URLs that point
+# at a CDN we don't control (focus.bg). To take ownership of the visuals —
+# watermarking, compression, link rot, GDPR — we download the bytes once
+# at import time and feed them through the standard data-URL → optimize →
+# store_image pipeline so they end up under `/api/uploads/...`.
+#
+# Kept here (not in image_processing) because the responsibility is
+# storage-side: "give me a stable URL on our infra". Image processing is a
+# *separate* concern run later by `optimize_many` once the data URL exists.
+# ---------------------------------------------------------------------------
+import asyncio  # noqa: E402  (used by async fetcher below)
+
+REMOTE_FETCH_MAX_BYTES = 12 * 1024 * 1024  # 12 MB hard cap per remote image
+REMOTE_FETCH_TIMEOUT = 15.0                # seconds per image
+REMOTE_FETCH_CONCURRENCY = 6               # parallel downloads per batch
+
+
+async def _fetch_one(client, url: str) -> Optional[str]:
+    """Download a single URL and return it as a base64 data URL.
+
+    Returns None on failure (timeout, non-2xx, oversized, unknown content-
+    type) so the caller can keep the original URL as a graceful fallback.
+    """
+    try:
+        # Stream the response so we can abort early if it exceeds the
+        # byte cap — mobile.bg images are usually 200-500 KB but a
+        # rogue source could try to wedge us with a huge payload.
+        async with client.stream("GET", url, timeout=REMOTE_FETCH_TIMEOUT, follow_redirects=True) as r:
+            if r.status_code >= 400:
+                logger.info("remote fetch %s → HTTP %s", url, r.status_code)
+                return None
+            ct = (r.headers.get("content-type") or "").lower().split(";")[0].strip()
+            # Trust either an image/* content-type or fall back to the
+            # URL extension. focus.bg sometimes serves `application/
+            # octet-stream` for .webp so we can't be strict here.
+            if ct and ct.startswith("image/"):
+                ext = ct.split("/", 1)[1].split("+")[0]
+            else:
+                tail = url.lower().rsplit("?", 1)[0].rsplit(".", 1)
+                ext = tail[1] if len(tail) == 2 and len(tail[1]) <= 5 else "jpeg"
+            ext = _EXT_ALIASES.get(ext, ext)
+            chunks = bytearray()
+            async for chunk in r.aiter_bytes(chunk_size=64 * 1024):
+                chunks.extend(chunk)
+                if len(chunks) > REMOTE_FETCH_MAX_BYTES:
+                    logger.info("remote fetch %s → oversize abort (>%d B)", url, REMOTE_FETCH_MAX_BYTES)
+                    return None
+            if not chunks:
+                return None
+            b64 = base64.b64encode(bytes(chunks)).decode("ascii")
+            return f"data:image/{ext};base64,{b64}"
+    except Exception as e:  # noqa: BLE001 — log & continue, do not break the import
+        logger.info("remote fetch %s failed: %s", url, e)
+        return None
+
+
+async def fetch_remote_images_as_data_urls(urls: list[str]) -> list[str]:
+    """Download a list of remote image URLs and return them as base64
+    data URLs ready to feed into `optimize_many` + `store_image`.
+
+    Concurrency is capped at `REMOTE_FETCH_CONCURRENCY` so a 24-image
+    listing doesn't fan out into 24 simultaneous sockets. Each failed
+    download keeps the original https URL in the returned list (so the
+    user still sees the image even if our copy is missing).
+    """
+    try:
+        import httpx
+    except ImportError:  # pragma: no cover — pinned in requirements.txt
+        logger.warning("httpx not installed; remote rehost disabled")
+        return list(urls or [])
+
+    if not urls:
+        return []
+
+    # Pass-through anything that isn't an external image already (data:
+    # URLs, our own /api/uploads paths, empty strings).
+    def _needs_fetch(u: str) -> bool:
+        if not u or not isinstance(u, str):
+            return False
+        if u.startswith(("data:image/", "/api/uploads/", "/uploads/")):
+            return False
+        return u.startswith(("http://", "https://"))
+
+    sem = asyncio.Semaphore(REMOTE_FETCH_CONCURRENCY)
+    async with httpx.AsyncClient(
+        headers={
+            # Some CDNs (focus.bg included) refuse to serve images without
+            # a referer that matches the originating listing host. Set a
+            # generic one — the actual content is public.
+            "User-Agent": "Mozilla/5.0 (compatible; AutoBidImporter/1.0)",
+            "Referer": "https://www.mobile.bg/",
+            "Accept": "image/avif,image/webp,image/*,*/*;q=0.8",
+        },
+    ) as client:
+        async def _guarded(u: str) -> str:
+            if not _needs_fetch(u):
+                return u
+            async with sem:
+                fetched = await _fetch_one(client, u)
+            return fetched or u  # graceful fallback to the original
+
+        return list(await asyncio.gather(*[_guarded(u) for u in urls]))
