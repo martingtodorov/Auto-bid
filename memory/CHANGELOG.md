@@ -156,3 +156,29 @@
 - testing_agent_v3_fork (iteration_20.json) — 27/27 backend, 100% frontend UI verified, 0 issues, 0 action items.
 - Manual smoke: seeded test auction with variants → 4 `<picture>` elements + 1 CTA slide в card, 5 `<picture>` elements в detail. Pinch-zoom потвърден active.
 
+
+## 2026-05-12 — Iteration 21: CDN env rename + image categorization + lazy-load card slides
+
+### Backend
+- `services/image_variants.py public_variant_url` сега резолва env vars в реда: `IMAGE_BASE_URL` → legacy `IMAGE_CDN_BASE` → relative `/api/uploads/`. `IMAGE_BASE_URL` е canonical име за production setup `img.autoandbid.bg` зад frontend nginx reverse proxy.
+- Submit handler (`POST /api/auctions`) изгражда `image_categories[]` paralел с `merged[]`: първа exterior снимка = `main`, останалите exterior = `exterior`, bumper/wheels = `detail`, interior = `interior`. Uncategorized payload → първата = `main`, останалите = `other`.
+- mobile.bg import: первата снимка = `main`, останалите = `exterior` (heuristic — листингите не носят category metadata).
+- `CachedStaticFiles` subclass на `/api/uploads` mount: `variants/*` → `Cache-Control: public, max-age=31536000, immutable`; всичко друго → `max-age=604800`. Cloudflare в preview env override-ва, в production headers стигат до клиента.
+
+### Frontend
+- `AuctionCard.jsx`:
+  - Нова `pickOrderedPreviewSlides(variants, legacyImages)` функция: подрежда 4 preview slides в реда **main → exterior → interior × 2 → filler**. Graceful fallback за legacy auctions без categories.
+  - Lazy-load gating: само първият slide рендерира `<Picture priority>`. Slides 2-4 показват placeholder div, докато потребителят не направи `pointerdown` / `touchstart` / `mouseenter` на картата → `primed=true` → всички slides се рендерират.
+  - CTA slide ("View full auction") винаги е visible — 5-ти slide, акцентен dot.
+
+### Infrastructure docs
+- **Production setup**: 
+  - DNS `img.autoandbid.bg` → frontend server public IP
+  - nginx vhost на frontend: `proxy_pass http://<private-backend>:8001/api/uploads/variants/` с `proxy_cache` enabled
+  - Backend: `IMAGE_BASE_URL=https://img.autoandbid.bg` в .env
+  - Cache headers travel through end-to-end; CDN (Cloudflare/Bunny) може да се сложи отгоре без code промени.
+
+### Tested
+- testing_agent_v3_fork (iteration_21.json) — 20/21 backend ✅ (1 skipped), 100% frontend ✅, 0 issues, 0 action items.
+- Lazy-load verified: 1 `<picture>` + 3 placeholder divs преди hover → 4 `<picture>` след hover. Slide ordering main→exterior→interior×2 verified чрез seeded auction.
+
