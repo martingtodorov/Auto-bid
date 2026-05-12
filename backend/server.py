@@ -648,18 +648,20 @@ _LIST_MONGO_PROJECTION = {
 
 def _list_shape(a: dict) -> dict:
     """Project a public auction dict to the minimal subset needed for list
-    cards. Keeps only the cover image (thumb + full) — trims the rest.
+    cards. Keeps only the first 4 images (the AuctionCard mobile-swipe
+    carousel shows 4 photos + a "View full auction" CTA at slide 5, so
+    anything beyond the first 4 is dead weight here).
 
-    Also slices `images_variants[]` to the first 4 entries — the auction
-    card's mobile-swipe carousel shows 4 photos + a "View full auction"
-    CTA at slide 5, so anything beyond the first 4 is dead weight here.
+    Before iteration 22 this trimmed to 1 image, which broke the swipe
+    carousel for ALL legacy auctions — the card silently fell back to
+    its single-image branch when `slides.length <= 1`. Now we ship the
+    first 4 entries so the swipe deck always has fodder.
     """
     out = {k: a[k] for k in _LIST_KEEP if k in a}
-    # Cover only. AuctionCard.jsx already uses `thumbnails?.[0] || images?.[0]`.
     imgs = a.get("images") or []
     thumbs = a.get("thumbnails") or []
-    out["images"] = imgs[:1]
-    out["thumbnails"] = thumbs[:1] if thumbs else []
+    out["images"] = imgs[:4]
+    out["thumbnails"] = thumbs[:4] if thumbs else []
     variants = a.get("images_variants") or []
     out["images_variants"] = variants[:4]
     return out
