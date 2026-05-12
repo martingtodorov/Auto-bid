@@ -139,10 +139,16 @@ export default function AuctionCard({ auction, compact = false, priority = false
               ref={scrollerRef}
               className="absolute inset-0 flex overflow-x-auto snap-x snap-mandatory no-scrollbar"
               style={{
-                // Confine horizontal pans here so the rest of the page
-                // can still be scrolled vertically with two-finger /
-                // edge gestures.
-                touchAction: "pan-x",
+                // Allow both axes so a deliberate vertical drag still
+                // scrolls the page when the user happens to start their
+                // gesture on top of an auction card. The browser
+                // disambiguates: a clearly-horizontal pan drives the
+                // scroll-snap carousel, a clearly-vertical one bubbles
+                // up to the document. Previously we used `pan-x` which
+                // *locked* the touch to horizontal panning and silently
+                // killed page scroll the moment the user's finger
+                // landed on a card image.
+                touchAction: "pan-x pan-y",
                 scrollbarWidth: "none",
               }}
               onTouchStart={(e) => {
