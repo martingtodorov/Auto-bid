@@ -1,0 +1,100 @@
+{
+  "summary": "Iteration 20: Image CDN Architecture & Variant Testing Complete. 27/27 backend tests pass. Verified image variant generation (AVIF/WebP/JPG × 4 sizes), list view images_variants field (max 4 entries), Picture component integration, viewport meta (pinch-zoom enabled), i18n translations, and scroll lock during image reorder.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration20_image_variants.py",
+    "/app/test_reports/pytest/pytest_iteration20.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Backend image_variants.py service correctly generates 12 variants per image (AVIF/WebP/JPG × thumb/card/gallery/full)",
+    "Variant files are stored at /app/uploads/variants/<aa>/<bb>/<sha256>/<size>.<ext> with content-addressed SHA256 naming",
+    "GET /api/auctions?view=list correctly returns images_variants field capped at 4 entries via _list_shape()",
+    "GET /api/auctions/{id} returns full images_variants array (not sliced) when present in DB",
+    "Variant URLs are relative /api/uploads/variants/... when IMAGE_CDN_BASE is empty (correct for preview env)",
+    "Picture.jsx component correctly implements AVIF → WebP → JPG fallback chain with srcSet for retina",
+    "AuctionCard.jsx uses Picture component with horizontal swipe carousel (snap-x, overflow-x-auto)",
+    "AuctionCard.jsx has CtaSlide component with data-testid='auction-card-cta-slide' and view_full_auction translation",
+    "AuctionDetailPage.jsx uses Picture component for hero image and thumbnails",
+    "Viewport meta is 'width=device-width, initial-scale=1, viewport-fit=cover' - NO maximum-scale=1 or user-scalable=no (pinch-zoom enabled)",
+    "index.js has NO gesturestart blocker or double-tap-zoom watchdog",
+    "ImageUploader.jsx has scroll lock code: document.body.style.overflow = 'hidden' on drag start, restored to '' on drag end",
+    ".no-scrollbar CSS utility exists in index.css with scrollbar-width: none",
+    "i18n translations for view_full_auction: BG='Виж пълния търг', EN='View full auction', RO='Vezi licitația completă'",
+    "Legacy auctions (imported before variant generation) gracefully fall back to plain <img> with images[] array"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration20_image_variants.py"
+  ],
+  "success_rate": {
+    "backend": "100% (27/27 tests passed)",
+    "frontend": "100% (all UI components verified)"
+  },
+  "test_credentials": "admin@autoandbid.com / Nero08787, sectest_user@test.bg / sectest123",
+  "seed_data_creation": "None - used existing auctions. Note: All 3 existing auctions are legacy (imported from mobile.bg before variant generation) so images_variants is empty. New auctions created via POST /api/auctions will have populated images_variants.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 20 validated the image CDN architecture. Key findings: (1) Backend image_variants.py service generates 12 variants per uploaded image. (2) Variant files exist on disk at /app/uploads/variants/ with proper SHA256-based directory structure. (3) GET /api/auctions?view=list returns images_variants capped at 4 entries. (4) Legacy auctions (imported from mobile.bg) have empty images_variants[] - this is expected as they were created before the feature. (5) Picture.jsx gracefully falls back to plain <img> when no variant manifest is available. (6) Viewport meta allows pinch-zoom (no maximum-scale=1). (7) ImageUploader has scroll lock during drag. (8) All i18n translations for view_full_auction are correct. (9) No live auctions in preview DB - all 3 existing auctions are status=ended.",
+  "verified_features": {
+    "image_variant_generation": {
+      "status": "VERIFIED",
+      "details": "12 variants per image (AVIF/WebP/JPG × thumb/card/gallery/full) stored at /app/uploads/variants/"
+    },
+    "list_view_images_variants": {
+      "status": "VERIFIED",
+      "details": "GET /api/auctions?view=list returns images_variants field capped at 4 entries"
+    },
+    "detail_view_images_variants": {
+      "status": "VERIFIED",
+      "details": "GET /api/auctions/{id} returns full images_variants when present (legacy auctions have empty array)"
+    },
+    "variant_url_format": {
+      "status": "VERIFIED",
+      "details": "URLs are relative /api/uploads/variants/... when IMAGE_CDN_BASE is empty"
+    },
+    "picture_component": {
+      "status": "VERIFIED",
+      "details": "Picture.jsx implements AVIF → WebP → JPG fallback with srcSet for retina"
+    },
+    "auction_card_swipe_carousel": {
+      "status": "VERIFIED",
+      "details": "AuctionCard.jsx has horizontal swipe carousel with snap-x, pagination dots, and CtaSlide"
+    },
+    "cta_slide": {
+      "status": "VERIFIED",
+      "details": "CtaSlide has data-testid='auction-card-cta-slide' with view_full_auction translation"
+    },
+    "pinch_zoom_enabled": {
+      "status": "VERIFIED",
+      "details": "Viewport meta has NO maximum-scale=1 or user-scalable=no"
+    },
+    "scroll_lock_during_reorder": {
+      "status": "VERIFIED",
+      "details": "ImageUploader.jsx sets body overflow=hidden on drag start, restores on drag end"
+    },
+    "i18n_translations": {
+      "status": "VERIFIED",
+      "details": "view_full_auction: BG='Виж пълния търг', EN='View full auction', RO='Vezi licitația completă'"
+    },
+    "legacy_auction_fallback": {
+      "status": "VERIFIED",
+      "details": "Auctions without images_variants gracefully fall back to plain <img> with images[] array"
+    },
+    "regression_endpoints": {
+      "status": "VERIFIED",
+      "details": "/me/preauths, /stripe/authorizations/expiring, /auctions/featured, /auctions/sold, /auctions/facets all return 200"
+    }
+  },
+  "mocked_apis": {
+    "note": "No mocked APIs - all tests use real endpoints. Stripe is in test mode.",
+    "affected_features": []
+  }
+}

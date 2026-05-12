@@ -648,13 +648,20 @@ _LIST_MONGO_PROJECTION = {
 
 def _list_shape(a: dict) -> dict:
     """Project a public auction dict to the minimal subset needed for list
-    cards. Keeps only the cover image (thumb + full) — trims the rest."""
+    cards. Keeps only the cover image (thumb + full) — trims the rest.
+
+    Also slices `images_variants[]` to the first 4 entries — the auction
+    card's mobile-swipe carousel shows 4 photos + a "View full auction"
+    CTA at slide 5, so anything beyond the first 4 is dead weight here.
+    """
     out = {k: a[k] for k in _LIST_KEEP if k in a}
     # Cover only. AuctionCard.jsx already uses `thumbnails?.[0] || images?.[0]`.
     imgs = a.get("images") or []
     thumbs = a.get("thumbnails") or []
     out["images"] = imgs[:1]
     out["thumbnails"] = thumbs[:1] if thumbs else []
+    variants = a.get("images_variants") or []
+    out["images_variants"] = variants[:4]
     return out
 
 
@@ -1277,6 +1284,29 @@ async def create_auction(request: Request, payload: AuctionCreate, user: dict = 
     doc["images"] = web_urls
     doc["thumbnails"] = thumb_urls
 
+    # ── Multi-format / multi-size variants (AVIF/WebP/JPG × 4 sizes) ──
+    # The legacy `images` / `thumbnails` arrays above stay populated so
+    # any pre-`<Picture>` consumer (admin previews, OG share, email
+    # templates) keeps working. The new `images_variants` array stores
+    # the responsive manifest read by the frontend `<Picture>` helper.
+    # Generation runs off the event loop because Pillow is CPU-bound;
+    # 12 variants × N images can be a few seconds on a fast box but is
+    # invisible to the user behind the submit spinner.
+    try:
+        from services.image_variants import variants_from_data_url
+        manifests: list[dict] = []
+        for raw_url in merged:
+            m = await asyncio.to_thread(variants_from_data_url, raw_url)
+            if m:
+                manifests.append(m)
+        doc["images_variants"] = manifests
+    except Exception as _e:  # noqa: BLE001
+        # Variant generation is best-effort — never block a submit if the
+        # encoder choked on one weird image. The user still gets a
+        # working auction with the legacy `images[]` URLs.
+        logger.warning("[submit] variants generation failed: %s", _e)
+        doc["images_variants"] = []
+
     # ---- VAT validation ----
     vat = (doc.get("vat_status") or "").strip() or None
     if vat and vat not in ("exempt", "vat_inclusive"):
@@ -1859,10 +1889,12 @@ async def import_from_mobile_bg(request: Request, payload: MobileBgImport):
     # https URL — better to ship the listing with an external image
     # than block the whole import on one flaky CDN slot.
     thumbnails: list[str] = []
+    images_variants: list[dict] = []
     if images:
         try:
             from storage import fetch_remote_images_as_data_urls, store_image
             from services.image_processing import optimize_many
+            from services.image_variants import variants_from_data_url
             # 1. Download bytes from the source CDN.
             data_urls = await fetch_remote_images_as_data_urls(images)
             # 2. Re-encode (CPU-bound) on the thread pool so we don't
@@ -1872,6 +1904,11 @@ async def import_from_mobile_bg(request: Request, payload: MobileBgImport):
             #    so re-importing the same listing is free.
             images = [await asyncio.to_thread(store_image, u) for u in web_urls]
             thumbnails = [await asyncio.to_thread(store_image, u) for u in thumb_urls]
+            # 4. Generate AVIF/WebP/JPG × 4 sizes variants for `<Picture>`.
+            for raw in data_urls:
+                m = await asyncio.to_thread(variants_from_data_url, raw)
+                if m:
+                    images_variants.append(m)
         except Exception as _img_e:  # noqa: BLE001
             logger.warning("[mobile.bg import] rehost failed, keeping URLs: %s", _img_e)
 
@@ -1908,6 +1945,7 @@ async def import_from_mobile_bg(request: Request, payload: MobileBgImport):
         "description": description[:3500] if description else "",
         "images": images,
         "thumbnails": thumbnails,
+        "images_variants": images_variants,
         "source_url": url or "",
     }
 

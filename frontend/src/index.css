@@ -630,6 +630,11 @@ input:focus, select:focus, textarea:focus {
     touch-action: pan-x;
 }
 .ticker-scroll::-webkit-scrollbar { display: none; }
+
+/* Hide native scrollbar on horizontal swipe carousels (auction card,
+ * gallery thumbstrip, etc.) — touch-pan-x without the visual chrome. */
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
 .ticker-scroll:active .animate-marquee,
 .ticker-scroll:focus-within .animate-marquee {
     animation-play-state: paused;

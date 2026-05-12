@@ -8,6 +8,7 @@ import { translateEnum } from "../lib/carTranslations";
 import { useAuth, formatError } from "../lib/auth";
 import BidConfirmModal from "../components/BidConfirmModal";
 import TopUpCreditModal from "../components/TopUpCreditModal";
+import Picture from "../components/Picture";
 import AuctionCard from "../components/AuctionCard";
 import NegotiationPortal from "../components/NegotiationPortal";
 import Lightbox from "../components/Lightbox";
@@ -675,12 +676,13 @@ export default function AuctionDetailPage() {
                 onClick={() => setLightboxIdx(photoIdx)}
                 data-testid="main-gallery-image"
               >
-                <img
-                  src={a.images?.[photoIdx] || a.thumbnails?.[photoIdx]}
+                <Picture
+                  variant={a.images_variants?.[photoIdx]}
+                  fallbackSrc={a.images?.[photoIdx] || a.thumbnails?.[photoIdx]}
+                  size="gallery"
                   alt={a.title}
                   className="w-full h-full object-cover transition group-hover:scale-[1.02]"
-                  decoding="async"
-                  fetchpriority="high"
+                  priority
                 />
                 {a.images?.length > 0 && (
                   <div className="absolute bottom-3 right-3 px-2.5 py-1 rounded-full bg-black/55 text-white text-xs font-mono opacity-0 group-hover:opacity-100 transition pointer-events-none">
@@ -725,14 +727,12 @@ export default function AuctionDetailPage() {
                           } ${hideOnMobile && hideOnDesktop ? "hidden" : hideOnMobile ? "hidden md:block" : hideOnDesktop ? "block md:hidden" : ""}`}
                           data-testid={`thumb-${i}`}
                         >
-                          <img
-                            src={thumbSrc}
+                          <Picture
+                            variant={a.images_variants?.[i]}
+                            fallbackSrc={thumbSrc}
+                            size="thumb"
                             alt=""
                             className="w-full h-full object-cover"
-                            loading="lazy"
-                            decoding="async"
-                            width="120"
-                            height="90"
                           />
                           {isMobileLastVisible && (
                             <span

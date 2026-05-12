@@ -1,20 +1,92 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { MapPin, Gauge, Fuel, Calendar, Users, Shield, Zap, Star } from "lucide-react";
+import { MapPin, Gauge, Fuel, Calendar, Users, Shield, Zap, Star, ArrowRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { formatEUR, formatLocal, formatKM, timeLeft, formatTimeLeft } from "../lib/apiClient";
 import { translateEnum } from "../lib/carTranslations";
 import { auctionUrl } from "../lib/auctionUrl";
+import Picture from "./Picture";
 
+/**
+ * AuctionCard with mobile-first horizontal swipe gallery.
+ *
+ * UX rules (matching Cars&Bids / BringATrailer):
+ *   1. First 4 photos are swipable directly inside the card.
+ *   2. Slide 5 is NOT another photo — it's a "View Full Auction →" CTA
+ *      that funnels the user into the detail page once they've teased
+ *      enough of the gallery.
+ *   3. Vertical page scroll is preserved — `touch-action: pan-x` on
+ *      the scroll container scopes horizontal pans to the carousel
+ *      while letting the rest of the page scroll vertically normally.
+ *   4. The outer <Link> still works for taps; the browser disambiguates
+ *      between "tap" (→ navigate) and "swipe" (→ scroll-snap moves) so
+ *      we don't need to install an onClick guard.
+ *
+ * Performance:
+ *   • Uses <Picture> with the backend variant manifest (AVIF → WebP → JPG)
+ *     when available; falls back to the legacy single-URL <img> path.
+ *   • First card on the page is rendered with `priority` (eager + high
+ *     fetchpriority) so Lighthouse can pick it as the LCP candidate.
+ *   • Subsequent slides lazy-load.
+ */
 export default function AuctionCard({ auction, compact = false, priority = false }) {
   const { t, i18n } = useTranslation();
   const [tl, setTl] = useState(() => timeLeft(auction.ends_at));
+  const [activeSlide, setActiveSlide] = useState(0);
+  const scrollerRef = useRef(null);
 
   useEffect(() => {
     if (auction.status === "sold" || auction.status === "ended") return;
     const i = setInterval(() => setTl(timeLeft(auction.ends_at)), 1000);
     return () => clearInterval(i);
   }, [auction.ends_at, auction.status]);
+
+  // ---- slide deck: first 4 photos + CTA ----
+  // We deliberately don't read more than 4 entries from images_variants
+  // because the backend list projection (`_list_shape`) caps it at 4
+  // anyway — and pulling more bytes here would defeat the size-savings.
+  const variants = auction.images_variants || [];
+  // Compose fallback URL list from legacy fields so cards from
+  // pre-variants auctions still render. Some old auctions only have a
+  // single cover image, which is fine — slide deck shrinks to 1+1=2.
+  const legacyImages = (auction.images && auction.images.length > 0)
+    ? auction.images
+    : (auction.thumbnails || []);
+  const photoCount = Math.min(4, Math.max(variants.length, legacyImages.length));
+  const slides = [];
+  for (let i = 0; i < photoCount; i += 1) {
+    slides.push({ kind: "photo", index: i });
+  }
+  // Only attach the CTA when there's *more* to explore (i.e. we actually
+  // have a multi-photo gallery). For an auction with one cover image
+  // we'd rather show that single image clean than tease a half-empty
+  // carousel.
+  if (photoCount >= 2) slides.push({ kind: "cta" });
+
+  // Track which slide is currently centred — needed for the pagination
+  // pills underneath the carousel. IntersectionObserver is the cheapest
+  // way: no per-frame `scroll` handler.
+  useEffect(() => {
+    const root = scrollerRef.current;
+    if (!root || slides.length <= 1) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        // Pick the entry with the largest intersectionRatio.
+        let best = null;
+        entries.forEach((e) => {
+          if (!best || e.intersectionRatio > best.intersectionRatio) best = e;
+        });
+        if (best && best.isIntersecting) {
+          const idx = Number(best.target.getAttribute("data-slide-index"));
+          if (Number.isFinite(idx)) setActiveSlide(idx);
+        }
+      },
+      { root, threshold: [0.55] },
+    );
+    const children = root.querySelectorAll("[data-slide-index]");
+    children.forEach((c) => observer.observe(c));
+    return () => observer.disconnect();
+  }, [slides.length]);
 
   const isSold = auction.status === "sold";
   const isEnded = auction.status === "ended";
@@ -26,23 +98,72 @@ export default function AuctionCard({ auction, compact = false, priority = false
       className="card-editorial block group"
       data-testid={`auction-card-${auction.id}`}
     >
-      <div className="card-img aspect-[4/3] bg-[hsl(var(--surface))]">
-        <img
-          src={auction.thumbnails?.[0] || auction.images?.[0]}
-          srcSet={
-            auction.thumbnails?.[0] && auction.images?.[0]
-              ? `${auction.thumbnails[0]} 400w, ${auction.images[0]} 1600w`
-              : undefined
-          }
-          sizes="(min-width: 1024px) 380px, (min-width: 640px) 50vw, 100vw"
-          alt={auction.title}
-          // Top-of-page cards get eager + high priority so Lighthouse can
-          // discover the LCP candidate without waiting on the JS bundle.
-          loading={priority ? "eager" : "lazy"}
-          fetchpriority={priority ? "high" : "auto"}
-          decoding="async"
-        />
-        <div className="absolute top-3 left-3 flex gap-2 flex-wrap max-w-[calc(100%-1.5rem)]">
+      <div className="card-img aspect-[4/3] bg-[hsl(var(--surface))] relative overflow-hidden">
+        {slides.length > 1 ? (
+          <>
+            <div
+              ref={scrollerRef}
+              className="absolute inset-0 flex overflow-x-auto snap-x snap-mandatory no-scrollbar"
+              style={{
+                // Confine horizontal pans here so the rest of the page
+                // can still be scrolled vertically with two-finger /
+                // edge gestures.
+                touchAction: "pan-x",
+                scrollbarWidth: "none",
+              }}
+              data-testid={`auction-card-swiper-${auction.id}`}
+            >
+              {slides.map((s, idx) => (
+                <div
+                  key={idx}
+                  data-slide-index={idx}
+                  className="shrink-0 w-full h-full snap-start snap-always relative"
+                >
+                  {s.kind === "photo" ? (
+                    <Picture
+                      variant={variants[s.index]}
+                      fallbackSrc={legacyImages[s.index]}
+                      size="card"
+                      alt={`${auction.title} — ${s.index + 1}`}
+                      className="absolute inset-0 w-full h-full object-cover"
+                      priority={priority && idx === 0}
+                      draggable={false}
+                    />
+                  ) : (
+                    <CtaSlide title={t("auction.view_full_auction", "Виж пълния търг")} />
+                  )}
+                </div>
+              ))}
+            </div>
+            {/* Pagination pills — tap-targets are 8x8 px squares with
+                generous touch padding via the parent's height. */}
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 px-2 py-1 rounded-full bg-black/40 backdrop-blur-sm pointer-events-none">
+              {slides.map((s, idx) => (
+                <span
+                  key={idx}
+                  className={`block w-1.5 h-1.5 rounded-full transition-all ${
+                    idx === activeSlide
+                      ? (s.kind === "cta" ? "bg-[hsl(var(--accent))] w-3" : "bg-white w-3")
+                      : "bg-white/50"
+                  }`}
+                  aria-hidden="true"
+                />
+              ))}
+            </div>
+          </>
+        ) : (
+          // Single-image legacy fallback — no carousel chrome, no JS.
+          <Picture
+            variant={variants[0]}
+            fallbackSrc={legacyImages[0]}
+            size="card"
+            alt={auction.title}
+            className="absolute inset-0 w-full h-full object-cover"
+            priority={priority}
+            draggable={false}
+          />
+        )}
+        <div className="absolute top-3 left-3 flex gap-2 flex-wrap max-w-[calc(100%-1.5rem)] z-10 pointer-events-none">
           {isSold ? (
             <span className="pill pill-sold">{t("my_listings.status.sold")}</span>
           ) : isEnded ? (
@@ -150,5 +271,23 @@ export default function AuctionCard({ auction, compact = false, priority = false
         </div>
       </div>
     </Link>
+  );
+}
+
+/** "View full auction" terminal slide — last panel in the swipe deck.
+ *  Visually distinctive (subtle gradient + arrow) so users get a clear
+ *  end-of-deck signal and a strong "open the listing" CTA. */
+function CtaSlide({ title }) {
+  return (
+    <div
+      className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-[hsl(var(--bg))] to-[hsl(var(--surface))] text-center px-6"
+      data-testid="auction-card-cta-slide"
+    >
+      <ArrowRight size={32} className="text-[hsl(var(--accent))] mb-2" />
+      <div className="font-serif text-lg">{title}</div>
+      <div className="mt-1 text-[11px] uppercase tracking-wider text-[hsl(var(--ink-muted))]">
+        Tap to open
+      </div>
+    </div>
   );
 }

@@ -233,6 +233,16 @@ export default function ImageUploader({
     const payload = JSON.stringify({ category, idx });
     e.dataTransfer.setData("application/x-image-move", payload);
     e.dataTransfer.setData("text/plain", payload);
+    // Scroll-lock the page during desktop drag to avoid the surrounding
+    // form scrolling under the cursor when the browser's edge-scroll
+    // engages — that fights the user's reorder intent and feels janky.
+    // Restored unconditionally on dragend (fires for both drop & cancel).
+    document.body.style.overflow = "hidden";
+  };
+  const onDragEndAny = () => {
+    document.body.style.overflow = "";
+    setDragOverIdx(null);
+    setDragOverGrid(false);
   };
   const parseDrag = (e) => {
     try {
@@ -413,6 +423,7 @@ export default function ImageUploader({
             onDragOver={(e) => onSlotDragOver(e, i)}
             onDragLeave={() => setDragOverIdx(null)}
             onDrop={(e) => onSlotDrop(e, i)}
+            onDragEnd={onDragEndAny}
             onTouchStart={(e) => onTouchStart(e, i, src)}
             onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}
