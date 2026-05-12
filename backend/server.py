@@ -623,10 +623,13 @@ _LIST_MONGO_PROJECTION = {
     "description_en": 0,
     "description_bg": 0,
     "description_ro": 0,
-    "images_exterior": 0,
-    "images_wheels": 0,
-    "images_bumper": 0,
-    "images_interior": 0,
+    # NB: images_exterior / images_interior / images_bumper / images_wheels
+    # ARE included in the list projection (no `0` here) so `_list_shape`
+    # below can reorder the preview deck — slides 3-4 must be the first
+    # two interior shots (they're also the photos that appear inline
+    # within the description on the detail page). Without this, every
+    # card silently fell back to "first 4 by upload order" = all
+    # exteriors.
     "contact_email": 0,
     "contact_phone": 0,
     "vin": 0,
@@ -653,46 +656,108 @@ def _list_shape(a: dict) -> dict:
       slide 1: main (cover)
       slide 2: best exterior
       slide 3-4: first two interior shots
-    so we must include at least one variant from each category — naïve
-    `variants[:4]` would slice off all interior shots if the auction had
-    ≥4 exteriors (the common case), leaving slides 3-4 to fall back to
-    extra exteriors.
+    Interior images are the same photos that get interleaved into the
+    description text on the auction detail page (`DescriptionWithInteriorShots`
+    splits the body into 3 chunks and injects the first 3 interior
+    photos between them) — so slides 3-4 on the card mirror what the
+    user sees "inside the listing text" once they tap through.
+
+    Sources, in priority order:
+      • If the auction has categorized variants (`images_variants[i].category`),
+        build the deck from those.
+      • Otherwise fall back to the per-bucket URL arrays
+        (`images_exterior`, `images_interior`, ...) which are populated
+        for every SellPage submission since iteration 12.
+      • Final fallback: the flat `images[]` array (used for very old
+        listings that pre-date the bucket UI).
     """
     out = {k: a[k] for k in _LIST_KEEP if k in a}
-    imgs = a.get("images") or []
-    thumbs = a.get("thumbnails") or []
-    out["images"] = imgs[:4]
-    out["thumbnails"] = thumbs[:4] if thumbs else []
 
-    # Category-aware variant projection: pull up to 1 main + 1 exterior
-    # + 2 interior + 2 fillers so the frontend picker has fodder for
-    # every preview slot. Preserve sourceIndex so the picker still keys
-    # them stably.
+    # Per-bucket URL arrays — present on every SellPage submission since
+    # iteration 12 (the categorized uploader). Used both to derive the
+    # `thumbnails`/`images` payload AND as a fallback when the auction
+    # has no variant manifests yet.
+    ext_urls = list(a.get("images_exterior") or [])
+    bump_urls = list(a.get("images_bumper") or [])
+    wheel_urls = list(a.get("images_wheels") or [])
+    int_urls = list(a.get("images_interior") or [])
+    flat = list(a.get("images") or [])
+    flat_thumbs = list(a.get("thumbnails") or [])
+
+    # Compose the card preview order: main → exterior → interior × 2,
+    # then fillers from the remaining unused exterior/bumper/wheels.
+    seen: set[str] = set()
+    ordered_urls: list[str] = []
+    def _push(u: str | None) -> None:
+        if not u or u in seen:
+            return
+        seen.add(u)
+        ordered_urls.append(u)
+
+    if ext_urls or int_urls or bump_urls or wheel_urls:
+        # Categorized layout — best signal we have.
+        if ext_urls:
+            _push(ext_urls[0])  # main / cover
+            if len(ext_urls) > 1:
+                _push(ext_urls[1])  # 2nd exterior
+        # First two interior shots → slides 3 & 4 (also the images
+        # interleaved in description text on detail page).
+        for u in int_urls[:2]:
+            _push(u)
+        # Fillers — preserve original ordering.
+        for u in (*ext_urls[2:], *bump_urls, *wheel_urls, *int_urls[2:]):
+            if len(ordered_urls) >= 4:
+                break
+            _push(u)
+    else:
+        # Legacy flat upload — keep whatever order the auction was
+        # stored in (mobile.bg imports & very old listings).
+        for u in flat[:4]:
+            _push(u)
+
+    out["images"] = ordered_urls[:4]
+    # Build a parallel thumbnails array by URL match — falls back to
+    # the same URL if no thumbnail was generated (storage backend is
+    # content-addressed so the URL works as a small image too).
+    if flat_thumbs and flat:
+        flat_to_thumb = {flat[i]: flat_thumbs[i] for i in range(min(len(flat), len(flat_thumbs)))}
+        out["thumbnails"] = [flat_to_thumb.get(u, u) for u in ordered_urls[:4]]
+    else:
+        out["thumbnails"] = ordered_urls[:4]
+
+    # Category-aware variant projection (mirrors the URL logic above so
+    # the frontend `<Picture>` chain picks up AVIF/WebP/JPG fallbacks
+    # for the same images we just put in `images[]`).
     variants = a.get("images_variants") or []
     by_cat: dict[str, list[dict]] = {}
     for v in variants:
         by_cat.setdefault((v.get("category") or "other"), []).append(v)
     picked: list[dict] = []
-    seen = set()
-    def _push_n(cat: str, n: int) -> None:
-        for v in by_cat.get(cat, [])[:n]:
-            sha = v.get("sha")
-            if sha in seen:
-                continue
-            seen.add(sha)
-            picked.append(v)
-    _push_n("main", 1)
-    _push_n("exterior", 1)
-    _push_n("interior", 2)
-    # Fillers — preserve original order; skip anything we already picked.
-    for v in variants:
-        if len(picked) >= 6:
-            break
-        if v.get("sha") in seen:
-            continue
-        seen.add(v.get("sha"))
+    seen_sha: set[str] = set()
+    def _push_var(v: dict | None) -> None:
+        if not v:
+            return
+        sha = v.get("sha")
+        if sha in seen_sha:
+            return
+        seen_sha.add(sha)
         picked.append(v)
-    out["images_variants"] = picked[:6]
+    if by_cat:
+        if by_cat.get("main"):
+            _push_var(by_cat["main"][0])
+        elif by_cat.get("exterior"):
+            _push_var(by_cat["exterior"][0])
+        for v in by_cat.get("exterior", []):
+            if len(picked) >= 2:
+                break
+            _push_var(v)
+        for v in by_cat.get("interior", [])[:2]:
+            _push_var(v)
+        for v in variants:
+            if len(picked) >= 4:
+                break
+            _push_var(v)
+    out["images_variants"] = picked[:4]
     return out
 
 
