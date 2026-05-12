@@ -6,8 +6,9 @@ import os
 import re
 import json as _json
 from html import escape as _esc
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import PlainTextResponse, RedirectResponse
 
 from deps import db
@@ -237,11 +238,21 @@ async def sitemap_xml(request: Request):
     xml_parts = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"',
-        '        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">',
+        '        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"',
+        '        xmlns:xhtml="http://www.w3.org/1999/xhtml">',
     ]
+    # Hreflang map — every auction URL is the same path under three TLDs.
+    tld_map = {"bg": "https://autoandbid.bg", "en": "https://autoandbid.com", "ro": "https://autoandbid.ro"}
     for path, freq, pr in pages:
+        alts = "".join(
+            f'<xhtml:link rel="alternate" hreflang="{code}" href="{base}{path}"/>'
+            for code, base in tld_map.items()
+        )
+        alts += f'<xhtml:link rel="alternate" hreflang="x-default" href="{tld_map["en"]}{path}"/>'
         xml_parts.append(
-            f"<url><loc>{frontend_base}{path}</loc><changefreq>{freq}</changefreq><priority>{pr}</priority></url>"
+            f"<url><loc>{frontend_base}{path}</loc>"
+            + alts
+            + f"<changefreq>{freq}</changefreq><priority>{pr}</priority></url>"
         )
     for a in auctions:
         last = a.get("finalized_at") or a.get("updated_at") or a.get("created_at") or ""
@@ -257,9 +268,16 @@ async def sitemap_xml(request: Request):
                 + (f"<image:caption>{caption}</image:caption>" if caption else "")
                 + f"<image:title>{caption}</image:title></image:image>"
             )
+        slug_path = _auction_slug_url(a)
+        alts = "".join(
+            f'<xhtml:link rel="alternate" hreflang="{code}" href="{base}{slug_path}"/>'
+            for code, base in tld_map.items()
+        )
+        alts += f'<xhtml:link rel="alternate" hreflang="x-default" href="{tld_map["en"]}{slug_path}"/>'
         xml_parts.append(
-            f"<url><loc>{frontend_base}{_auction_slug_url(a)}</loc>"
+            f"<url><loc>{frontend_base}{slug_path}</loc>"
             + lastmod
+            + alts
             + f"<changefreq>{freq}</changefreq><priority>{pr}</priority>"
             + "".join(image_blocks)
             + "</url>"
@@ -336,7 +354,25 @@ async def og_auction_image(auction_id: str, request: Request):
 
 
 @router.get("/share/auction/{auction_id}", response_class=PlainTextResponse)
-async def share_auction(auction_id: str, request: Request):
+async def share_auction(
+    auction_id: str,
+    request: Request,
+    lang: Optional[str] = Query(None, regex="^(bg|en|ro)$"),
+):
+    """Locale-aware OG share HTML.
+
+    Locale resolution (first match wins):
+      1. `?lang=bg|en|ro` query param — used by the in-app share button
+         to pin the preview to the current UI language.
+      2. Host suffix: `.bg` → bg, `.ro` → ro, `.com` → en.
+      3. `Accept-Language` header — first listed code.
+      4. Default `bg`.
+
+    Behaviour: emits the right `og:locale`, sets `<html lang>`, plus
+    `<link rel="alternate" hreflang>` tuples to the same listing on the
+    other two TLDs so Google treats them as proper geo-variants and not
+    duplicate content.
+    """
     # Resolve slug-suffix → canonical UUID when the caller passes a
     # SEO-friendly URL (e.g. nginx rewrites `/auctions/bmw-m240i-...-ff615975`
     # → `/api/share/auction/bmw-m240i-...-ff615975`). Without this step
@@ -367,28 +403,75 @@ async def share_auction(auction_id: str, request: Request):
     origin_hdr = request.headers.get("origin")
     if origin_hdr:
         frontend_base = origin_hdr.rstrip("/")
+        host_for_lang = re.sub(r"^https?://", "", frontend_base)
     else:
         proto = request.headers.get("x-forwarded-proto", "https")
-        host = request.headers.get("host") or request.url.hostname or "autoandbid.com"
-        frontend_base = f"{proto}://{host}"
+        host_for_lang = request.headers.get("host") or request.url.hostname or "autoandbid.com"
+        frontend_base = f"{proto}://{host_for_lang}"
+    # ---- Locale resolution ------------------------------------------
+    # Order: explicit `?lang=` > host TLD > Accept-Language header > bg.
+    def _lang_from_host(h: str) -> Optional[str]:
+        h = (h or "").lower()
+        if h.endswith(".bg"):
+            return "bg"
+        if h.endswith(".ro"):
+            return "ro"
+        if h.endswith(".com") or h.endswith(".org") or h.endswith(".net"):
+            return "en"
+        return None
+
+    def _lang_from_accept(header: str) -> Optional[str]:
+        # Take the first language code from `Accept-Language: bg-BG;q=0.9, en;q=0.8`.
+        first = (header or "").split(",")[0].strip().lower().split("-")[0]
+        return first if first in ("bg", "en", "ro") else None
+
+    resolved_lang = (
+        lang
+        or _lang_from_host(host_for_lang)
+        or _lang_from_accept(request.headers.get("accept-language", ""))
+        or "bg"
+    )
+    html_lang = resolved_lang
+    og_locale = {"bg": "bg_BG", "en": "en_US", "ro": "ro_RO"}[resolved_lang]
     # Redirect crawlers to the SEO-friendly slug URL.
-    target = f"{frontend_base}{_auction_slug_url(a) if a else f'/auctions/{resolved_id}'}"
+    base_path = _auction_slug_url(a) if a else f"/auctions/{resolved_id}"
+    target = f"{frontend_base}{base_path}"
+    # Cross-domain alternates for the same listing — Google, Bing and
+    # Facebook all honour these as long as the URLs resolve.
+    tld_map = {"bg": "autoandbid.bg", "en": "autoandbid.com", "ro": "autoandbid.ro"}
+    alt_links: list[tuple[str, str]] = []
+    for code, domain in tld_map.items():
+        alt_links.append((code, f"https://{domain}{base_path}"))
+    # `x-default` should point to the canonical (English) edition.
+    alt_links.append(("x-default", f"https://{tld_map['en']}{base_path}"))
 
     if not a:
-        title = "autoandbid.com — Търг"
-        description = "Търгът не е намерен."
+        title_fallback = {
+            "bg": "autoandbid.bg — Търг", "en": "autoandbid.com — Auction", "ro": "autoandbid.ro — Licitație",
+        }[resolved_lang]
+        desc_fallback = {
+            "bg": "Търгът не е намерен.", "en": "Auction not found.", "ro": "Licitația nu a fost găsită.",
+        }[resolved_lang]
+        title = title_fallback
+        description = desc_fallback
         image = f"{frontend_base}/og-default.jpg"
         json_ld = ""
     else:
-        title = f"{a.get('title','')} — autoandbid.com"
-        description = (a.get("description") or "")[:280]
-        # Use the auction's headline (first) image directly as the share
-        # preview. The previous custom-template renderer (Pillow PNG with
-        # title + bid overlays) was unreliable across social platforms —
-        # Facebook/WhatsApp would sometimes cache an outdated version,
-        # Telegram would crop the bid badge weirdly, and the eager
-        # generator added a second-long publish delay. Just sending the
-        # car's actual photo is the most predictable outcome.
+        # Title: locale-specific cache if present, otherwise raw `title`
+        # (which is the seller-entered string — usually already a Latin
+        # make/model line so it's safe across locales).
+        title_localized = a.get(f"title_{resolved_lang}") or a.get("title") or ""
+        brand = {"bg": "autoandbid.bg", "en": "autoandbid.com", "ro": "autoandbid.ro"}[resolved_lang]
+        title = f"{title_localized} — {brand}"
+        # Description: prefer the short SEO snippet (cached as
+        # `seo_description_<lang>` at approve time, ≤280 chars).
+        # Fallback chain: full localised description → full BG
+        # description → empty.
+        description = (
+            a.get(f"seo_description_{resolved_lang}")
+            or (a.get(f"description_{resolved_lang}") or "")[:280]
+            or (a.get("description") or "")[:280]
+        )
         cover = og_image.headline_image_url(a)
         if cover:
             image = cover if cover.startswith("http") else f"{frontend_base}{cover}"
@@ -396,30 +479,40 @@ async def share_auction(auction_id: str, request: Request):
             image = f"{frontend_base}/og-default.jpg"
         json_ld = f'<script type="application/ld+json">{_json_ld_vehicle(a, target)}</script>'
 
+    # Compose hreflang link tags.
+    hreflang_html = "\n".join(
+        f'<link rel="alternate" hreflang="{code}" href="{_esc(href)}">'
+        for code, href in alt_links
+    )
+
     html = f"""<!DOCTYPE html>
-<html lang="bg">
+<html lang="{html_lang}">
 <head>
 <meta charset="UTF-8">
 <title>{_esc(title)}</title>
 <meta name="description" content="{_esc(description)}">
 <meta property="og:type" content="article">
-<meta property="og:site_name" content="autoandbid.com">
+<meta property="og:site_name" content="autoandbid">
 <meta property="og:title" content="{_esc(title)}">
 <meta property="og:description" content="{_esc(description)}">
 <meta property="og:image" content="{_esc(image)}">
 <meta property="og:url" content="{_esc(target)}">
-<meta property="og:locale" content="bg_BG">
+<meta property="og:locale" content="{og_locale}">
+<meta property="og:locale:alternate" content="bg_BG">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:locale:alternate" content="ro_RO">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{_esc(title)}">
 <meta name="twitter:description" content="{_esc(description)}">
 <meta name="twitter:image" content="{_esc(image)}">
 <link rel="canonical" href="{_esc(target)}">
+{hreflang_html}
 {json_ld}
 <meta http-equiv="refresh" content="0; url={_esc(target)}">
 </head>
 <body>
 <script>window.location.replace({repr(target)});</script>
-<p>Пренасочване към <a href="{_esc(target)}">{_esc(target)}</a>…</p>
+<p>Redirecting to <a href="{_esc(target)}">{_esc(target)}</a>…</p>
 </body>
 </html>"""
     return Response(content=html, media_type="text/html; charset=utf-8")

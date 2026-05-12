@@ -1286,6 +1286,61 @@ async def translate_auction_description(
     await db.auctions.update_one({"id": auction_id}, {"$set": {cache_key: translated}})
     return {"lang": lang, "text": translated, "cached": False}
 
+
+async def _ensure_seo_translations(auction_id: str, a: dict) -> dict:
+    """Eagerly generate `title_<lang>` + `seo_description_<lang>` cache
+    fields for both RO and EN. Called once at admin approval time so
+    every social share + SERP impression uses locale-correct copy
+    instead of falling back to Bulgarian.
+
+    `title_<lang>` carries a localised version of `auction.title` (the
+    car make/model line; mostly Latin already, but Gemini handles
+    edge cases like "БМВ Х5" → "BMW X5"). `seo_description_<lang>`
+    holds a 280-char excerpt that's safe to paste into `<meta name="
+    description">` and `og:description` — we keep this separate from
+    the full `description_<lang>` so we don't blow the 300-char SERP
+    budget when descriptions get long.
+
+    Idempotent: skips any pair already present on the document.
+    Returns the patch dict so the caller can merge it into a $set.
+    """
+    from translate import translate_text
+    patch: dict = {}
+    title_src = (a.get("title") or "").strip()
+    desc_src = (a.get("description") or "").strip()
+    for lang in ("en", "ro"):
+        # Title — short, idempotent.
+        if title_src and not (a.get(f"title_{lang}") or "").strip():
+            try:
+                translated = await translate_text(title_src, lang)
+                if translated:
+                    patch[f"title_{lang}"] = translated.strip()
+            except Exception as e:  # noqa: BLE001
+                logger.info("[seo] title translation %s failed: %s", lang, e)
+        # SEO description — derived from translated description (cached
+        # in `description_<lang>` if seller / earlier call already ran
+        # the full translation). 280 chars matches Google's SERP
+        # snippet ceiling.
+        if desc_src and not (a.get(f"seo_description_{lang}") or "").strip():
+            full = a.get(f"description_{lang}") or ""
+            if not full.strip():
+                try:
+                    full = await translate_text(desc_src, lang) or ""
+                    if full.strip():
+                        patch[f"description_{lang}"] = full
+                except Exception as e:  # noqa: BLE001
+                    logger.info("[seo] description translation %s failed: %s", lang, e)
+            if full.strip():
+                patch[f"seo_description_{lang}"] = full.strip()[:280]
+    # Also derive seo_description_bg from the source if missing — keeps
+    # the share handler dead-simple (one lookup table, no fallbacks
+    # inline).
+    if desc_src and not (a.get("seo_description_bg") or "").strip():
+        patch["seo_description_bg"] = desc_src[:280]
+    if patch:
+        await db.auctions.update_one({"id": auction_id}, {"$set": patch})
+    return patch
+
 @api.post("/auctions")
 @limiter.limit("10/minute")
 async def create_auction(request: Request, payload: AuctionCreate, user: dict = Depends(require_verified_email)):
@@ -3270,6 +3325,17 @@ async def admin_approve(auction_id: str, _admin: dict = Depends(require_admin)):
             await _notify_followers_new_listing(fresh_for_follow)
     except Exception as e:
         logger.error("follower notification failed: %s", e)
+    # Eagerly translate title + SEO description into RO and EN so the
+    # very first social share / SERP impression renders with locale-
+    # correct copy. Failures are logged but never block approval — the
+    # share handler falls back to the BG canonical text if a translation
+    # is missing.
+    try:
+        fresh_for_seo = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+        if fresh_for_seo:
+            await _ensure_seo_translations(auction_id, fresh_for_seo)
+    except Exception as e:
+        logger.warning("SEO i18n translation at approve failed: %s", e)
     # Eager OG image generation — fire before any social crawler can
     # possibly scrape the URL. If the asynchronous generator fails
     # (cover fetch timeout, Pillow decode error, disk full) we retry

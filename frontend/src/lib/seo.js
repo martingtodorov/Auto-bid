@@ -33,13 +33,18 @@ const DEFAULT = {
   url: window.location.origin,
 };
 
-export function setPageMeta({ title, description, image, url, jsonLd, robots } = {}) {
+export function setPageMeta({ title, description, image, url, jsonLd, robots, locale, alternates } = {}) {
   const t = title || DEFAULT.title;
   const d = (description || DEFAULT.description).slice(0, 300);
   const img = image || DEFAULT.image;
   const u = url || window.location.href;
 
   document.title = t;
+  // `<html lang>` mirrors the i18n decision (locale "bg|en|ro") so
+  // screen readers and Google's content-language signal stay in sync.
+  if (locale) {
+    document.documentElement.setAttribute("lang", locale);
+  }
 
   ensureMeta('meta[name="description"]', "content", d);
   // Respect the global deindex override if it's in place — its meta element
@@ -54,6 +59,10 @@ export function setPageMeta({ title, description, image, url, jsonLd, robots } =
   ensureMeta('meta[property="og:image"]', "content", img);
   ensureMeta('meta[property="og:url"]', "content", u);
   ensureMeta('meta[property="og:type"]', "content", title && title !== DEFAULT.title ? "article" : "website");
+  if (locale) {
+    const ogLocale = { bg: "bg_BG", en: "en_US", ro: "ro_RO" }[locale] || "bg_BG";
+    ensureMeta('meta[property="og:locale"]', "content", ogLocale);
+  }
 
   ensureMeta('meta[name="twitter:card"]', "content", "summary_large_image");
   ensureMeta('meta[name="twitter:title"]', "content", t);
@@ -61,6 +70,32 @@ export function setPageMeta({ title, description, image, url, jsonLd, robots } =
   ensureMeta('meta[name="twitter:image"]', "content", img);
 
   ensureLink("canonical", u);
+
+  // ---- hreflang alternates ----
+  // `alternates` is `{ bg: "https://...", en: "...", ro: "..." }`. We
+  // strip any existing dynamic alternate links first to avoid stale
+  // entries piling up across navigations, then emit one per language
+  // + an `x-default` row pointing at the English (canonical) edition.
+  document.head.querySelectorAll('link[rel="alternate"][data-dynamic="1"]').forEach((n) => n.remove());
+  if (alternates && typeof alternates === "object") {
+    Object.entries(alternates).forEach(([code, href]) => {
+      if (!href) return;
+      const link = document.createElement("link");
+      link.rel = "alternate";
+      link.hreflang = code;
+      link.href = href;
+      link.setAttribute("data-dynamic", "1");
+      document.head.appendChild(link);
+    });
+    if (alternates.en) {
+      const xd = document.createElement("link");
+      xd.rel = "alternate";
+      xd.hreflang = "x-default";
+      xd.href = alternates.en;
+      xd.setAttribute("data-dynamic", "1");
+      document.head.appendChild(xd);
+    }
+  }
 
   // Optional structured data (JSON-LD)
   const id = "dynamic-jsonld";
