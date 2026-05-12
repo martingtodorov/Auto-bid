@@ -41,27 +41,37 @@ export default function AuctionCard({ auction, compact = false, priority = false
     return () => clearInterval(i);
   }, [auction.ends_at, auction.status]);
 
-  // ---- slide deck: first 4 photos + CTA ----
-  // We deliberately don't read more than 4 entries from images_variants
-  // because the backend list projection (`_list_shape`) caps it at 4
-  // anyway — and pulling more bytes here would defeat the size-savings.
+  // ---- slide deck: ordered preview (main → exterior → interior × 2) + CTA ----
+  // The user-facing rule: keep the visual story consistent — first frame
+  // is the cover, second is an exterior beauty, slots 3-4 give a peek
+  // into the cabin. The CTA always sits at index 5 (4 photos + CTA).
+  //
+  // Picker rules:
+  //   1. Always show the auction's "main" image first (cover).
+  //   2. Then best exterior shot (skipping the one we already picked).
+  //   3-4. Then two interior shots if available.
+  //   • If a category is missing, fall back to any remaining unused
+  //     image preserving original order.
+  //
+  // Backwards-compat: legacy auctions without category-tagged variants
+  // fall through to a simple "first 4 by upload order" picker — which
+  // is also what mobile.bg imports give us until we re-tag.
   const variants = auction.images_variants || [];
-  // Compose fallback URL list from legacy fields so cards from
-  // pre-variants auctions still render. Some old auctions only have a
-  // single cover image, which is fine — slide deck shrinks to 1+1=2.
   const legacyImages = (auction.images && auction.images.length > 0)
     ? auction.images
     : (auction.thumbnails || []);
-  const photoCount = Math.min(4, Math.max(variants.length, legacyImages.length));
-  const slides = [];
-  for (let i = 0; i < photoCount; i += 1) {
-    slides.push({ kind: "photo", index: i });
-  }
-  // Only attach the CTA when there's *more* to explore (i.e. we actually
-  // have a multi-photo gallery). For an auction with one cover image
-  // we'd rather show that single image clean than tease a half-empty
-  // carousel.
+  const orderedPhotos = pickOrderedPreviewSlides(variants, legacyImages);
+  const photoCount = orderedPhotos.length;
+  const slides = orderedPhotos.map((entry, i) => ({ kind: "photo", ...entry, slot: i }));
   if (photoCount >= 2) slides.push({ kind: "cta" });
+
+  // Deferred-load gate: the first slide loads instantly (LCP), the rest
+  // wait for user intent — touchstart (mobile) or hover (desktop) on
+  // the card. This shaves significant bytes off the initial page weight
+  // when the visitor is just scrolling past, while keeping the swipe
+  // gallery snappy once they show interest.
+  const [primed, setPrimed] = useState(false);
+  const primeOnce = () => { if (!primed) setPrimed(true); };
 
   // Track which slide is currently centred — needed for the pagination
   // pills underneath the carousel. IntersectionObserver is the cheapest
@@ -98,7 +108,12 @@ export default function AuctionCard({ auction, compact = false, priority = false
       className="card-editorial block group"
       data-testid={`auction-card-${auction.id}`}
     >
-      <div className="card-img aspect-[4/3] bg-[hsl(var(--surface))] relative overflow-hidden">
+      <div
+        className="card-img aspect-[4/3] bg-[hsl(var(--surface))] relative overflow-hidden"
+        onMouseEnter={primeOnce}
+        onTouchStart={primeOnce}
+        onPointerDown={primeOnce}
+      >
         {slides.length > 1 ? (
           <>
             <div
@@ -120,15 +135,27 @@ export default function AuctionCard({ auction, compact = false, priority = false
                   className="shrink-0 w-full h-full snap-start snap-always relative"
                 >
                   {s.kind === "photo" ? (
-                    <Picture
-                      variant={variants[s.index]}
-                      fallbackSrc={legacyImages[s.index]}
-                      size="card"
-                      alt={`${auction.title} — ${s.index + 1}`}
-                      className="absolute inset-0 w-full h-full object-cover"
-                      priority={priority && idx === 0}
-                      draggable={false}
-                    />
+                    // First slide is the LCP candidate — render eagerly
+                    // with the variant manifest. Slides 2-N are deferred
+                    // until the user shows intent (touchstart / hover)
+                    // via the `primed` flag — keeps initial weight low.
+                    (idx === 0 || primed) ? (
+                      <Picture
+                        variant={s.variant}
+                        fallbackSrc={s.fallbackSrc}
+                        size="card"
+                        alt={`${auction.title} — ${idx + 1}`}
+                        className="absolute inset-0 w-full h-full object-cover"
+                        priority={priority && idx === 0}
+                        draggable={false}
+                      />
+                    ) : (
+                      <div
+                        className="absolute inset-0 bg-[hsl(var(--surface))]"
+                        aria-hidden="true"
+                        data-testid={`auction-card-slide-placeholder-${idx}`}
+                      />
+                    )
                   ) : (
                     <CtaSlide title={t("auction.view_full_auction", "Виж пълния търг")} />
                   )}
@@ -154,8 +181,8 @@ export default function AuctionCard({ auction, compact = false, priority = false
         ) : (
           // Single-image legacy fallback — no carousel chrome, no JS.
           <Picture
-            variant={variants[0]}
-            fallbackSrc={legacyImages[0]}
+            variant={slides[0]?.variant}
+            fallbackSrc={slides[0]?.fallbackSrc || legacyImages[0]}
             size="card"
             alt={auction.title}
             className="absolute inset-0 w-full h-full object-cover"
@@ -273,6 +300,54 @@ export default function AuctionCard({ auction, compact = false, priority = false
     </Link>
   );
 }
+
+/**
+ * Pick up to 4 preview slides in the order: main → exterior → interior
+ * → interior, falling back to any remaining unused image when a category
+ * is missing.
+ *
+ * Each returned entry has shape `{ variant, fallbackSrc, sourceIndex }`
+ * — sourceIndex points back into the original arrays so React keys
+ * stay stable across re-renders.
+ */
+function pickOrderedPreviewSlides(variants, legacyImages) {
+  const used = new Set();
+  const out = [];
+  // Helper to push an index into the result if it's unused.
+  const push = (idx) => {
+    if (idx == null || idx < 0) return false;
+    if (used.has(idx)) return false;
+    used.add(idx);
+    out.push({
+      variant: variants[idx] || null,
+      fallbackSrc: legacyImages[idx] || (variants[idx] && variants[idx].primary) || null,
+      sourceIndex: idx,
+    });
+    return true;
+  };
+  // Index by category to skim categorized variants in one pass.
+  const byCategory = (() => {
+    const map = { main: [], exterior: [], interior: [], detail: [], damage: [], documents: [], other: [] };
+    variants.forEach((v, i) => {
+      const cat = (v && v.category) || "other";
+      if (map[cat]) map[cat].push(i); else map.other.push(i);
+    });
+    return map;
+  })();
+  // 1. main (cover). If absent, fall through to first exterior.
+  if (!push((byCategory.main || [])[0])) push((byCategory.exterior || [])[0]);
+  // 2. exterior — best one that wasn't already picked above.
+  push((byCategory.exterior || []).find((i) => !used.has(i)));
+  // 3-4. up to two interior shots.
+  (byCategory.interior || []).slice(0, 2).forEach(push);
+  // Fill any remaining slots with whatever else exists, preserving the
+  // original upload order so e.g. a "detail" or "damage" tagged image
+  // still shows when there are no interior shots.
+  const total = Math.max(variants.length, legacyImages.length);
+  for (let i = 0; i < total && out.length < 4; i += 1) push(i);
+  return out;
+}
+
 
 /** "View full auction" terminal slide — last panel in the swipe deck.
  *  Visually distinctive (subtle gradient + arrow) so users get a clear

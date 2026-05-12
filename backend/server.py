@@ -1246,11 +1246,26 @@ async def create_auction(request: Request, payload: AuctionCreate, user: dict = 
             raise HTTPException(status_code=400, detail="Снимките са непълни: " + "; ".join(errors))
 
     # Build merged images list in natural viewing order: exterior first, then bumper, wheels, interior
+    # Tag each entry with its source bucket so the auction card preview
+    # picker can order the gallery as: main → exterior → interior → interior.
     merged = []
+    image_categories: list[str] = []  # parallel array to `merged`
     if has_categorized:
-        merged = [*exterior, *bumper, *wheels, *interior]
+        # First exterior shot doubles as the "main" cover. Tag it
+        # explicitly so the card picker prefers it for slide 1.
+        for idx, u in enumerate(exterior):
+            merged.append(u)
+            image_categories.append("main" if idx == 0 else "exterior")
+        for u in bumper:
+            merged.append(u); image_categories.append("detail")
+        for u in wheels:
+            merged.append(u); image_categories.append("detail")
+        for u in interior:
+            merged.append(u); image_categories.append("interior")
     else:
         merged = list(payload.images or [])
+        # Uncategorized upload — tag only the first as main, the rest stay neutral.
+        image_categories = ["main" if i == 0 else "other" for i in range(len(merged))]
 
     # Optimize on a worker thread — Pillow is sync and CPU-bound.
     web_urls, thumb_urls, errs = await asyncio.to_thread(imgproc.optimize_many, merged)
@@ -1295,9 +1310,15 @@ async def create_auction(request: Request, payload: AuctionCreate, user: dict = 
     try:
         from services.image_variants import variants_from_data_url
         manifests: list[dict] = []
-        for raw_url in merged:
+        for idx, raw_url in enumerate(merged):
             m = await asyncio.to_thread(variants_from_data_url, raw_url)
             if m:
+                # Tag with the source bucket so the AuctionCard picker
+                # can build the "main → exterior → interior → interior"
+                # preview deck without re-classifying images at render
+                # time.
+                if idx < len(image_categories):
+                    m["category"] = image_categories[idx]
                 manifests.append(m)
         doc["images_variants"] = manifests
     except Exception as _e:  # noqa: BLE001
@@ -1905,9 +1926,14 @@ async def import_from_mobile_bg(request: Request, payload: MobileBgImport):
             images = [await asyncio.to_thread(store_image, u) for u in web_urls]
             thumbnails = [await asyncio.to_thread(store_image, u) for u in thumb_urls]
             # 4. Generate AVIF/WebP/JPG × 4 sizes variants for `<Picture>`.
-            for raw in data_urls:
+            # Tag the first image as `main` (cover), the rest as `exterior`
+            # — mobile.bg listings don't expose category metadata so this
+            # is the safest heuristic (first photo on a typical listing
+            # is always the front 3/4 shot the seller picked as cover).
+            for idx, raw in enumerate(data_urls):
                 m = await asyncio.to_thread(variants_from_data_url, raw)
                 if m:
+                    m["category"] = "main" if idx == 0 else "exterior"
                     images_variants.append(m)
         except Exception as _img_e:  # noqa: BLE001
             logger.warning("[mobile.bg import] rehost failed, keeping URLs: %s", _img_e)
@@ -5718,6 +5744,31 @@ app.add_middleware(
 # preview overrides via .env to keep files next to the code).
 try:
     from fastapi.staticfiles import StaticFiles
+    from starlette.responses import FileResponse  # for cache-header subclass
+
+    class CachedStaticFiles(StaticFiles):
+        """StaticFiles subclass that adds aggressive cache headers to
+        content-addressed variant files. Filenames inside `/variants/`
+        embed the sha256 of the source bytes, so the URL is *immutable*
+        — we hand the client (and any CDN sitting in front of nginx)
+        a `Cache-Control: public, max-age=31536000, immutable` header
+        so they never re-fetch.
+
+        Outside `/variants/` (legacy auction JPEGs uploaded before
+        variant generation) we use a more conservative 7-day max-age
+        because those URLs *could* still be re-uploaded.
+        """
+        async def get_response(self, path: str, scope):  # noqa: D401
+            resp = await super().get_response(path, scope)
+            if isinstance(resp, FileResponse):
+                if path.startswith("variants/"):
+                    resp.headers["Cache-Control"] = (
+                        "public, max-age=31536000, immutable"
+                    )
+                else:
+                    resp.headers["Cache-Control"] = "public, max-age=604800"
+            return resp
+
     _UPLOAD_DIR = os.path.abspath(os.environ.get("UPLOAD_DIR", "/opt/autobids/uploads"))
     # Fail soft: if the target isn't creatable (e.g. read-only /app),
     # fall back to a temp dir so the app still boots. Disk storage will
@@ -5732,7 +5783,7 @@ try:
             _UPLOAD_DIR, _e,
         )
     if os.path.isdir(_UPLOAD_DIR):
-        app.mount("/api/uploads", StaticFiles(directory=_UPLOAD_DIR), name="uploads")
+        app.mount("/api/uploads", CachedStaticFiles(directory=_UPLOAD_DIR), name="uploads")
 except Exception as _e:  # pragma: no cover — never block boot on this
     logging.getLogger(__name__).warning("Could not mount /api/uploads: %s", _e)
 

@@ -90,17 +90,23 @@ def _variant_path(sha: str, size_name: str, ext: str) -> str:
 def public_variant_url(sha: str, size_name: str, ext: str) -> str:
     """Public URL for a variant.
 
-    Falls back to a relative `/api/uploads/...` path if `IMAGE_CDN_BASE`
-    is not set, so the app keeps working in dev/preview environments
-    without DNS for the subdomain. In production the user sets:
+    Resolution order (first non-empty wins):
+        1. `IMAGE_BASE_URL` — canonical env var, e.g.
+           `https://img.autoandbid.bg` (production frontend reverse-
+           proxy in front of the private backend storage).
+        2. `IMAGE_CDN_BASE` — legacy alias kept for backwards compat
+           with older deployments.
+        3. Relative `/api/uploads/...` path (dev / preview environment
+           where DNS for the image subdomain isn't set up yet).
 
-        IMAGE_CDN_BASE=https://img.autoandbid.com
-
-    and nginx (or Cloudflare R2 bucket) serves the `variants/...`
-    tree directly from disk with long-lived cache headers.
+    The app stays CDN-ready throughout: pointing `img.autoandbid.bg`
+    at a real CDN (Cloudflare, BunnyCDN, Fastly) later requires zero
+    code change — just flip the env var. The CDN sits in front of the
+    same nginx that's reverse-proxying to the backend; cache headers
+    are emitted at the backend layer and honoured all the way through.
     """
     rel = f"variants/{sha[:2]}/{sha[2:4]}/{sha}/{size_name}.{ext}"
-    base = os.environ.get("IMAGE_CDN_BASE")
+    base = os.environ.get("IMAGE_BASE_URL") or os.environ.get("IMAGE_CDN_BASE")
     if base:
         return f"{base.rstrip('/')}/{rel}"
     return f"/api/uploads/{rel}"

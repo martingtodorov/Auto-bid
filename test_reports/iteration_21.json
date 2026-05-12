@@ -1,0 +1,101 @@
+{
+  "summary": "Iteration 21: Image CDN Architecture & Variant Categorization Testing Complete. 20/21 backend tests pass (1 skipped). Verified IMAGE_BASE_URL/IMAGE_CDN_BASE env var resolution, cache headers on /api/uploads, image category tagging in POST /api/auctions and /api/auctions/import-mobile-bg, AuctionCard lazy-load behavior, and pickOrderedPreviewSlides ordering logic.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Homepage",
+        "issues": ["Same auction appears twice in 'Featured Listings' section - React key warning in console. This is a display issue, not a data issue (API returns 1 auction)."]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration21_image_cdn.py",
+    "/app/test_reports/pytest/pytest_iteration21.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Backend public_variant_url() correctly implements IMAGE_BASE_URL → IMAGE_CDN_BASE → relative /api/uploads fallback chain",
+    "CachedStaticFiles subclass correctly sets Cache-Control: public, max-age=31536000, immutable for variants/* paths",
+    "CachedStaticFiles correctly sets Cache-Control: public, max-age=604800 for non-variants paths",
+    "POST /api/auctions correctly tags images with categories: first exterior=main, rest exterior=exterior, bumper/wheels=detail, interior=interior",
+    "POST /api/auctions with uncategorized images correctly tags: first=main, rest=other",
+    "POST /api/auctions/import-mobile-bg correctly tags: index 0=main, rest=exterior",
+    "AuctionCard.jsx pickOrderedPreviewSlides correctly orders: main → exterior → interior × 2, with fallback to remaining unused images",
+    "AuctionCard.jsx lazy-load working: 3 placeholder divs before hover → 0 after hover, 1 picture → 4 pictures",
+    "AuctionCard.jsx pagination dots count matches slides (5 dots = 4 photos + 1 CTA)",
+    "CTA slide shows 'View full auction' with 'TAP TO OPEN' text",
+    "Legacy auctions without images_variants gracefully fall back to images[] array"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration21_image_cdn.py"
+  ],
+  "success_rate": {
+    "backend": "95% (20/21 tests passed, 1 skipped)",
+    "frontend": "100% (all UI behaviors verified via Playwright)"
+  },
+  "test_credentials": "admin@autoandbid.com / Nero08787",
+  "seed_data_creation": "Created and deleted test auction 4071d037-1036-443d-8456-9a27880c4291 with categorized images_variants for frontend testing",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 21 validated the image CDN architecture updates. Key findings: (1) IMAGE_BASE_URL takes priority over IMAGE_CDN_BASE, both fall back to relative /api/uploads when empty. (2) Cache headers verified via direct curl to localhost:8001 - variants get immutable 1-year cache, non-variants get 7-day cache. (3) Category tagging logic verified for both categorized bucket uploads and uncategorized uploads. (4) Mobile.bg import correctly tags first image as 'main', rest as 'exterior'. (5) Frontend AuctionCard lazy-load verified: 3 placeholder divs before hover, 0 after hover (replaced with <picture> elements). (6) Pagination dots count = 5 (4 photos + 1 CTA). (7) CTA slide shows 'View full auction' text. (8) Legacy auctions without images_variants still render via fallback to images[] array.",
+  "verified_features": {
+    "image_base_url_resolution": {
+      "status": "VERIFIED",
+      "details": "IMAGE_BASE_URL → IMAGE_CDN_BASE → relative /api/uploads fallback chain works correctly"
+    },
+    "cache_headers_variants": {
+      "status": "VERIFIED",
+      "details": "variants/* paths return Cache-Control: public, max-age=31536000, immutable"
+    },
+    "cache_headers_non_variants": {
+      "status": "VERIFIED",
+      "details": "non-variants paths return Cache-Control: public, max-age=604800"
+    },
+    "category_tagging_categorized_upload": {
+      "status": "VERIFIED",
+      "details": "first exterior=main, rest exterior=exterior, bumper/wheels=detail, interior=interior"
+    },
+    "category_tagging_uncategorized_upload": {
+      "status": "VERIFIED",
+      "details": "first=main, rest=other"
+    },
+    "category_tagging_mobile_bg_import": {
+      "status": "VERIFIED",
+      "details": "index 0=main, rest=exterior"
+    },
+    "auction_card_lazy_load": {
+      "status": "VERIFIED",
+      "details": "3 placeholder divs before hover → 0 after hover, 1 picture → 4 pictures"
+    },
+    "auction_card_slide_ordering": {
+      "status": "VERIFIED",
+      "details": "pickOrderedPreviewSlides orders: main → exterior → interior × 2"
+    },
+    "auction_card_pagination_dots": {
+      "status": "VERIFIED",
+      "details": "5 dots = 4 photos + 1 CTA"
+    },
+    "auction_card_cta_slide": {
+      "status": "VERIFIED",
+      "details": "CTA slide shows 'View full auction' with 'TAP TO OPEN'"
+    },
+    "legacy_auction_fallback": {
+      "status": "VERIFIED",
+      "details": "Auctions without images_variants fall back to images[] array"
+    },
+    "regression_endpoints": {
+      "status": "VERIFIED",
+      "details": "/healthz, /readyz, /auctions/featured, /auctions/sold, /auctions/facets, /makes all return 200"
+    }
+  },
+  "mocked_apis": {
+    "note": "No mocked APIs - all tests use real endpoints",
+    "affected_features": []
+  }
+}
