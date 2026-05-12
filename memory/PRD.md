@@ -2338,3 +2338,28 @@ Frontend: Wallet иконка + сума след "Настройки", пока
 - `priceValidUntil` остарява след auction end (замяна с `finalized_at + 30d` за sold)
 - Минимална SSR meta за `/auctions`, `/sales`, `/leaderboard` (non-JS crawlers)
 - Cloudflare AI Shield injection в production robots.txt (изисква user dashboard действие)
+
+
+---
+
+## 12 May 2026 — Dedicated img.autoandbid.bg CDN vhost (DONE)
+
+**Проблем**: `img.autoandbid.bg` (с правилен DNS) сочеше към главния frontend vhost
+заради shared `server_name` и връщаше React homepage вместо изображения.
+
+**Фикс** (`/app/deploy/hetzner/nginx/autoandbid.conf`):
+- `img.autoandbid.bg` **махнат** от главния HTTPS server_name (`autoandbid.com autoandbid.bg autoandbid.ro`)
+- Добавен към HTTP→HTTPS redirect block (port 80)
+- Нов dedicated **HTTPS server block** само за `img.autoandbid.bg` с whitelisted paths:
+  - `/uploads/`  → alias `/opt/autobids/uploads/` (originals)
+  - `/variants/` → alias `/opt/autobids/uploads/variants/` (AVIF/WebP/JPG, backend default)
+  - `/social-images/` → alias `/opt/autobids/social-images/` (OG snapshots)
+- Всичко друго (включително `/`, `/index.html`, `/api/*`) → **hard 404**
+- CORS allow само за `autoandbid.{com,bg,ro}` + www variants
+- AVIF/WebP MIME types явно декларирани
+
+**Verified**: `nginx -t` с dummy upstream + self-signed cert → `syntax is ok / test is successful`.
+
+**Deploy**: Прилага се при следващия `ansible-playbook deploy_frontend.yml` или ръчно
+`scp` + `systemctl reload nginx` на `ab-front1`.
+
