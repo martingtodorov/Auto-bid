@@ -542,13 +542,12 @@ export default function AuctionDetailPage() {
                   readable during fast scroll. Bold price leads the eye.
                 */}
                 <div className="flex-1 min-w-0">
-                  <div
+                  <h1
                     className="font-serif text-[17px] leading-tight truncate text-[hsl(var(--ink))]"
                     data-testid="sticky-title"
-                    aria-hidden="true"
                   >
                     {a.title}
-                  </div>
+                  </h1>
                   <div className="mt-1.5 flex items-center gap-2.5 text-[hsl(var(--ink-muted))]">
                     <span
                       className="font-mono font-bold tabular-nums whitespace-nowrap text-[18px] text-[hsl(var(--ink))]"
@@ -659,7 +658,7 @@ export default function AuctionDetailPage() {
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
           <div className="lg:col-span-8">
             <div className="overline text-[hsl(var(--accent))]">{a.make} · {translateEnum(a.body_type, "body_type", lng)}</div>
-            <h1 ref={titleRef} className="font-serif text-2xl sm:text-3xl lg:text-5xl mt-3 tracking-tight leading-tight">{a.title}</h1>
+            <h1 ref={titleRef} className="hidden lg:block font-serif text-3xl lg:text-5xl mt-3 tracking-tight leading-tight">{a.title}</h1>
             <div className="mt-3 text-sm text-[hsl(var(--ink-muted))] flex items-center gap-4 flex-wrap">
               <span>{a.year} · {formatKM(a.mileage_km)} · {translateEnum(a.fuel, "fuel", lng)} · {translateEnum(a.city, "city", lng)}{a.country ? `, ${a.country}` : ""}</span>
             </div>
