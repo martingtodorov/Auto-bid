@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Calendar, Gauge, Fuel, Settings, MapPin, Palette, Zap, Cog, MessageCircle, Heart, ArrowLeft, Shield, Wifi, Share2, Languages, Gavel, ChevronUp, ChevronDown, TrendingUp } from "lucide-react";
+import { Calendar, Gauge, Fuel, Settings, MapPin, Palette, Zap, Cog, MessageCircle, Heart, ArrowLeft, Shield, Wifi, Share2, Languages, Gavel, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, TrendingUp } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, API_BASE, formatEUR, formatLocal, formatKM, timeLeft, formatTimeLeft, intlLocale } from "../lib/apiClient";
 import { translateEnum } from "../lib/carTranslations";
@@ -58,17 +58,15 @@ export default function AuctionDetailPage() {
   const wsRef = useRef(null);
   const mainImageRef = useRef(null);
 
-  // ── Mobile big-image swipe ────────────────────────────────────────────────
-  // On mobile, swiping the hero image left/right moves between photos using
-  // the same 10° lock rule as the AuctionCard mini-carousel:
-  //   • If the gesture deviates ≤10° from the horizontal axis, lock to
-  //     horizontal and call `preventDefault()` on every touchmove so the
-  //     page doesn't scroll under the finger.
-  //   • Anything steeper (i.e. clearly vertical) bubbles up to the
-  //     browser → user can scroll the page normally even if their thumb
-  //     happens to land on the image.
-  // The click handler that opens the lightbox is suppressed when a swipe
-  // actually fires (`swipeRef.current.cancelClick = true`).
+  // ── Hero image swipe (mobile + desktop) ───────────────────────────────────
+  // Same 10° lock rule as the AuctionCard mini-carousel:
+  //   • If the gesture deviates ≤10° from horizontal, lock to horizontal
+  //     and call `preventDefault()` on every touchmove so the page doesn't
+  //     scroll under the finger.
+  //   • Anything steeper → free vertical scroll.
+  // Desktop adds the same handler chain on mouse events so a click-and-drag
+  // also flips photos. A swipe `cancelClick=true` suppresses the click that
+  // would otherwise open the lightbox.
   const swipeRef = useRef(null);
   const photoIdxRef = useRef(0);
   useEffect(() => { photoIdxRef.current = photoIdx; }, [photoIdx]);
@@ -77,65 +75,87 @@ export default function AuctionDetailPage() {
     if (!el) return;
     const total = a?.images?.length || 0;
     if (total < 2) return;
-    // 10° from horizontal → tan(10°) ≈ 0.176
-    const ANGLE_TAN = Math.tan((10 * Math.PI) / 180);
-    const COMMIT_PX = 50;        // min horizontal distance to commit a slide change
+    const ANGLE_TAN = Math.tan((10 * Math.PI) / 180); // ≈ 0.176
+    const COMMIT_PX = 25;        // min horizontal distance to commit a slide change
     const DETECT_PX = 8;         // min movement before deciding axis lock
 
-    const onStart = (e) => {
-      const t = e.touches[0];
-      swipeRef.current = {
-        x: t.clientX,
-        y: t.clientY,
-        dx: 0,
-        locked: null,
-        cancelClick: false,
-      };
+    const begin = (x, y) => {
+      swipeRef.current = { x, y, dx: 0, locked: null, cancelClick: false };
     };
-    const onMove = (e) => {
+    const update = (x, y, preventDefault) => {
       const s = swipeRef.current;
       if (!s) return;
-      const t = e.touches[0];
-      const dx = t.clientX - s.x;
-      const dy = t.clientY - s.y;
+      const dx = x - s.x;
+      const dy = y - s.y;
       const absX = Math.abs(dx), absY = Math.abs(dy);
       if (s.locked === null) {
         if (absX < DETECT_PX && absY < DETECT_PX) return;
-        // 10° rule: angle from horizontal axis = atan(|dy|/|dx|).
-        // Horizontal lock when |dy| < |dx| * tan(10°).
         s.locked = absX > absY && absY <= absX * ANGLE_TAN ? "h" : "v";
       }
       if (s.locked === "h") {
-        e.preventDefault(); // requires non-passive listener (set below)
+        preventDefault && preventDefault();
         s.dx = dx;
       }
     };
-    const onEnd = () => {
+    const finish = () => {
       const s = swipeRef.current;
       if (!s) return;
       if (s.locked === "h" && Math.abs(s.dx) > COMMIT_PX) {
         const cur = photoIdxRef.current;
         const next = s.dx < 0
-          ? Math.min(total - 1, cur + 1)   // swipe left → next photo
-          : Math.max(0, cur - 1);          // swipe right → prev photo
+          ? Math.min(total - 1, cur + 1)
+          : Math.max(0, cur - 1);
         if (next !== cur) setPhotoIdx(next);
         s.cancelClick = true;
       }
-      // Keep the ref alive briefly so the synthetic `click` that fires
-      // after touchend can read `cancelClick`. We null it on the next tick.
       setTimeout(() => { swipeRef.current = null; }, 0);
     };
 
-    // touchmove must be non-passive so `preventDefault()` works on iOS.
-    el.addEventListener("touchstart", onStart, { passive: true });
-    el.addEventListener("touchmove", onMove, { passive: false });
-    el.addEventListener("touchend", onEnd, { passive: true });
-    el.addEventListener("touchcancel", onEnd, { passive: true });
+    // ---- Touch (mobile / tablet) ----
+    const onTouchStart = (e) => { const t = e.touches[0]; begin(t.clientX, t.clientY); };
+    const onTouchMove = (e) => {
+      const t = e.touches[0];
+      update(t.clientX, t.clientY, () => e.preventDefault());
+    };
+
+    // ---- Mouse (desktop click-drag) ----
+    // We don't preventDefault on mousemove (text-selection is already
+    // suppressed via `select-none` on the container), but we DO need
+    // to swallow the subsequent click via `cancelClick`. Mouse events
+    // listen on window during a drag so the gesture survives leaving
+    // the image bounds mid-swipe.
+    let mouseDown = false;
+    const onMouseDown = (e) => {
+      // Only react to primary button. Right-click / middle-click bypass.
+      if (e.button !== 0) return;
+      mouseDown = true;
+      begin(e.clientX, e.clientY);
+    };
+    const onMouseMove = (e) => {
+      if (!mouseDown) return;
+      update(e.clientX, e.clientY, null);
+    };
+    const onMouseUp = () => {
+      if (!mouseDown) return;
+      mouseDown = false;
+      finish();
+    };
+
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", finish, { passive: true });
+    el.addEventListener("touchcancel", finish, { passive: true });
+    el.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
     return () => {
-      el.removeEventListener("touchstart", onStart);
-      el.removeEventListener("touchmove", onMove);
-      el.removeEventListener("touchend", onEnd);
-      el.removeEventListener("touchcancel", onEnd);
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", finish);
+      el.removeEventListener("touchcancel", finish);
+      el.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
     };
   }, [a?.images?.length]);
   const settings = useSiteSettings();
@@ -781,11 +801,7 @@ export default function AuctionDetailPage() {
             >
               <div
                 ref={mainImageRef}
-                className="aspect-[4/3] lg:aspect-[3/2] border border-[hsl(var(--line))] rounded-card overflow-hidden bg-[hsl(var(--surface))] cursor-zoom-in relative group select-none"
-                onClick={() => {
-                  if (swipeRef.current?.cancelClick) return; // swipe consumed the gesture
-                  setLightboxIdx(photoIdx);
-                }}
+                className="aspect-[4/3] lg:aspect-[3/2] border border-[hsl(var(--line))] rounded-card overflow-hidden bg-[hsl(var(--surface))] relative group select-none"
                 style={{ touchAction: "pan-y" }}
                 data-testid="main-gallery-image"
               >
@@ -794,9 +810,79 @@ export default function AuctionDetailPage() {
                   fallbackSrc={a.images?.[photoIdx] || a.thumbnails?.[photoIdx]}
                   size="gallery"
                   alt={a.title}
-                  className="w-full h-full object-cover transition group-hover:scale-[1.02]"
+                  className="w-full h-full object-cover transition group-hover:scale-[1.02] pointer-events-none"
                   priority
                 />
+                {/* 3-zone click overlay — covers the whole image.
+                    LEFT 30% → prev · MIDDLE 40% → open lightbox · RIGHT 30% → next.
+                    On desktop, hovering the left/right zones reveals a
+                    semi-transparent chevron the full height of the image
+                    (per spec). Mobile: zones still work as tap targets
+                    but chevrons stay hidden — swipe is the primary gesture. */}
+                {a.images?.length > 1 ? (
+                  <>
+                    <button
+                      type="button"
+                      aria-label={t("common.previous", "Previous")}
+                      onClick={(e) => {
+                        if (swipeRef.current?.cancelClick) return;
+                        e.stopPropagation();
+                        setPhotoIdx((i) => Math.max(0, i - 1));
+                      }}
+                      disabled={photoIdx === 0}
+                      className="absolute inset-y-0 left-0 w-[30%] flex items-center justify-start pl-3 cursor-w-resize lg:cursor-pointer opacity-0 lg:group-hover:opacity-100 transition disabled:cursor-not-allowed disabled:opacity-0"
+                      data-testid="gallery-prev-btn"
+                    >
+                      <span className="hidden lg:flex w-10 h-10 rounded-full bg-black/45 backdrop-blur-sm items-center justify-center text-white shadow-lg">
+                        <ChevronLeft size={22} />
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={t("common.zoom", "Zoom")}
+                      onClick={(e) => {
+                        if (swipeRef.current?.cancelClick) return;
+                        e.stopPropagation();
+                        setLightboxIdx(photoIdx);
+                      }}
+                      className="absolute inset-y-0 left-[30%] w-[40%] cursor-zoom-in"
+                      data-testid="gallery-zoom-btn"
+                    />
+                    <button
+                      type="button"
+                      aria-label={t("common.next", "Next")}
+                      onClick={(e) => {
+                        if (swipeRef.current?.cancelClick) return;
+                        e.stopPropagation();
+                        setPhotoIdx((i) => Math.min((a.images?.length || 1) - 1, i + 1));
+                      }}
+                      disabled={photoIdx >= (a.images?.length || 1) - 1}
+                      className="absolute inset-y-0 right-0 w-[30%] flex items-center justify-end pr-3 cursor-e-resize lg:cursor-pointer opacity-0 lg:group-hover:opacity-100 transition disabled:cursor-not-allowed disabled:opacity-0"
+                      data-testid="gallery-next-btn"
+                    >
+                      <span className="hidden lg:flex w-10 h-10 rounded-full bg-black/45 backdrop-blur-sm items-center justify-center text-white shadow-lg">
+                        <ChevronRight size={22} />
+                      </span>
+                    </button>
+                  </>
+                ) : (
+                  // Single image — whole surface opens lightbox.
+                  <button
+                    type="button"
+                    aria-label={t("common.zoom", "Zoom")}
+                    onClick={() => setLightboxIdx(photoIdx)}
+                    className="absolute inset-0 cursor-zoom-in"
+                    data-testid="gallery-zoom-btn"
+                  />
+                )}
+
+                {/* Instagram-style sliding dot strip — caps at 5 visible
+                    dots, the rest are virtualised via the window. Active
+                    dot is always near the centre when total > 5. */}
+                {a.images?.length > 1 && (
+                  <GalleryDots total={a.images.length} active={photoIdx} />
+                )}
+
                 {a.images?.length > 0 && (
                   <div className="absolute bottom-3 right-3 px-2.5 py-1 rounded-full bg-black/55 text-white text-xs font-mono opacity-0 group-hover:opacity-100 transition pointer-events-none">
                     {photoIdx + 1} / {a.images.length} · {t("common.zoom")}
@@ -1358,6 +1444,58 @@ export default function AuctionDetailPage() {
     </main>
   );
 }
+
+/**
+ * Instagram-style sliding dot strip — caps at 5 visible dots no matter
+ * how many photos exist (so a 60-photo auction doesn't bombard the user
+ * with a 60-wide bar). Edge dots in the visible window scale down to
+ * hint "there are more photos in that direction".
+ */
+function GalleryDots({ total, active }) {
+  const WINDOW = 5;
+  if (total < 2) return null;
+  let start;
+  if (total <= WINDOW) {
+    start = 0;
+  } else {
+    // Keep the active dot near the centre of the window; clamp at edges.
+    start = Math.max(0, Math.min(total - WINDOW, active - 2));
+  }
+  const end = Math.min(total, start + WINDOW);
+  const indices = [];
+  for (let i = start; i < end; i++) indices.push(i);
+  const hasMoreLeft = start > 0;
+  const hasMoreRight = end < total;
+  return (
+    <div
+      className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 px-2 py-1 rounded-full bg-black/40 backdrop-blur-sm pointer-events-none"
+      data-testid="gallery-dots"
+    >
+      {indices.map((i, posInWindow) => {
+        const isActive = i === active;
+        // Shrink the outermost two dots on whichever side has hidden
+        // photos — Instagram's "more in that direction" cue.
+        let scale = 1;
+        if (hasMoreLeft && posInWindow === 0) scale = 0.5;
+        else if (hasMoreLeft && posInWindow === 1) scale = 0.75;
+        if (hasMoreRight && posInWindow === indices.length - 1) scale = 0.5;
+        else if (hasMoreRight && posInWindow === indices.length - 2) scale = 0.75;
+        return (
+          <span
+            key={i}
+            className={`block rounded-full transition-all ${
+              isActive ? "bg-[#ffffff] w-3 h-1.5" : "bg-white/55 w-1.5 h-1.5"
+            }`}
+            style={!isActive && scale !== 1 ? { transform: `scale(${scale})` } : undefined}
+            aria-hidden="true"
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+
 
 function DescriptionWithInteriorShots({ auctionId, auctionTitle = "", description, interiorImages, interiorThumbnails = [], interiorStartIdx = 0, onOpenLightbox, preTranslated = {} }) {
   const { t, i18n } = useTranslation();
