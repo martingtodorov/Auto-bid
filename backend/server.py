@@ -3253,6 +3253,56 @@ async def list_comments(auction_id: str, request: Request):
     await _hydrate_user_slug(out)
     return out
 
+# ─── Photo captions (owner-only) ─────────────────────────────────────────────
+# Sellers can attach a short caption to any individual photo of their
+# own listing so they can clarify questions raised in the public comment
+# thread (e.g. "scratch on left fender — repaired professionally in 2024").
+# Stored as a dict on the auction doc: `{image_index: caption_str}` keyed
+# by stringified int (Mongo can't have integer dict keys in JSON-safe form).
+#
+# Visibility: every visitor reads the caption; only the seller (or an
+# admin) can create / edit / delete.
+
+class PhotoCaptionPayload(BaseModel):
+    photo_idx: int
+    text: str  # empty string = delete the caption
+
+
+@api.put("/auctions/{auction_id}/photo-caption")
+async def set_photo_caption(
+    auction_id: str,
+    payload: PhotoCaptionPayload,
+    user: dict = Depends(require_verified_email),
+):
+    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0, "seller_id": 1, "images": 1})
+    if not a:
+        raise HTTPException(status_code=404, detail="Търгът не е намерен")
+    is_admin = user.get("role") in ("admin", "moderator")
+    if not is_admin and a.get("seller_id") != user["id"]:
+        raise HTTPException(status_code=403, detail="Само продавачът може да коментира собствени снимки")
+    total_imgs = len(a.get("images") or [])
+    if payload.photo_idx < 0 or payload.photo_idx >= total_imgs:
+        raise HTTPException(status_code=400, detail="Невалиден индекс на снимка")
+    text = (payload.text or "").strip()
+    if len(text) > 500:
+        raise HTTPException(status_code=400, detail="Коментарът трябва да е до 500 символа")
+
+    key = f"photo_captions.{payload.photo_idx}"
+    if text:
+        await db.auctions.update_one(
+            {"id": auction_id},
+            {"$set": {key: text, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        )
+    else:
+        await db.auctions.update_one(
+            {"id": auction_id},
+            {"$unset": {key: ""}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}},
+        )
+    return {"ok": True, "photo_idx": payload.photo_idx, "text": text}
+
+
+
+
 @api.post("/auctions/{auction_id}/comments")
 async def add_comment(auction_id: str, payload: CommentCreate, user: dict = Depends(require_verified_email)):
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})

@@ -128,7 +128,7 @@ export default function AuctionCard({ auction, compact = false, priority = false
       }}
     >
       <div
-        className="card-img aspect-[4/3] bg-[hsl(var(--surface))] relative overflow-hidden"
+        className="card-img aspect-[3/2] bg-[hsl(var(--surface))] relative overflow-hidden"
         onMouseEnter={primeOnce}
         onTouchStart={primeOnce}
         onPointerDown={primeOnce}

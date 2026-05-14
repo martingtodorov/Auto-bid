@@ -68,6 +68,12 @@ export default function AuctionDetailPage() {
   // also flips photos. A swipe `cancelClick=true` suppresses the click that
   // would otherwise open the lightbox.
   const swipeRef = useRef(null);
+  // Separate guard for the synthetic click that fires AFTER touchend
+  // (Chromium synthesises a click ~300ms after touchend even when we
+  // call preventDefault inside touchmove). Keep this flag alive longer
+  // than the click event so the middle-zone onClick can bail without
+  // racing the swipe-state cleanup.
+  const clickGuardRef = useRef(false);
   const photoIdxRef = useRef(0);
   useEffect(() => { photoIdxRef.current = photoIdx; }, [photoIdx]);
   useEffect(() => {
@@ -106,9 +112,12 @@ export default function AuctionDetailPage() {
           ? Math.min(total - 1, cur + 1)
           : Math.max(0, cur - 1);
         if (next !== cur) setPhotoIdx(next);
-        s.cancelClick = true;
+        // Block the synthetic click that fires right after touchend.
+        // 450ms covers all browsers (Chromium ~300ms, Safari ~350ms).
+        clickGuardRef.current = true;
+        setTimeout(() => { clickGuardRef.current = false; }, 450);
       }
-      setTimeout(() => { swipeRef.current = null; }, 0);
+      swipeRef.current = null;
     };
 
     // ---- Touch (mobile / tablet) ----
@@ -825,7 +834,7 @@ export default function AuctionDetailPage() {
                       type="button"
                       aria-label={t("common.previous", "Previous")}
                       onClick={(e) => {
-                        if (swipeRef.current?.cancelClick) return;
+                        if (clickGuardRef.current) { e.preventDefault(); e.stopPropagation(); return; }
                         e.stopPropagation();
                         setPhotoIdx((i) => Math.max(0, i - 1));
                       }}
@@ -841,7 +850,7 @@ export default function AuctionDetailPage() {
                       type="button"
                       aria-label={t("common.zoom", "Zoom")}
                       onClick={(e) => {
-                        if (swipeRef.current?.cancelClick) return;
+                        if (clickGuardRef.current) { e.preventDefault(); e.stopPropagation(); return; }
                         e.stopPropagation();
                         setLightboxIdx(photoIdx);
                       }}
@@ -852,7 +861,7 @@ export default function AuctionDetailPage() {
                       type="button"
                       aria-label={t("common.next", "Next")}
                       onClick={(e) => {
-                        if (swipeRef.current?.cancelClick) return;
+                        if (clickGuardRef.current) { e.preventDefault(); e.stopPropagation(); return; }
                         e.stopPropagation();
                         setPhotoIdx((i) => Math.min((a.images?.length || 1) - 1, i + 1));
                       }}
@@ -889,6 +898,21 @@ export default function AuctionDetailPage() {
                   </div>
                 )}
               </div>
+              {/* Per-photo caption strip — visible to everyone, editable
+                  only by the auction owner / admins. Lives directly under
+                  the main image so it's tied visually to the active photo. */}
+              <PhotoCaption
+                auctionId={id}
+                photoIdx={photoIdx}
+                caption={a.photo_captions?.[photoIdx] || a.photo_captions?.[String(photoIdx)] || ""}
+                isOwner={!!user && (user.id === a.seller_id || user.role === "admin" || user.role === "moderator")}
+                onSaved={(text) => {
+                  setA((prev) => ({
+                    ...prev,
+                    photo_captions: { ...(prev.photo_captions || {}), [photoIdx]: text || undefined, [String(photoIdx)]: text || undefined },
+                  }));
+                }}
+              />
               {a.images?.length > 1 && (() => {
                 const total = a.images.length;
                 const MOBILE_MAX = 5;
@@ -1451,6 +1475,113 @@ export default function AuctionDetailPage() {
  * with a 60-wide bar). Edge dots in the visible window scale down to
  * hint "there are more photos in that direction".
  */
+
+/**
+ * Per-photo caption.
+ *
+ * Renders below the active hero photo. Public mode (read-only) just
+ * shows the caption text in a subtle gray pill if one exists. Owner
+ * mode adds an inline editor (collapsed → "Add note for photo {n}";
+ * expanded → textarea + save/cancel). Captions are stored on the
+ * auction document at `photo_captions[photo_idx]`.
+ */
+function PhotoCaption({ auctionId, photoIdx, caption, isOwner, onSaved }) {
+  const { t } = useTranslation();
+  const [editing, setEditing] = React.useState(false);
+  const [text, setText] = React.useState(caption || "");
+  const [saving, setSaving] = React.useState(false);
+
+  // Re-sync local draft when the user navigates to a different photo.
+  React.useEffect(() => { setText(caption || ""); setEditing(false); }, [photoIdx, caption]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const trimmed = (text || "").trim();
+      await api.put(`/auctions/${auctionId}/photo-caption`, { photo_idx: photoIdx, text: trimmed });
+      onSaved && onSaved(trimmed);
+      setEditing(false);
+    } catch (e) {
+      // Surface backend error; otherwise generic.
+      // eslint-disable-next-line no-alert
+      alert(e?.response?.data?.detail || t("common.error", "Грешка"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Hide entirely when there's no caption AND viewer isn't the owner.
+  if (!caption && !isOwner) return null;
+
+  return (
+    <div className="mt-2 lg:mt-3 max-w-2xl" data-testid="photo-caption">
+      {!editing && (
+        <div className="flex items-start gap-2 flex-wrap">
+          {caption ? (
+            <div
+              className="text-sm text-[hsl(var(--ink-muted))] bg-[hsl(var(--surface))] border border-[hsl(var(--line))] rounded-card px-3 py-2 leading-snug flex-1 min-w-0"
+              data-testid="photo-caption-text"
+            >
+              <span className="font-medium text-[hsl(var(--ink))] mr-1.5">
+                {t("auction.seller_note", "Бележка от продавача")}:
+              </span>
+              {caption}
+            </div>
+          ) : null}
+          {isOwner && (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="text-xs underline text-[hsl(var(--ink-muted))] hover:text-[hsl(var(--ink))] py-2"
+              data-testid="photo-caption-edit-btn"
+            >
+              {caption
+                ? t("auction.edit_photo_note", "Редактирай")
+                : t("auction.add_photo_note", "Добави бележка към тази снимка")}
+            </button>
+          )}
+        </div>
+      )}
+      {editing && isOwner && (
+        <div className="space-y-2">
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={2}
+            maxLength={500}
+            placeholder={t("auction.photo_note_placeholder", "напр. Леко надраскване на капака — поправено професионално 2024 г.")}
+            className="w-full border border-[hsl(var(--line))] rounded-card px-3 py-2 text-sm bg-[hsl(var(--surface))]"
+            data-testid="photo-caption-textarea"
+          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving}
+              className="btn btn-primary btn-sm"
+              data-testid="photo-caption-save-btn"
+            >
+              {saving ? t("common.saving", "Запис...") : t("common.save", "Запиши")}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setText(caption || ""); setEditing(false); }}
+              className="text-xs text-[hsl(var(--ink-muted))] hover:text-[hsl(var(--ink))] underline"
+              data-testid="photo-caption-cancel-btn"
+            >
+              {t("common.cancel", "Откажи")}
+            </button>
+            <span className="text-xs text-[hsl(var(--ink-muted))] ml-auto">
+              {(text || "").length} / 500
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function GalleryDots({ total, active }) {
   const WINDOW = 5;
   if (total < 2) return null;

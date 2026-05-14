@@ -2486,3 +2486,64 @@ ansible-playbook -i inventory.ini playbooks/deploy_frontend.yml
 След deploy, ботовете попадащи на `https://autoandbid.bg/auctions` ще получат SSR meta.
 Реални потребители продължават с React SPA-та.
 
+
+
+---
+
+## 14 May 2026 — Gallery UX polish (swipe fix + per-photo captions + 3:2 cards) — DONE
+
+### 🐛 Swipe synthetic-click bug fix
+**Bug**: On mobile, swiping the hero image left/right (via the new 3-zone
+button overlays) correctly changed the photo BUT the synthetic click
+fired by Chromium ~300ms after touchend opened the lightbox anyway.
+Root cause: `swipeRef.current` was being nulled via `setTimeout(0)`,
+so by the time the click handler ran, the `cancelClick` flag was gone.
+
+**Fix**: introduced a separate `clickGuardRef` that stays `true` for 450ms
+after a horizontal commit (longer than any browser's synthetic-click
+delay). All three zone buttons now check this guard first and bail
+without calling `setLightboxIdx` / `setPhotoIdx`. Verified e2e — swipe
+on the middle zone now changes photos without opening the lightbox.
+
+### 📝 Per-photo captions (owner-only)
+**Use case**: Buyer asks in the comments "what's that mark on the door?",
+seller now wants to attach a clarification directly to the photo so
+future visitors don't ask the same question.
+
+**Backend (`/api/auctions/{id}/photo-caption` PUT)**:
+- Owner OR admin can set/delete a per-photo caption (≤500 chars).
+- Empty `text` deletes the caption.
+- Stored on the auction document as `photo_captions: {"0": "...", "3": "..."}`
+  (Mongo dict keyed by stringified photo index — JSON-safe round-trip).
+- 401 unauthenticated, 403 non-owner, 400 invalid index — all verified.
+
+**Frontend (`<PhotoCaption>` component)**:
+- Renders directly below the hero image, tied to the active `photoIdx`.
+- Public mode: subtle gray pill showing "Бележка от продавача: {text}".
+- Owner mode: same pill + inline "Редактирай" / "Добави бележка..." button
+  → expands to textarea + save/cancel + character counter (500 max).
+- Sync: re-fetch is unnecessary — local state is mutated optimistically
+  via the `onSaved` callback that updates `a.photo_captions[idx]`.
+
+### 🖼️ AuctionCard aspect ratio: 4:3 → 3:2
+Single-class swap: `aspect-[4/3]` → `aspect-[3/2]` in
+`/app/frontend/src/components/AuctionCard.jsx`. Visual ratio confirmed
+via Playwright at 1280px viewport: **279.3 × 186.2 px → ratio 1.500**.
+The wider image makes hero shots feel more cinematic / matches how
+modern listing platforms (BAT, AutoTempest) present cars.
+
+### ✅ Verified end-to-end
+- Photo caption: set + read + 401 + 403 + 400 + delete (all 6 paths) ✓
+- Mobile swipe (no lightbox false-open) ✓
+- AuctionCard 3:2 ratio ✓
+- Captions display correctly under hero on mobile (with cookies banner present) ✓
+
+### 📁 Files changed
+- `/app/backend/server.py` (+50 LOC — endpoint + PhotoCaptionPayload model)
+- `/app/frontend/src/pages/AuctionDetailPage.jsx` (+`clickGuardRef`, `<PhotoCaption>`, `setA` after save)
+- `/app/frontend/src/components/AuctionCard.jsx` (aspect ratio swap)
+
+### 🚀 Deploy
+- Backend: `ansible-playbook -i inventory.ini playbooks/deploy_backend.yml`
+- Frontend: `ansible-playbook -i inventory.ini playbooks/deploy_frontend.yml`
+
