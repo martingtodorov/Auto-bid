@@ -56,6 +56,88 @@ export default function AuctionDetailPage() {
   const [nextBid, setNextBid] = useState({ min_next_eur: 0, buyer_fee_eur: 150, step_eur: 100 });
   const titleRef = useRef(null);
   const wsRef = useRef(null);
+  const mainImageRef = useRef(null);
+
+  // ── Mobile big-image swipe ────────────────────────────────────────────────
+  // On mobile, swiping the hero image left/right moves between photos using
+  // the same 10° lock rule as the AuctionCard mini-carousel:
+  //   • If the gesture deviates ≤10° from the horizontal axis, lock to
+  //     horizontal and call `preventDefault()` on every touchmove so the
+  //     page doesn't scroll under the finger.
+  //   • Anything steeper (i.e. clearly vertical) bubbles up to the
+  //     browser → user can scroll the page normally even if their thumb
+  //     happens to land on the image.
+  // The click handler that opens the lightbox is suppressed when a swipe
+  // actually fires (`swipeRef.current.cancelClick = true`).
+  const swipeRef = useRef(null);
+  const photoIdxRef = useRef(0);
+  useEffect(() => { photoIdxRef.current = photoIdx; }, [photoIdx]);
+  useEffect(() => {
+    const el = mainImageRef.current;
+    if (!el) return;
+    const total = a?.images?.length || 0;
+    if (total < 2) return;
+    // 10° from horizontal → tan(10°) ≈ 0.176
+    const ANGLE_TAN = Math.tan((10 * Math.PI) / 180);
+    const COMMIT_PX = 50;        // min horizontal distance to commit a slide change
+    const DETECT_PX = 8;         // min movement before deciding axis lock
+
+    const onStart = (e) => {
+      const t = e.touches[0];
+      swipeRef.current = {
+        x: t.clientX,
+        y: t.clientY,
+        dx: 0,
+        locked: null,
+        cancelClick: false,
+      };
+    };
+    const onMove = (e) => {
+      const s = swipeRef.current;
+      if (!s) return;
+      const t = e.touches[0];
+      const dx = t.clientX - s.x;
+      const dy = t.clientY - s.y;
+      const absX = Math.abs(dx), absY = Math.abs(dy);
+      if (s.locked === null) {
+        if (absX < DETECT_PX && absY < DETECT_PX) return;
+        // 10° rule: angle from horizontal axis = atan(|dy|/|dx|).
+        // Horizontal lock when |dy| < |dx| * tan(10°).
+        s.locked = absX > absY && absY <= absX * ANGLE_TAN ? "h" : "v";
+      }
+      if (s.locked === "h") {
+        e.preventDefault(); // requires non-passive listener (set below)
+        s.dx = dx;
+      }
+    };
+    const onEnd = () => {
+      const s = swipeRef.current;
+      if (!s) return;
+      if (s.locked === "h" && Math.abs(s.dx) > COMMIT_PX) {
+        const cur = photoIdxRef.current;
+        const next = s.dx < 0
+          ? Math.min(total - 1, cur + 1)   // swipe left → next photo
+          : Math.max(0, cur - 1);          // swipe right → prev photo
+        if (next !== cur) setPhotoIdx(next);
+        s.cancelClick = true;
+      }
+      // Keep the ref alive briefly so the synthetic `click` that fires
+      // after touchend can read `cancelClick`. We null it on the next tick.
+      setTimeout(() => { swipeRef.current = null; }, 0);
+    };
+
+    // touchmove must be non-passive so `preventDefault()` works on iOS.
+    el.addEventListener("touchstart", onStart, { passive: true });
+    el.addEventListener("touchmove", onMove, { passive: false });
+    el.addEventListener("touchend", onEnd, { passive: true });
+    el.addEventListener("touchcancel", onEnd, { passive: true });
+    return () => {
+      el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchmove", onMove);
+      el.removeEventListener("touchend", onEnd);
+      el.removeEventListener("touchcancel", onEnd);
+    };
+  }, [a?.images?.length]);
   const settings = useSiteSettings();
 
   // Client-side buyer fee for preview (mirrors backend _buyer_fee)
@@ -698,8 +780,13 @@ export default function AuctionDetailPage() {
               }}
             >
               <div
-                className="aspect-[4/3] lg:aspect-[3/2] border border-[hsl(var(--line))] rounded-card overflow-hidden bg-[hsl(var(--surface))] cursor-zoom-in relative group"
-                onClick={() => setLightboxIdx(photoIdx)}
+                ref={mainImageRef}
+                className="aspect-[4/3] lg:aspect-[3/2] border border-[hsl(var(--line))] rounded-card overflow-hidden bg-[hsl(var(--surface))] cursor-zoom-in relative group select-none"
+                onClick={() => {
+                  if (swipeRef.current?.cancelClick) return; // swipe consumed the gesture
+                  setLightboxIdx(photoIdx);
+                }}
+                style={{ touchAction: "pan-y" }}
                 data-testid="main-gallery-image"
               >
                 <Picture
