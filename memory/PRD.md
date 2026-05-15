@@ -873,21 +873,25 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 
 ---
 
-## 15 May 2026 — Lightbox Swipe Navigation
+## 15 May 2026 — Lightbox Swipe Navigation (Touch + Desktop)
 
-**Добавено:** Horizontal single-finger swipe gestures в Lightbox image stage за next/prev снимка, без да чупи pinch-to-zoom.
+**Touch (mobile):** `onTouchStart/Move/End` handlers с single-finger swipe detection. Threshold ≥40px horizontal + 1.2× horizontal/vertical ratio. Multi-touch (pinch) auto-cancel. Skip при `visualViewport.scale > 1.05`.
 
-**Implementation в `/app/frontend/src/components/Lightbox.jsx`:**
-- `onTouchStart` записва start position само при единичен touch
-- `onTouchMove` отменя tracking при поява на втори пръст (pinch detected)
-- `onTouchEnd` проверява: `|dx| >= 40px` И `|dx| > |dy| * 1.2` → next() ако dx < 0, prev() иначе
-- Auto-abort ако `window.visualViewport.scale > 1.05` (image е zoom-нат → пано-ва се, не swipe-ва)
+**Desktop drag:** `onMouseDown/Up/Leave` — left button only. Същият threshold (40px) и hor/ver ratio. Cursor: `grab` / `grabbing` за visual affordance.
 
-**Verified end-to-end (synthetic TouchEvents):**
-- ✅ Swipe left → `1/24 → 2/24` (next)
-- ✅ Swipe right → `2/24 → 1/24` (prev)
-- ✅ Tiny swipe (<40px) → no change (threshold filter работи)
-- ✅ Lint clean
+**Desktop trackpad wheel:** Non-passive wheel listener (via useEffect + addEventListener `{passive: false}`) — React's onWheel е passive. Accumulator-based: 80px deltaX → advance. 400ms cooldown за да не скача 5+ снимки. Vertical-dominant wheel events се игнорират.
+
+**Verified end-to-end (desktop):**
+- ✅ Mouse drag left → next (1/24 → 2/24)
+- ✅ Mouse drag right → prev (2/24 → 1/24)
+- ✅ Wheel deltaX +150 → next
+- ✅ Wheel deltaX -150 → prev
+- ✅ Vertical wheel → no change
+- ✅ Tiny drag (<40px) → no change
+
+**Verified (mobile touch):**
+- ✅ Swipe left/right → next/prev
+- ✅ Tiny swipe → no change
 
 ## 15 May 2026 — Native CSS Scroll-Snap Gallery + Object-Contain Fix
 

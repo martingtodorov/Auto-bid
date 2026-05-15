@@ -71,6 +71,51 @@ export default function Lightbox({ images, thumbnails, index, onClose, onChange 
     if (dx < 0) next(); else prev();
   }, [prev, next]);
 
+  // ── Desktop mouse drag ────────────────────────────────────────────
+  // Same gesture model as touch: press, drag horizontally, release.
+  // Threshold matches touch (≥40 px). Cancelled on right-click or
+  // when the cursor leaves the stage mid-drag.
+  const dragRef = useRef({ startX: 0, startY: 0, active: false });
+  const onMouseDown = useCallback((e) => {
+    if (e.button !== 0) return; // only left button
+    dragRef.current = { startX: e.clientX, startY: e.clientY, active: true };
+  }, []);
+  const onMouseUp = useCallback((e) => {
+    const s = dragRef.current;
+    if (!s.active) return;
+    dragRef.current.active = false;
+    const dx = e.clientX - s.startX;
+    const dy = e.clientY - s.startY;
+    if (Math.abs(dx) < 40) return;
+    if (Math.abs(dx) < Math.abs(dy) * 1.2) return;
+    if (dx < 0) next(); else prev();
+  }, [prev, next]);
+  const onMouseLeave = useCallback(() => { dragRef.current.active = false; }, []);
+
+  // ── Desktop trackpad horizontal wheel ─────────────────────────────
+  // Two-finger horizontal swipe on macOS / Precision trackpads emits
+  // `wheel` events with `deltaX`. Accumulate until we cross a threshold,
+  // then advance — with a cooldown so a single fling doesn't skip 5+
+  // photos. Touchpad swipes typically deliver 100-300px of deltaX over
+  // ~400ms; we trigger at 80 px accumulated.
+  const wheelRef = useRef({ accum: 0, cooldownUntil: 0 });
+  const onWheel = useCallback((e) => {
+    // Vertical-dominant scroll (mouse wheel) → ignore. We only react
+    // when the gesture is clearly horizontal.
+    if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+    e.preventDefault();
+    const now = performance.now();
+    if (now < wheelRef.current.cooldownUntil) return;
+    wheelRef.current.accum += e.deltaX;
+    if (Math.abs(wheelRef.current.accum) >= 80) {
+      if (wheelRef.current.accum < 0) prev(); else next();
+      wheelRef.current.accum = 0;
+      wheelRef.current.cooldownUntil = now + 400;
+    }
+  }, [prev, next]);
+  // Reset accumulator when navigating via other means.
+  useEffect(() => { wheelRef.current.accum = 0; }, [index]);
+
   useEffect(() => {
     const handler = (e) => {
       if (e.key === "Escape") onClose();
@@ -113,6 +158,18 @@ export default function Lightbox({ images, thumbnails, index, onClose, onChange 
     }
   }, [index]);
 
+  // Non-passive wheel listener on the stage — React's onWheel is passive
+  // by default and preventDefault() is silently ignored. We need a manual
+  // addEventListener with {passive:false} for trackpad horizontal swipes
+  // to feel responsive (no rubber-band on the page).
+  const stageRef = useRef(null);
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [onWheel]);
+
   if (!total || index == null) return null;
 
   return (
@@ -143,13 +200,17 @@ export default function Lightbox({ images, thumbnails, index, onClose, onChange 
         data-allow-pinch-zoom="1" — see the handler).
       */}
       <div
-        className="flex-1 w-full flex items-center justify-center px-4 pt-14 pb-2 min-h-0 overflow-auto"
+        ref={stageRef}
+        className="flex-1 w-full flex items-center justify-center px-4 pt-14 pb-2 min-h-0 overflow-auto cursor-grab active:cursor-grabbing"
         data-allow-pinch-zoom="1"
         style={{ touchAction: "pinch-zoom" }}
         onClick={(e) => e.stopPropagation()}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
+        onMouseDown={onMouseDown}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseLeave}
       >
         <img
           src={images[index]}
