@@ -245,7 +245,9 @@ async def _fetch_one(client, url: str) -> Optional[str]:
         # rogue source could try to wedge us with a huge payload.
         async with client.stream("GET", url, timeout=REMOTE_FETCH_TIMEOUT, follow_redirects=True) as r:
             if r.status_code >= 400:
-                logger.info("remote fetch %s → HTTP %s", url, r.status_code)
+                # WARNING (not INFO) so production log scrapers surface
+                # CDN blocks / 404s without requiring DEBUG verbosity.
+                logger.warning("remote fetch %s → HTTP %s", url, r.status_code)
                 return None
             ct = (r.headers.get("content-type") or "").lower().split(";")[0].strip()
             # Trust either an image/* content-type or fall back to the
@@ -261,14 +263,15 @@ async def _fetch_one(client, url: str) -> Optional[str]:
             async for chunk in r.aiter_bytes(chunk_size=64 * 1024):
                 chunks.extend(chunk)
                 if len(chunks) > REMOTE_FETCH_MAX_BYTES:
-                    logger.info("remote fetch %s → oversize abort (>%d B)", url, REMOTE_FETCH_MAX_BYTES)
+                    logger.warning("remote fetch %s → oversize abort (>%d B)", url, REMOTE_FETCH_MAX_BYTES)
                     return None
             if not chunks:
+                logger.warning("remote fetch %s → empty body", url)
                 return None
             b64 = base64.b64encode(bytes(chunks)).decode("ascii")
             return f"data:image/{ext};base64,{b64}"
     except Exception as e:  # noqa: BLE001 — log & continue, do not break the import
-        logger.info("remote fetch %s failed: %s", url, e)
+        logger.warning("remote fetch %s failed: %s", url, e)
         return None
 
 

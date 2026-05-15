@@ -1590,35 +1590,61 @@ async def create_auction(request: Request, payload: AuctionCreate, user: dict = 
     # failed to download (404, network error). We drop those entries and
     # the parallel category array so we never persist a broken external
     # URL on a listing.
-    from storage import fetch_remote_images_as_data_urls
-    fetched = await fetch_remote_images_as_data_urls(merged, strict=True)
-    new_merged: list[str] = []
-    new_categories: list[str] = []
-    dropped = 0
-    for u, c in zip(fetched, image_categories):
-        if not u:
-            dropped += 1
-            continue
-        new_merged.append(u)
-        new_categories.append(c)
-    if dropped:
-        logger.warning("[submit] dropped %d unfetchable external image URLs", dropped)
-    merged = new_merged
-    image_categories = new_categories
+    #
+    # The whole block is wrapped in a try/except because production
+    # Hetzner egress to focus.bg/mobistatic.bg can intermittently fail
+    # (rate-limiting, transient 502s, blocked DC IP ranges). When it
+    # fails we keep the original URLs so the seller can at least submit
+    # — the listing will still display via mobile.bg's CDN. Admins can
+    # then re-run the migration script once egress is restored.
+    try:
+        from storage import fetch_remote_images_as_data_urls
+        fetched = await fetch_remote_images_as_data_urls(merged, strict=True)
+        new_merged: list[str] = []
+        new_categories: list[str] = []
+        dropped = 0
+        for u, c in zip(fetched, image_categories):
+            if not u:
+                dropped += 1
+                continue
+            new_merged.append(u)
+            new_categories.append(c)
+        if dropped:
+            logger.warning("[submit] dropped %d unfetchable external image URLs", dropped)
+        # Only adopt the filtered list if we ended up with something to
+        # store — otherwise fall back to the original payload so the
+        # submit doesn't die on a temporary CDN outage.
+        if new_merged:
+            merged = new_merged
+            image_categories = new_categories
+    except Exception as _rehost_err:  # noqa: BLE001
+        logger.warning("[submit] external rehost pre-fetch failed, keeping original URLs: %s", _rehost_err)
     if not merged:
         raise HTTPException(
             status_code=400,
             detail="Нито една снимка не можа да бъде свалена. Моля, качете снимки директно вместо да импортирате от mobile.bg.",
         )
 
-    # Optimize on a worker thread — Pillow is sync and CPU-bound.
-    web_urls, thumb_urls, errs = await asyncio.to_thread(imgproc.optimize_many, merged)
-    if errs:
-        # Surface first 3 errors so user sees actionable feedback.
-        msg = "; ".join(errs[:3])
-        if len(errs) > 3:
-            msg += f"; и още {len(errs) - 3}"
-        raise HTTPException(status_code=400, detail=f"Грешка при обработката на снимки: {msg}")
+    # Optimize on a worker thread — Pillow is sync and CPU-bound. Wrap
+    # the whole optimize+store step too because focus.bg's https URLs
+    # pass through optimize_data_url() as-is, but store_image() will
+    # raise `ImageProcessingError` if the local disk isn't writable
+    # (UPLOAD_DIR perms / missing mount). On that failure we degrade to
+    # persisting the original payload so the seller can still submit.
+    try:
+        web_urls, thumb_urls, errs = await asyncio.to_thread(imgproc.optimize_many, merged)
+        if errs:
+            # Surface first 3 errors so user sees actionable feedback.
+            msg = "; ".join(errs[:3])
+            if len(errs) > 3:
+                msg += f"; и още {len(errs) - 3}"
+            raise HTTPException(status_code=400, detail=f"Грешка при обработката на снимки: {msg}")
+    except HTTPException:
+        raise
+    except Exception as _opt_err:  # noqa: BLE001
+        logger.warning("[submit] optimize_many failed (%s) — saving raw URLs as-is", _opt_err)
+        web_urls = list(merged)
+        thumb_urls = list(merged)
 
     auction_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
@@ -1632,13 +1658,16 @@ async def create_auction(request: Request, payload: AuctionCreate, user: dict = 
         thumb_urls = await asyncio.to_thread(store_images, thumb_urls)
     except imgproc.ImageProcessingError as e:
         # Disk storage couldn't write — most common cause is the upload
-        # directory missing or /app being read-only on production. Surface
-        # as 500 with the real error text so ops can fix it, rather than
-        # a generic tracebacked 500 from OSError.
-        logging.getLogger("storage").error("Image storage failed: %s", e)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Съхраняването на снимките не успя: {e}. Обърнете се към администратора.",
+        # directory missing or read-only on production. Log it loudly so
+        # ops can fix it, but don't 500 the seller — keep whatever URLs
+        # we have (already-stored locals stay, external URLs persist
+        # as-is) so they can at least submit the listing.
+        logging.getLogger("storage").error(
+            "Image storage write failed (continuing with raw URLs): %s", e,
+        )
+    except Exception as e:  # noqa: BLE001
+        logging.getLogger("storage").error(
+            "Image storage unexpected error (continuing with raw URLs): %s", e,
         )
     doc["images"] = web_urls
     doc["thumbnails"] = thumb_urls

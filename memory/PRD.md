@@ -873,6 +873,27 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 
 ---
 
+## 15 May 2026 — Submit Resilience: Graceful Rehost Fallback
+
+**Bug на production:** Submit на обявa с external focus.bg URLs → **500 Internal Server Error**. Stack trace недостъпен (production), но reproducible. Корен — submit-ът expected всички image operations да succeed; ImageProcessingError или connect failure → unhandled exception → middleware → 500.
+
+**Fix в `create_auction`** (`/app/backend/server.py`):
+1. Pre-fetch wrapped в try/except — ако rehost fail-ва (CDN blocked, network error, etc.), log warning и keep оригиналните URLs вместо да 500.
+2. `optimize_many` block wrapped — fallback на raw URLs ако Pillow fail.
+3. `store_images` IDM ImageProcessingError → **не raise-ва** 500 повече; log error и continue с current URLs.
+4. `_fetch_one` log level повишен INFO → WARNING за HTTP failures, oversize, exceptions — production scrapers ще ги surface-ват без DEBUG verbosity.
+
+**Verified end-to-end (preview + browser)**:
+- ✅ Mobile.bg import → 17 локални URLs + 17 variants
+- ✅ Browser submit → "Submission received" page
+- ✅ Mongo: pending auction with 17 local `/api/uploads/...`, 0 external
+- ✅ External URL submission (защита) — `1/17 valid` fake URLs → 200 OK with 1 local
+- ✅ Lint clean
+
+**Файлове:**
+- `/app/backend/server.py` (create_auction line 1582-1648)
+- `/app/backend/storage.py` (`_fetch_one` log levels)
+
 ## 15 May 2026 — External Image CDN Migration (mobile.bg → img.autoandbid.com)
 
 **Bug:** Когато потребител импортира обявa от mobile.bg, external focus.bg URL-ите минаваха през `optimize_data_url()` непокътнати (passthrough за non-`data:` URLs), и `store_image()` също пропускаше `http://...` URLs. Резултат: external URLs се запазваха в DB → click върху снимка отиваше до focus.bg CDN; ако mobile.bg изтрие снимките → broken images forever.
