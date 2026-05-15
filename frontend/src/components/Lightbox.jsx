@@ -10,10 +10,11 @@ import { X, ChevronLeft, ChevronRight } from "lucide-react";
  * own gesture handler. Users can zoom photos freely but cannot zoom the
  * surrounding app UI.
  *
- * Navigation: ONLY explicit actions change the image — arrow buttons,
- * thumbnail clicks, keyboard arrow keys. Swipe-to-advance is intentionally
- * removed so pinch + pan gestures inside a zoomed image aren't hijacked
- * as accidental "next photo" swipes.
+ * Navigation: arrow buttons, thumbnail clicks, keyboard arrow keys, AND
+ * horizontal single-finger swipe on the image area. Swipe is suppressed
+ * while a multi-touch pinch is in flight and when the visual viewport is
+ * zoomed (so panning around a zoomed photo never accidentally advances
+ * to the next image).
  *
  * Props:
  *  - images: string[] (full-resolution URLs — only the current one is ever loaded)
@@ -35,6 +36,40 @@ export default function Lightbox({ images, thumbnails, index, onClose, onChange 
     if (!total) return;
     onChange((index + 1) % total);
   }, [index, total, onChange]);
+
+  // ── Swipe tracking ────────────────────────────────────────────────
+  // Single-finger horizontal swipe → prev/next. Auto-aborts if a second
+  // finger touches down (= pinch in progress) or if the viewport is
+  // currently zoomed (user is panning a zoomed image).
+  const swipeRef = useRef({ startX: 0, startY: 0, active: false });
+  const onTouchStart = useCallback((e) => {
+    if (e.touches.length !== 1) { swipeRef.current.active = false; return; }
+    // Suppress when the image is currently zoomed in.
+    const scale = window.visualViewport?.scale ?? 1;
+    if (scale > 1.05) { swipeRef.current.active = false; return; }
+    swipeRef.current = {
+      startX: e.touches[0].clientX,
+      startY: e.touches[0].clientY,
+      active: true,
+    };
+  }, []);
+  const onTouchMove = useCallback((e) => {
+    // Pinch detected mid-swipe → cancel.
+    if (e.touches.length > 1) swipeRef.current.active = false;
+  }, []);
+  const onTouchEnd = useCallback((e) => {
+    const s = swipeRef.current;
+    if (!s.active) return;
+    swipeRef.current.active = false;
+    const t = e.changedTouches[0];
+    if (!t) return;
+    const dx = t.clientX - s.startX;
+    const dy = t.clientY - s.startY;
+    // Threshold: ≥40px horizontal AND clearly more horizontal than vertical.
+    if (Math.abs(dx) < 40) return;
+    if (Math.abs(dx) < Math.abs(dy) * 1.2) return;
+    if (dx < 0) next(); else prev();
+  }, [prev, next]);
 
   useEffect(() => {
     const handler = (e) => {
@@ -112,6 +147,9 @@ export default function Lightbox({ images, thumbnails, index, onClose, onChange 
         data-allow-pinch-zoom="1"
         style={{ touchAction: "pinch-zoom" }}
         onClick={(e) => e.stopPropagation()}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
       >
         <img
           src={images[index]}

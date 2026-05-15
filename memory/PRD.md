@@ -873,6 +873,22 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 
 ---
 
+## 15 May 2026 — Lightbox Swipe Navigation
+
+**Добавено:** Horizontal single-finger swipe gestures в Lightbox image stage за next/prev снимка, без да чупи pinch-to-zoom.
+
+**Implementation в `/app/frontend/src/components/Lightbox.jsx`:**
+- `onTouchStart` записва start position само при единичен touch
+- `onTouchMove` отменя tracking при поява на втори пръст (pinch detected)
+- `onTouchEnd` проверява: `|dx| >= 40px` И `|dx| > |dy| * 1.2` → next() ако dx < 0, prev() иначе
+- Auto-abort ако `window.visualViewport.scale > 1.05` (image е zoom-нат → пано-ва се, не swipe-ва)
+
+**Verified end-to-end (synthetic TouchEvents):**
+- ✅ Swipe left → `1/24 → 2/24` (next)
+- ✅ Swipe right → `2/24 → 1/24` (prev)
+- ✅ Tiny swipe (<40px) → no change (threshold filter работи)
+- ✅ Lint clean
+
 ## 15 May 2026 — Native CSS Scroll-Snap Gallery + Object-Contain Fix
 
 **Контекст:** Хеланд-офф задачата беше да се верифицира новата CSS `scroll-snap` галерия в `AuctionDetailPage.jsx`. Потребителят съобщи че "снимките са зуумнати" и след това че галерията изобщо не работи правилно.
