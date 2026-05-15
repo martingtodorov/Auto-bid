@@ -873,6 +873,49 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 
 ---
 
+## 15 May 2026 (v5) — CDN Subdomain: proxy_pass + clean `/uploads/` mount
+
+**User complaint:** `https://img.autoandbid.bg` 301-ва към `autoandbid.com`. Cf-cache-status=DYNAMIC доказва че Hetzner nginx генерира redirect-а, не Cloudflare.
+
+**Root cause:** Deployed nginx config на ab-front1 е стара версия. Освен това, дори когато се re-deploy-не, `alias /opt/autobids/uploads/` ще fail-не, защото disk-ът е на ab-back1, не на ab-front1.
+
+**Fix:**
+
+### 1. nginx config (`deploy/hetzner/nginx/autoandbid.conf`)
+- `img.autoandbid.bg` vhost вече използва **`proxy_pass http://ab-back1:8001/uploads/`** вместо `alias`. Това решава cross-host disk проблема — frontend host е stateless, backend host държи disk-а.
+- `/variants/` → `proxy_pass http://ab-back1:8001/uploads/variants/` (single root)
+- `/social-images/` → `proxy_pass http://ab-back1:8001/social-images/`
+- `location = /` → 404 (no homepage)
+- `location /` (catch-all) → 404 (no SPA leak)
+- CORS headers за `autoandbid.{com,bg,ro}` запазени
+- 365-day immutable cache headers
+- AVIF/WebP MIME types
+
+### 2. Backend mount (`backend/server.py`)
+- Добавена **втори mount `/uploads/`** на същата директория (`UPLOAD_DIR`). Първи mount `/api/uploads/` остава за legacy/preview compatibility. И двата сервират същите файлове.
+
+### Verified:
+- ✅ Backend direct: `curl http://127.0.0.1:8001/uploads/...` → 200 image/jpeg
+- ✅ `/api/uploads/...` (legacy) → 200 image/jpeg
+- ✅ nginx config: `img.autoandbid.bg` HTTPS vhost е isolated (само port 80 redirect блок включва това име)
+- ⚠️ Preview env: `/uploads/` минава през k8s ingress който routes към frontend SPA → 200 text/html. Това е k8s-specific. На production nginx-ът ще proxy-ва правилно към backend.
+
+**Ansible deploy** (за production):
+```
+cd /opt/autobids/deploy/hetzner/ansible
+ansible-playbook -i inventories/prod/hosts.ini site.yml
+# Frontend role ще copy-ne новия nginx config + reload
+```
+
+След deploy:
+```bash
+curl -sI https://img.autoandbid.bg/uploads/auctions/<sha>.jpg
+# Очаквано: HTTP/2 200, content-type: image/jpeg, cache-control: public, immutable
+
+curl -sI https://img.autoandbid.bg/
+# Очаквано: HTTP/2 404 (no homepage)
+```
+
 ## 15 May 2026 — Passkey Re-auth Window (10 min sliding)
 
 **User request:** За добавяне/премахване на passkey изисквай recent auth (10-15 min). Ако recent — без password prompt. Auto-name device, allow rename later.

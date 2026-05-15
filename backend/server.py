@@ -6410,7 +6410,16 @@ try:
             _UPLOAD_DIR, _e,
         )
     if os.path.isdir(_UPLOAD_DIR):
+        # Two mounts pointing at the same directory:
+        #   • `/api/uploads/...` — legacy path used by the k8s preview
+        #     ingress and by older listings already in MongoDB.
+        #   • `/uploads/...` — clean path consumed by the CDN subdomain
+        #     (`img.autoandbid.bg/uploads/...`). nginx on the frontend
+        #     host proxies straight through to this mount.
+        # Both serve the same content so old listings keep working while
+        # new ones get CDN URLs.
         app.mount("/api/uploads", CachedStaticFiles(directory=_UPLOAD_DIR), name="uploads")
+        app.mount("/uploads", CachedStaticFiles(directory=_UPLOAD_DIR), name="uploads_cdn")
 except Exception as _e:  # pragma: no cover — never block boot on this
     logging.getLogger(__name__).warning("Could not mount /api/uploads: %s", _e)
 
