@@ -873,6 +873,48 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 
 ---
 
+## 15 May 2026 — Passkey Re-auth Window (10 min sliding)
+
+**User request:** За добавяне/премахване на passkey изисквай recent auth (10-15 min). Ако recent — без password prompt. Auto-name device, allow rename later.
+
+**Implementation:**
+
+### Backend (`/app/backend/routers/passkey.py`)
+- `_session_recent_auth(request)` helper — чете `request.state.sid` от JWT-decoded session, проверя `recent_auth_at` field, returns `(is_recent, session_doc)`
+- `_bump_recent_auth(request)` — bumps timestamp on the session
+- `REAUTH_WINDOW_SECONDS = 600` (10 min)
+- **Нов GET `/auth/passkey/reauth-status`** → `{recent: bool, fresh_for_sec: int, window_seconds: int}`
+- **Нов POST `/auth/passkey/reauth`** → `{password}` → verifies & bumps. 401 при wrong password.
+- `register-begin` и `remove`: ако recent → skip password; ако не recent + no password → 401 with `X-Reauth-Required: 1` header
+- `RegisterBeginPayload.device_name` и `password` са вече `Optional[str]`
+- **Auto-naming** чрез `_auto_device_name()` от User-Agent header (Mac, iPhone, Windows, Android, Linux, "Chrome on macOS"...)
+- **Нов POST `/auth/passkey/rename/{credential_id}`** → `{name}`, без re-auth (метаданни, ниско-рискова операция)
+
+### Backend (`/app/backend/routers/auth.py`)
+- `_create_session()` сега записва `recent_auth_at` = now при login → пресни logins имат пълни 10 min без допълнителен prompt
+
+### Frontend (`/app/frontend/src/lib/passkey.js`)
+- `getReauthStatus()`, `verifyReauth(password)`, `renamePasskey(id, name)`
+- `registerPasskey()` без параметри (auto-named)
+- `removePasskey(id)` без password
+- Backward-compat: backend все още приема `password` като fallback за legacy clients
+
+### Frontend (`/app/frontend/src/components/PasskeySection.jsx`)
+- При mount fetch-ва `reauth-status`
+- Stale state: показва password gate с zelен confirm бутон, disable-ва Add/Remove
+- Recent state: gate-ът скрит, всичко enabled
+- Inline rename с pencil icon → text input → Check/X buttons
+- 401 от backend (window expired mid-session) auto-revert-ва UI към gated state
+
+### Verified (curl + browser):
+- ✅ Login → `recent: true`, fresh_for_sec=599 (1s elapsed during JSON)
+- ✅ Wrong password reauth → 401 "Грешна парола"
+- ✅ Stale session register-begin (no password) → 401 "Необходимо е скорошно потвърждаване с парола"
+- ✅ После reauth → bumps recent, register-begin works
+- ✅ Auto-named device "curl on Other" / Browser detects to "Chrome on macOS" etc.
+- ✅ UI: stale показва gate, бутоните disabled with title tooltip; reauth show зелена потвърждение, бутоните enabled
+- ✅ Lint clean (Python + JS)
+
 ## 15 May 2026 (v4) — Unified CDN_BASE_URL за всички uploaded media
 
 **User request:** Snimkите трябва да минават през `https://img.autoandbid.bg/uploads/...`, не през `autoandbid.bg/api/uploads/...`. Единна `CDN_BASE_URL` env var.

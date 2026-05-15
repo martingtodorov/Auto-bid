@@ -156,6 +156,12 @@ async def _create_session(user_id: str, request: Request, *, remember: bool, ttl
         "remember": bool(remember),
         "created_at": now.isoformat(),
         "last_seen_at": now.isoformat(),
+        # Timestamp of the last "high-trust" auth event (password verify,
+        # passkey reauth). Sensitive operations like adding/removing a
+        # passkey check this against a sliding window so users aren't
+        # asked for their password on every click — but a stale 30-day
+        # session can't be hijacked to enrol an attacker passkey.
+        "recent_auth_at": now.isoformat(),
         "expires_at": (now + timedelta(days=ttl_days)).isoformat(),
         "user_agent": info["user_agent"],
         "ip": info["ip"],

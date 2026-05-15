@@ -7,15 +7,18 @@ are an OPT-IN secondary login method — email/password and TOTP 2FA keep
 working unchanged.
 
 Architecture decisions:
-  • RP ID = `autoandbid.com` (canonical). The two regional TLDs
-    (`autoandbid.bg`, `autoandbid.ro`) participate via the
+  • RP ID = `autoandbid.bg` (canonical). The two regional TLDs
+    (`autoandbid.com`, `autoandbid.ro`) participate via the
     Related Origin Requests manifest at `/.well-known/webauthn`,
     so a single passkey works on all three domains in modern browsers.
   • Challenges live in MongoDB with a TTL index → automatic single-use
     expiration after 600 seconds, no Redis needed.
   • `sign_count` is enforced strictly increasing → cloning detection.
-  • Recent password re-auth required for both `add` and `remove` flows
-    (per user spec — "винаги изисквай пароля отново").
+  • Recent-auth gating instead of per-action password prompts: once the
+    user verifies their password (login OR explicit `/reauth`), the
+    session's `recent_auth_at` is bumped and add/remove operations are
+    allowed for the next REAUTH_WINDOW_SECONDS. A stale 30-day session
+    that no human typed a password into cannot enrol attacker keys.
   • Audit events captured for: created / removed / authenticated /
     failed_auth / clone_detection.
 
@@ -75,10 +78,43 @@ _extra = os.environ.get("WEBAUTHN_EXTRA_ORIGINS", "").strip()
 if _extra:
     ALLOWED_ORIGINS.extend(o.strip() for o in _extra.split(",") if o.strip())
 
-# Re-auth window: how recently the user must have entered their password
-# before they're allowed to add or remove a passkey. 5 min is short enough
-# to mean "in this session" but generous for slow typists.
-REAUTH_WINDOW_SECONDS = 5 * 60
+# Re-auth window: how long a freshly-verified password remains "fresh"
+# for sensitive operations (add / remove passkey). 10 minutes balances
+# UX (no per-click password prompt) with security (a stolen long-lived
+# session token cannot enrol attacker keys silently).
+REAUTH_WINDOW_SECONDS = 10 * 60
+
+
+def _auto_device_name(request: Request) -> str:
+    """Generate a friendly device name from the User-Agent header.
+
+    Used when the client doesn't supply an explicit name (the new
+    default — UX request to skip the device-name prompt). Falls back
+    to a stable label so the user can always tell devices apart in the
+    list and rename later via `/rename/{id}`.
+    """
+    ua_raw = (request.headers.get("user-agent") or "").lower()
+    try:
+        from user_agents import parse as _ua_parse
+        ua = _ua_parse(ua_raw or "Unknown")
+        browser = (ua.browser.family or "Browser").strip()
+        os_name = (ua.os.family or "Device").strip()
+        if ua.is_mobile:
+            return f"{browser} on {os_name}"[:80]
+        return f"{browser} on {os_name}"[:80]
+    except Exception:
+        # Best-effort string matching when the user_agents pkg is missing.
+        if "iphone" in ua_raw or "ipad" in ua_raw:
+            return "iPhone/iPad"
+        if "macintosh" in ua_raw or "mac os" in ua_raw:
+            return "Mac"
+        if "windows" in ua_raw:
+            return "Windows"
+        if "android" in ua_raw:
+            return "Android"
+        if "linux" in ua_raw:
+            return "Linux"
+        return "New device"
 
 
 def _b64url_encode(data: bytes) -> str:
@@ -91,18 +127,24 @@ def _b64url_decode(data: str) -> bytes:
 
 
 # ---- Pydantic payload models ----------------------------------------------
+class ReauthPayload(BaseModel):
+    password: str
+
+
 class RegisterBeginPayload(BaseModel):
-    device_name: str
-    password: str  # re-auth check — fresh password verify before challenge issued
+    # Both optional — flows where the session is "recently authenticated"
+    # skip the inline password and let the client auto-name the device.
+    device_name: Optional[str] = None
+    password: Optional[str] = None
 
 
 class RegisterFinishPayload(BaseModel):
-    credential: dict  # raw browser response (id, rawId, response{...}, type)
-    device_name: str
+    credential: dict
+    device_name: Optional[str] = None
 
 
 class AuthBeginPayload(BaseModel):
-    email: Optional[str] = None  # optional — empty allows discoverable creds
+    email: Optional[str] = None
 
 
 class AuthFinishPayload(BaseModel):
@@ -113,8 +155,13 @@ class TwoFactorBeginPayload(BaseModel):
     challenge_token: str
 
 
+class RenamePayload(BaseModel):
+    name: str
+
+
 class RemovePayload(BaseModel):
-    password: str  # re-auth — same as register
+    # Optional — recent-auth window replaces it in normal use.
+    password: Optional[str] = None
 
 
 # ---- Audit helper ---------------------------------------------------------
@@ -160,6 +207,84 @@ def build_passkey_router(
     """Inject DB + auth helpers from server.py so we don't fork those flows."""
     router = APIRouter(prefix="/auth/passkey", tags=["auth", "passkey"])
 
+    # ── Recent-auth gate ─────────────────────────────────────────────────
+    async def _session_recent_auth(request: Request) -> tuple[bool, Optional[dict]]:
+        """Return (is_recent, session_doc). `is_recent` means the user
+        verified their password within `REAUTH_WINDOW_SECONDS`.
+
+        We read the JWT-bound session id from `request.state.sid` (set by
+        `get_current_user`) and look at the session's `recent_auth_at`
+        field. Older sessions that pre-date this field — e.g. existing
+        users with cookies from before the migration — are treated as
+        non-recent so they're prompted for the password once.
+        """
+        sid = getattr(request.state, "sid", None)
+        if not sid:
+            return False, None
+        sess = await db.sessions.find_one({"id": sid}, {"_id": 0})
+        if not sess:
+            return False, None
+        raw = sess.get("recent_auth_at")
+        if not raw:
+            return False, sess
+        try:
+            ts = datetime.fromisoformat(raw)
+        except (ValueError, TypeError):
+            return False, sess
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        age = (datetime.now(timezone.utc) - ts).total_seconds()
+        return age < REAUTH_WINDOW_SECONDS, sess
+
+    async def _bump_recent_auth(request: Request) -> None:
+        """Mark the current session as freshly password-verified."""
+        sid = getattr(request.state, "sid", None)
+        if not sid:
+            return
+        await db.sessions.update_one(
+            {"id": sid},
+            {"$set": {"recent_auth_at": datetime.now(timezone.utc).isoformat()}},
+        )
+
+    @router.get("/reauth-status")
+    async def reauth_status(request: Request, user: dict = Depends(get_current_user)):
+        """Tell the client whether sensitive passkey operations can be
+        performed without an additional password prompt.
+
+        Returns `{recent: true, fresh_for_sec: <seconds left>}` when the
+        session is inside the re-auth window. Otherwise the client should
+        render the password gate before invoking add/remove.
+        """
+        recent, sess = await _session_recent_auth(request)
+        out: dict = {"recent": recent, "window_seconds": REAUTH_WINDOW_SECONDS}
+        if recent and sess and sess.get("recent_auth_at"):
+            try:
+                ts = datetime.fromisoformat(sess["recent_auth_at"])
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                age = (datetime.now(timezone.utc) - ts).total_seconds()
+                out["fresh_for_sec"] = max(0, int(REAUTH_WINDOW_SECONDS - age))
+            except Exception:
+                pass
+        return out
+
+    @router.post("/reauth")
+    async def reauth(
+        request: Request,
+        payload: ReauthPayload,
+        user: dict = Depends(get_current_user),
+    ):
+        """Verify the user's password and bump `recent_auth_at` on the
+        current session so subsequent add/remove calls within
+        `REAUTH_WINDOW_SECONDS` skip the password prompt.
+        """
+        if not await verify_password(user, payload.password):
+            await _audit(db, user["id"], "reauth_failed", request)
+            raise HTTPException(status_code=401, detail="Грешна парола.")
+        await _bump_recent_auth(request)
+        await _audit(db, user["id"], "reauth_ok", request)
+        return {"ok": True, "fresh_for_sec": REAUTH_WINDOW_SECONDS}
+
     # ── REGISTRATION ─────────────────────────────────────────────────────
     @router.post("/register-begin")
     async def register_begin(
@@ -167,12 +292,25 @@ def build_passkey_router(
         payload: RegisterBeginPayload,
         user: dict = Depends(get_current_user),
     ):
-        """Step 1 of registration. Re-auth with password, then issue
-        publicKeyCredentialCreationOptions (challenge + RP info).
+        """Step 1 of registration. Issue publicKeyCredentialCreationOptions.
+
+        Authentication policy: the operation is allowed when either
+        (a) the session is inside the re-auth window — set on login or
+        explicit `/reauth` — OR (b) the client supplies a fresh password
+        in the payload. Falling back to (b) lets legacy clients keep
+        working until they pick up the new `/reauth` flow.
         """
         _verify_origin(request)
-        if not await verify_password(user, payload.password):
-            raise HTTPException(status_code=401, detail="Грешна парола.")
+        recent, _ = await _session_recent_auth(request)
+        if not recent:
+            if not payload.password or not await verify_password(user, payload.password):
+                raise HTTPException(
+                    status_code=401,
+                    detail="Необходимо е скорошно потвърждаване с парола.",
+                    headers={"X-Reauth-Required": "1"},
+                )
+            # Honour the implicit password verification as a recent-auth event.
+            await _bump_recent_auth(request)
 
         # Exclude already-registered creds so the same authenticator
         # cannot be enrolled twice (browser will show "already registered").
@@ -203,6 +341,11 @@ def build_passkey_router(
             exclude_credentials=exclude_credentials,
         )
 
+        # Auto-name when the client didn't supply one — UX request to
+        # remove the device-name prompt. The user can rename later via
+        # `/auth/passkey/rename/{id}`.
+        device_name = (payload.device_name or "").strip() or _auto_device_name(request)
+
         # Persist the challenge for ~10 min so register-finish can verify it.
         # TTL index on `expires_at` will auto-expire abandoned challenges.
         challenge_b64 = _b64url_encode(opts.challenge)
@@ -211,10 +354,10 @@ def build_passkey_router(
             "challenge": challenge_b64,
             "user_id": user["id"],
             "operation": "register",
-            "device_name": payload.device_name[:80],
+            "device_name": device_name[:80],
             "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
         })
-        return {"options": options_to_json(opts)}
+        return {"options": options_to_json(opts), "device_name": device_name}
 
     @router.post("/register-finish")
     async def register_finish(
@@ -255,6 +398,13 @@ def build_passkey_router(
         except Exception:
             transports = []
 
+        # Name resolution order:
+        #   1. Client-supplied (legacy clients still send this).
+        #   2. Name we generated at register-begin from User-Agent.
+        #   3. Generic fallback.
+        name = (payload.device_name or "").strip() \
+            or (challenge_doc.get("device_name") or "").strip() \
+            or "Passkey"
         await db.passkey_credentials.insert_one({
             "id": str(_uuid.uuid4()),
             "user_id": user["id"],
@@ -262,14 +412,14 @@ def build_passkey_router(
             "public_key": _b64url_encode(verification.credential_public_key),
             "sign_count": verification.sign_count,
             "transports": transports,
-            "device_name": (challenge_doc.get("device_name") or "Passkey")[:80],
+            "device_name": name[:80],
             "created_at": datetime.now(timezone.utc).isoformat(),
             "last_used_at": None,
             "rp_id_when_created": RP_ID,
             "origin_when_created": origin,
         })
         await _audit(db, user["id"], "passkey_created", request, credential_id=cred_id_b64)
-        return {"ok": True, "credential_id": cred_id_b64}
+        return {"ok": True, "credential_id": cred_id_b64, "device_name": name[:80]}
 
     # ── PRIMARY AUTHENTICATION (login page) ─────────────────────────────
     @router.get("/has-passkey")
@@ -477,10 +627,21 @@ def build_passkey_router(
         payload: RemovePayload,
         user: dict = Depends(get_current_user),
     ):
-        """Delete a registered passkey. Requires fresh password
-        re-authentication (per user policy)."""
-        if not await verify_password(user, payload.password):
-            raise HTTPException(status_code=401, detail="Грешна парола.")
+        """Delete a registered passkey.
+
+        Same auth gate as `register-begin`: recent-auth window OR
+        explicit password in the payload. Clients in the new flow won't
+        send the password; the recent-auth check covers them.
+        """
+        recent, _ = await _session_recent_auth(request)
+        if not recent:
+            if not payload.password or not await verify_password(user, payload.password):
+                raise HTTPException(
+                    status_code=401,
+                    detail="Необходимо е скорошно потвърждаване с парола.",
+                    headers={"X-Reauth-Required": "1"},
+                )
+            await _bump_recent_auth(request)
         res = await db.passkey_credentials.delete_one({
             "credential_id": credential_id,
             "user_id": user["id"],
@@ -489,5 +650,28 @@ def build_passkey_router(
             raise HTTPException(status_code=404, detail="Passkey не е намерен.")
         await _audit(db, user["id"], "passkey_removed", request, credential_id=credential_id)
         return {"ok": True}
+
+    @router.post("/rename/{credential_id}")
+    async def rename_passkey(
+        credential_id: str,
+        request: Request,
+        payload: RenamePayload,
+        user: dict = Depends(get_current_user),
+    ):
+        """Rename a registered passkey. No re-auth required — this is
+        cosmetic metadata, not a privilege escalation. Names are clamped
+        to 80 characters and stripped of leading/trailing whitespace.
+        """
+        new_name = (payload.name or "").strip()[:80]
+        if not new_name:
+            raise HTTPException(status_code=400, detail="Името не може да е празно.")
+        res = await db.passkey_credentials.update_one(
+            {"credential_id": credential_id, "user_id": user["id"]},
+            {"$set": {"device_name": new_name}},
+        )
+        if not res.matched_count:
+            raise HTTPException(status_code=404, detail="Passkey не е намерен.")
+        await _audit(db, user["id"], "passkey_renamed", request, credential_id=credential_id)
+        return {"ok": True, "device_name": new_name}
 
     return router
