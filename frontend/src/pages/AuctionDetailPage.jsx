@@ -782,7 +782,8 @@ export default function AuctionDetailPage() {
                       <div
                         key={i}
                         data-slide-index={i}
-                        className="min-w-full h-full snap-start shrink-0 cursor-zoom-in"
+                        className="w-full h-full shrink-0 snap-start cursor-zoom-in overflow-hidden"
+                        style={{ flex: "0 0 100%" }}
                         onClick={(e) => {
                           if (isSwipingRef.current) {
                             e.preventDefault();

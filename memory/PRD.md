@@ -875,23 +875,28 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 
 ## 15 May 2026 — Native CSS Scroll-Snap Gallery + Object-Contain Fix
 
-**Контекст:** Хеланд-офф задачата беше да се верифицира новата CSS `scroll-snap` галерия в `AuctionDetailPage.jsx` (последното неверифицирано имплементиране от предишната сесия). Потребителят съобщи че "снимките са зуумнати".
+**Контекст:** Хеланд-офф задачата беше да се верифицира новата CSS `scroll-snap` галерия в `AuctionDetailPage.jsx`. Потребителят съобщи че "снимките са зуумнати" и след това че галерията изобщо не работи правилно.
 
-**Diagnose:**
-- Главната галерия използваше `aspect-[3/2]` + `object-cover` → 16:9 снимки (1600×900) се изрязваха със ~16% от страните.
-- Lightbox-ът използваше `object-contain` → показваше пълната снимка → разликата създаваше усещане за зуум.
+**Diagnose stage 1 (zoom):**
+- Главната галерия използваше `aspect-[3/2]` + `object-cover` → 16:9 снимки се изрязваха.
+
+**Diagnose stage 2 (broken slides):**
+- След смяната на `object-contain`, slide divs използваха `min-w-full` без max-width. `<picture>` контейнерът наследяваше intrinsic размер от 16:9 image-а → slide 1/2 ставаха **864px** широки вместо 730px (= scroller width).
+- Резултат: scroll-snap не работеше правилно, slide-овете не подравняваха със scroller-а.
 
 **Fix:**
-- `AuctionDetailPage.jsx`: `object-cover` → `object-contain` на главната hero галерия (и `<Picture>` за single-image fast-path). Контейнерът има `bg-[hsl(var(--surface))]` за неутрален letterbox.
+- `AuctionDetailPage.jsx`: `object-cover` → `object-contain` на главната hero галерия (lines 801, 822)
+- `AuctionDetailPage.jsx`: slide div промяна от `min-w-full h-full snap-start shrink-0` → `w-full h-full shrink-0 snap-start overflow-hidden` + `style={{flex: "0 0 100%"}}` за строг flex-basis = 100% (line 785)
 
-**Verified:**
-- ✅ Лайтбоксът се отваря при click върху снимка
-- ✅ IntersectionObserver обновява `photoIdx` правилно при swipe / programmatic scroll (active dot syncs)
-- ✅ Desktop chevron бутоните работят (counter 1→2 при click)
-- ✅ Mixed aspect ratios (3:2 + 16:9) показват пълни снимки без cropping
+**Verified след final fix:**
+- ✅ Всички slide-ове = 730px (= scrollerWidth) на desktop
+- ✅ Chevron Next подравнява точно (`diff: 0`)
+- ✅ 16:9 photos показват пълно съдържание с дискретен letterbox (light surface bg)
+- ✅ Lightbox click works (1/24 indexed)
+- ✅ IntersectionObserver active dot syncs to current slide
 
 **Файлове:**
-- `/app/frontend/src/pages/AuctionDetailPage.jsx` (lines 801, 822)
+- `/app/frontend/src/pages/AuctionDetailPage.jsx` (lines 785, 801, 822)
 
 ## Verified: Preauth Notification Bell + Bid Constraint Check (1 May 2026)
 
