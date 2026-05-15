@@ -873,6 +873,22 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 
 ---
 
+## 15 May 2026 — Ansible Disk Permissions Fix (Permission denied bug)
+
+**Production showed:** `Image storage is not writable at '/opt/autobids/uploads' (Permission denied)` → submit 500.
+
+**Корен:** Ansible task chown-ваше `/opt/autobids/uploads` за www-data **без `recurse`**, така че всеки subdir създаден manually като root (или от стар deploy) оставаше root-owned → www-data → EACCES при write.
+
+**Fix в `/app/deploy/hetzner/ansible/roles/backend/tasks/main.yml`:**
+1. `recurse: no` → `recurse: yes` за upload_dir + log_dir + backup_dir + /var/lib/autobids → всички съществуващи file-ове + subdirs ще се chown-нат за www-data при следващ Ansible deploy
+2. Нов **post-deploy write probe task**: `sudo -u www-data touch {{ upload_dir }}/.ansible-write-probe`. Ако fail-ва → Ansible deploy fail-ва веднага с ясна грешка вместо да остави production-а в broken state.
+
+**Действие за production**: следващ `ansible-playbook` ще:
+- Recursive chown на `/opt/autobids/uploads` → www-data:www-data
+- Write probe като www-data
+- Ако всичко минe → backend се пуска нормално
+- Submit-ът ще работи
+
 ## 15 May 2026 — CDN Storage Diagnostics + Hardened Disk Write Path
 
 **User report:** "Когато копирам URL на снимка, получавам `data:image/jpeg;base64,...` вместо нормален URL". Това разкрива че `DiskStorage` на production fail-ва тихо и snimkите се запазват inline base64 в Mongo (десетки MB on disk-bound document).

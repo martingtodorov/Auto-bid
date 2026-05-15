@@ -226,6 +226,27 @@
     daemon_reload: yes
   become: yes
 
+# ─── Post-deploy storage write probe ─────────────────────────────────────────
+# Fail the deploy loudly if `www-data` cannot write to {{ upload_dir }}.
+# Previously a misconfigured chown would only surface when a seller hit
+# Submit and got an opaque 500 — operators wouldn't notice until users
+# complained. Probing as the service user during deploy turns it into a
+# fast, obvious red Ansible failure.
+- name: Write probe upload dir as service user
+  ansible.builtin.command:
+    cmd: "sudo -u {{ service_user }} touch {{ upload_dir }}/.ansible-write-probe"
+  register: upload_probe
+  changed_when: false
+  failed_when: upload_probe.rc != 0
+  become: yes
+
+- name: Remove write probe marker
+  ansible.builtin.file:
+    path: "{{ upload_dir }}/.ansible-write-probe"
+    state: absent
+  become: yes
+  when: upload_probe.rc == 0
+
 # ─── Backups (daily at 03:30) ─────────────────────────────────────────────────
 - name: Install nightly DB backup script
   ansible.builtin.copy:
