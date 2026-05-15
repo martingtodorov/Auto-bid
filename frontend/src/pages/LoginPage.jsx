@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { ShieldCheck, ArrowLeft } from "lucide-react";
+import { ShieldCheck, ArrowLeft, Fingerprint } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth, formatError } from "../lib/auth";
+import { isPasskeySupported, hasPasskey } from "../lib/passkey";
 
 export default function LoginPage() {
   const { t } = useTranslation();
-  const { login, verifyTwoFactor } = useAuth();
+  const { login, verifyTwoFactor, loginWithPasskey, verifyTwoFactorWithPasskey } = useAuth();
   const navigate = useNavigate();
   const loc = useLocation();
   const next = new URLSearchParams(loc.search).get("next") || "/";
@@ -15,10 +16,30 @@ export default function LoginPage() {
   const [remember, setRemember] = useState(false);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+  const [emailHasPasskey, setEmailHasPasskey] = useState(false);
 
   // 2FA stage
   const [challenge, setChallenge] = useState(null);
   const [code, setCode] = useState("");
+  const [twoFaUserHasPasskey, setTwoFaUserHasPasskey] = useState(false);
+
+  const supportsPasskey = isPasskeySupported();
+
+  // Email-blur hint: detect if this account already has a passkey so we
+  // can surface a one-tap "Sign in with passkey" option without making
+  // the user enter their password first.
+  const onEmailBlur = async () => {
+    if (!supportsPasskey || !email || !email.includes("@")) {
+      setEmailHasPasskey(false);
+      return;
+    }
+    try {
+      const res = await hasPasskey(email);
+      setEmailHasPasskey(!!res?.has);
+    } catch {
+      setEmailHasPasskey(false);
+    }
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -27,6 +48,13 @@ export default function LoginPage() {
       const res = await login(email, password, remember);
       if (res?.requires_2fa) {
         setChallenge(res.challenge_token);
+        // Pre-check whether the user can use a passkey instead of TOTP.
+        if (supportsPasskey && email) {
+          try {
+            const r = await hasPasskey(email);
+            setTwoFaUserHasPasskey(!!r?.has);
+          } catch { /* ignore */ }
+        }
       } else {
         navigate(next);
       }
@@ -44,6 +72,24 @@ export default function LoginPage() {
     finally { setLoading(false); }
   };
 
+  const onPasskeyLogin = async () => {
+    setErr(""); setLoading(true);
+    try {
+      await loginWithPasskey(email || null);
+      navigate(next);
+    } catch (e) { setErr(e?.message || formatError(e)); }
+    finally { setLoading(false); }
+  };
+
+  const onPasskey2FA = async () => {
+    setErr(""); setLoading(true);
+    try {
+      await verifyTwoFactorWithPasskey(challenge);
+      navigate(next);
+    } catch (e) { setErr(e?.message || formatError(e)); }
+    finally { setLoading(false); }
+  };
+
   if (challenge) {
     return (
       <main className="py-20" data-testid="login-page">
@@ -57,7 +103,20 @@ export default function LoginPage() {
           <h1 className="font-serif text-4xl mt-3">{t("auth.two_fa_enter_title") || "Въведете код"}</h1>
           <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">{t("auth.two_fa_enter_code")}</p>
 
-          <form onSubmit={submit2FA} className="mt-8 space-y-5">
+          {twoFaUserHasPasskey && (
+            <button
+              type="button"
+              onClick={onPasskey2FA}
+              disabled={loading}
+              className="mt-6 w-full btn btn-outline flex items-center justify-center gap-2"
+              data-testid="login-2fa-passkey"
+            >
+              <Fingerprint size={18} />
+              {t("auth.two_fa_use_passkey", "Влез с passkey вместо код")}
+            </button>
+          )}
+
+          <form onSubmit={submit2FA} className="mt-6 space-y-5">
             <div>
               <label className="overline text-[hsl(var(--ink-muted))] block mb-2">{t("auth.two_fa_code_label") || "Код"}</label>
               <input
@@ -93,7 +152,16 @@ export default function LoginPage() {
         <form onSubmit={submit} className="mt-10 space-y-5">
           <div>
             <label className="overline text-[hsl(var(--ink-muted))] block mb-2">{t("forms.email")}</label>
-            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full border border-[hsl(var(--line))] h-12 px-3" data-testid="login-email" />
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onBlur={onEmailBlur}
+              autoComplete="username webauthn"
+              className="w-full border border-[hsl(var(--line))] h-12 px-3"
+              data-testid="login-email"
+            />
           </div>
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -119,6 +187,30 @@ export default function LoginPage() {
             {loading ? (t("auth.signing_in") || "Влизане…") : t("nav.login")}
           </button>
         </form>
+
+        {supportsPasskey && (
+          <>
+            <div className="mt-8 flex items-center gap-3" aria-hidden="true">
+              <div className="flex-1 h-px bg-[hsl(var(--line))]"></div>
+              <span className="text-xs text-[hsl(var(--ink-muted))] uppercase tracking-wider">
+                {t("auth.or", "или")}
+              </span>
+              <div className="flex-1 h-px bg-[hsl(var(--line))]"></div>
+            </div>
+            <button
+              type="button"
+              onClick={onPasskeyLogin}
+              disabled={loading}
+              className="mt-4 w-full btn btn-outline flex items-center justify-center gap-2"
+              data-testid="login-passkey-btn"
+            >
+              <Fingerprint size={18} />
+              {emailHasPasskey
+                ? t("auth.passkey_login_for_email", "Влез с passkey за {{email}}", { email })
+                : t("auth.passkey_login", "Влез с passkey")}
+            </button>
+          </>
+        )}
 
         <p className="mt-8 text-sm text-[hsl(var(--ink-muted))]">
           {t("auth.no_account")} <Link to="/register" className="underline text-[hsl(var(--ink))]" data-testid="login-to-register">{t("nav.register")}</Link>

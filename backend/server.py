@@ -5347,6 +5347,13 @@ async def on_startup():
     await db.audit_log.create_index([("at", -1)])
     # Video-upload rate-limit log: per-user query for hourly/daily counts.
     await db.video_upload_log.create_index([("user_id", 1), ("created_at", -1)])
+    # Passkey storage + audit + auto-expiring challenges.
+    await db.passkey_credentials.create_index([("user_id", 1)])
+    await db.passkey_credentials.create_index([("credential_id", 1)], unique=True)
+    await db.passkey_audit_log.create_index([("user_id", 1), ("at", -1)])
+    # TTL on `expires_at` — challenges auto-deleted ~10 min after creation.
+    await db.passkey_challenges.create_index([("expires_at", 1)], expireAfterSeconds=0)
+    await db.passkey_challenges.create_index([("user_id", 1), ("operation", 1)])
     # Stripe webhook idempotency dedupe collection (unique on Stripe event id).
     try:
         await db.stripe_processed_events.create_index("id", unique=True)
@@ -5909,6 +5916,60 @@ api.include_router(_sso_router.build_sso_router(
 from routers import inbox as _inbox_router
 _inbox = _inbox_router.build_inbox_router(db, get_current_user)
 app.include_router(_inbox)
+
+# WebAuthn / FIDO2 passkey login (alternative to TOTP 2FA + standalone).
+# RP ID is `autoandbid.com`; passkeys created on any of the three brand
+# TLDs work cross-domain via the `/.well-known/webauthn` manifest.
+from routers import passkey as _passkey_router  # noqa: E402
+
+async def _verify_password_for_passkey(user_doc, password_str: str) -> bool:
+    """Re-auth helper used by add/remove passkey endpoints.
+
+    `get_current_user` strips `password_hash` from its returned dict
+    (line 125), so we re-fetch the full user document with the hash
+    intact before delegating to the standard verifier.
+    """
+    if not password_str:
+        return False
+    full = await db.users.find_one(
+        {"id": user_doc["id"]}, {"_id": 0, "password_hash": 1}
+    )
+    if not full or not full.get("password_hash"):
+        return False
+    return verify_password(password_str, full["password_hash"])
+
+api.include_router(_passkey_router.build_passkey_router(
+    db=db,
+    get_current_user=get_current_user,
+    verify_password=_verify_password_for_passkey,
+    create_token=_auth_router._create_token,
+    create_session=_auth_router._create_session,
+    set_auth_cookies=_auth_router._set_auth_cookies,
+    remember_ttl_days=_auth_router.REMEMBER_TTL_DAYS,
+    cookie_ttl_days=_auth_router.COOKIE_TTL_DAYS,
+    sanitize_user=_auth_router._sanitize,
+))
+
+
+@app.get("/.well-known/webauthn")
+@api.get("/.well-known/webauthn")
+async def webauthn_related_origins():
+    """Related Origin Requests manifest — lets passkeys created with
+    `rp.id = autoandbid.com` be used on autoandbid.bg / autoandbid.ro
+    too (Chromium 128+, Safari 18+). See:
+    https://developer.mozilla.org/en-US/docs/Web/API/Web_Authentication_API/Related_Origin_Requests
+    """
+    return {
+        "origins": [
+            "https://autoandbid.com",
+            "https://www.autoandbid.com",
+            "https://autoandbid.bg",
+            "https://www.autoandbid.bg",
+            "https://autoandbid.ro",
+            "https://www.autoandbid.ro",
+        ]
+    }
+
 
 # Two-way chat between users and admins/moderators.
 from routers import chat as _chat_router

@@ -5,6 +5,7 @@ import { Phone, Bell, Trash2, BookmarkPlus } from "lucide-react";
 import { useAuth, formatError } from "../lib/auth";
 import { api } from "../lib/apiClient";
 import TwoFactorSection from "../components/TwoFactorSection";
+import PasskeySection from "../components/PasskeySection";
 import PushSettings from "../components/PushSettings";
 import EmailSettings from "../components/EmailSettings";
 import SessionsSection from "../components/SessionsSection";
@@ -142,6 +143,7 @@ export default function AccountSettingsPage() {
         </section>
 
         <TwoFactorSection />
+        <PasskeySection />
 
         <SavedCardSection />
 

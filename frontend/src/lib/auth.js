@@ -44,6 +44,28 @@ export function AuthProvider({ children }) {
     return data.user;
   };
 
+  // Passkey-based login (alternative to password). Reuses the same
+  // backend session/cookie flow as `login`, so post-success the rest
+  // of the app behaves identically.
+  const loginWithPasskey = async (email) => {
+    const { authenticateWithPasskey } = await import("./passkey");
+    const data = await authenticateWithPasskey(email);
+    try { localStorage.removeItem("autobid_token"); } catch (_e) { /* ignore */ }
+    setUser(data.user);
+    return data.user;
+  };
+
+  // Passkey-as-2FA — user already typed password, backend issued a 2FA
+  // challenge_token, and instead of a TOTP code the user can prove
+  // identity with a passkey.
+  const verifyTwoFactorWithPasskey = async (challenge_token) => {
+    const { passkeyAsTwoFactor } = await import("./passkey");
+    const data = await passkeyAsTwoFactor(challenge_token);
+    try { localStorage.removeItem("autobid_token"); } catch (_e) { /* ignore */ }
+    setUser(data.user);
+    return data.user;
+  };
+
   const register = async (email, password, name, termsAccepted = false) => {
     const { data } = await api.post("/auth/register", {
       email, password, name,
@@ -62,7 +84,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, refresh, verifyTwoFactor }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, refresh, verifyTwoFactor, loginWithPasskey, verifyTwoFactorWithPasskey }}>
       {children}
     </AuthContext.Provider>
   );
