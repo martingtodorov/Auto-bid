@@ -873,6 +873,38 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 
 ---
 
+## 15 May 2026 (v4) — Unified CDN_BASE_URL за всички uploaded media
+
+**User request:** Snimkите трябва да минават през `https://img.autoandbid.bg/uploads/...`, не през `autoandbid.bg/api/uploads/...`. Единна `CDN_BASE_URL` env var.
+
+**Fix:**
+1. **`backend/storage.py`**: нова helper функция `public_uploads_base()` — single source of truth. Резолвира `CDN_BASE_URL` → `IMAGE_BASE_URL` → `PUBLIC_UPLOAD_BASE` → `/api/uploads`. Auto-appends `/uploads` ако CDN_BASE_URL е host root.
+2. **`DiskStorage.public_base`** използва новия helper.
+3. **`backend/services/image_variants.py::public_variant_url`** delegated към `public_uploads_base()` — варианti URLs стават `<base>/uploads/variants/<sha>/...`.
+4. **`backend/services/og_image.py::_uploads_public_base()`** delegated — OG image URLs също минават през CDN.
+5. **`deploy/hetzner/env-templates/backend.env.example`**: добавена `CDN_BASE_URL=https://img.autoandbid.bg` (commented out).
+6. **`deploy/hetzner/ansible/group_vars/all.yml`**: добавена `cdn_base_url` променлива.
+7. nginx config-ът вече е напълно готов — `img.autoandbid.bg` server block има `/uploads/` alias към `/opt/autobids/uploads/`.
+
+**Verified:**
+- Preview (no CDN_BASE_URL): `/api/uploads/auctions/<sha>.png` ✅
+- Production (CDN_BASE_URL=https://img.autoandbid.bg):
+  - DiskStorage URL: `https://img.autoandbid.bg/uploads/auctions/<sha>.jpg` ✅
+  - Variant URL: `https://img.autoandbid.bg/uploads/variants/<sha>/md.avif` ✅
+- Lint clean
+
+**За production deploy:**
+1. Save to GitHub → Ansible deploy (вече има CDN_BASE_URL var в group_vars)
+2. Добавете в `/etc/autobids/backend.env` на ab-back1:
+   ```
+   CDN_BASE_URL=https://img.autoandbid.bg
+   ```
+3. `systemctl restart autobids-backend`
+4. Hit `/api/admin/storage-health` → `write_probe_ref` ще е `https://img.autoandbid.bg/uploads/...`
+5. Нови upload-нати снимки автоматично ще получат CDN URLs
+
+**Legacy listings**: вече запазените `/api/uploads/...` URLs остават валидни (nginx alias на main domain още работи). Ако искате да ги rewrite-нете към CDN — пусни `python3 -m scripts.migrate_inline_to_disk` (вече има `_normalise_path` logic).
+
 ## 15 May 2026 (v3) — Admin Storage Health Endpoint + DNS Clarification
 
 **Контекст:** Production submit все още показва `Permission denied`. User обърква DNS (img.autoandbid.bg CDN) с disk storage permissions — две напълно отделни неща.

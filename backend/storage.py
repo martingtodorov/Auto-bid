@@ -57,6 +57,36 @@ class InlineStorage:
         return data_url
 
 
+def public_uploads_base() -> str:
+    """Single source of truth for the public base URL of uploaded media.
+
+    Resolution order (first non-empty wins):
+        1. `CDN_BASE_URL` — canonical env var (e.g. `https://img.autoandbid.bg`).
+           When set, uploaded asset URLs become `<CDN_BASE_URL>/uploads/...`
+           (no `/api` prefix) — nginx on the CDN subdomain serves them
+           directly from disk via `alias /opt/autobids/uploads/`.
+        2. `IMAGE_BASE_URL` — legacy alias kept for previously deployed envs.
+        3. `PUBLIC_UPLOAD_BASE` — pre-CDN-era setting, typically `/api/uploads`
+           which is what the k8s preview ingress routes to the backend.
+        4. Fallback `/api/uploads` for dev / containerised environments where
+           the image subdomain isn't set up yet.
+
+    A trailing `/uploads` segment is auto-appended when `CDN_BASE_URL` or
+    `IMAGE_BASE_URL` is set without it, so the public URL layout is always
+    `<base>/uploads/auctions/<sha2>/<sha>.<ext>` — consistent regardless of
+    which env var the operator chose.
+    """
+    cdn = (os.environ.get("CDN_BASE_URL") or os.environ.get("IMAGE_BASE_URL") or "").rstrip("/")
+    if cdn:
+        # If the operator pointed CDN_BASE_URL at the host root, append
+        # `/uploads`. If they already included a path segment (legacy
+        # `https://img.x/uploads`), respect it.
+        if cdn.endswith("/uploads") or "/uploads/" in cdn:
+            return cdn
+        return cdn + "/uploads"
+    return (os.environ.get("PUBLIC_UPLOAD_BASE") or "/api/uploads").rstrip("/")
+
+
 class DiskStorage:
     """Local filesystem backend: write data URLs to disk, return public URL.
 
@@ -65,9 +95,9 @@ class DiskStorage:
 
         <UPLOAD_DIR>/auctions/<aa>/<full-sha>.<ext>
 
-    Public URL is built from `PUBLIC_UPLOAD_BASE` (e.g. `/uploads`) so a
-    reverse proxy (nginx) or FastAPI's StaticFiles can serve the path
-    without further routing logic.
+    Public URL is built from `public_uploads_base()` so the same on-disk
+    layout is served from either the CDN subdomain (production) or the
+    backend itself (dev / preview).
     """
     name = "disk"
 
@@ -78,11 +108,7 @@ class DiskStorage:
         # Preview/containerised environments can override this via the
         # `UPLOAD_DIR` env var to keep files co-located with the code.
         self.root = os.path.abspath(os.environ.get("UPLOAD_DIR", "/opt/autobids/uploads"))
-        # Default `/api/uploads` is the only path the k8s preview ingress
-        # routes to the backend. On a Hetzner box nginx can short-circuit
-        # the same path via `alias`, so the public URL is identical
-        # everywhere.
-        self.public_base = os.environ.get("PUBLIC_UPLOAD_BASE", "/api/uploads").rstrip("/")
+        self.public_base = public_uploads_base()
         # Soft-create the directory. If the filesystem is read-only (e.g.
         # /app on the production VPS) we don't crash the process here —
         # `store()` will raise a clear ImageProcessingError per upload so
@@ -127,6 +153,7 @@ class DiskStorage:
                     f"({e.strerror}). Проверете UPLOAD_DIR и правата на директорията."
                 ) from e
         return f"{self.public_base}/{rel}"
+
 
 
 class S3Storage:

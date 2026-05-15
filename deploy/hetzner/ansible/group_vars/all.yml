@@ -14,6 +14,10 @@ backup_dir:         "/var/backups/autobids"
 # Served by nginx via `alias` at `/api/uploads/` and by the backend's
 # `DiskStorage` via `UPLOAD_DIR`. Must match on both sides.
 upload_dir:         "/opt/autobids/uploads"
+# Public CDN base for uploaded media. nginx on this subdomain serves the
+# same content-addressed files via `alias /opt/autobids/uploads/`.
+# Auction photo URLs become `<cdn_base_url>/uploads/auctions/<sha>.<ext>`.
+cdn_base_url:       "https://img.autoandbid.bg"
 
 # ─── Versions ────────────────────────────────────────────────────────────────
 # We intentionally use the OS default Python now (`python3`) rather than

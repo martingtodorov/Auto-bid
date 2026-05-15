@@ -372,7 +372,8 @@ def _uploads_root() -> str:
 
 
 def _uploads_public_base() -> str:
-    return (os.environ.get("PUBLIC_UPLOAD_BASE") or "/api/uploads").rstrip("/")
+    from storage import public_uploads_base
+    return public_uploads_base()
 
 
 def headline_image_url(auction: dict) -> str:
