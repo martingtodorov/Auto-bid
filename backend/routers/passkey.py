@@ -54,7 +54,12 @@ from webauthn.helpers.structs import (
 log = logging.getLogger(__name__)
 
 # ---- Configuration ---------------------------------------------------------
-RP_ID = os.environ.get("WEBAUTHN_RP_ID", "autoandbid.com")
+# Canonical RP ID is `autoandbid.bg` (BG market is the primary one). The
+# other two brand TLDs (.com, .ro) participate via the
+# `/.well-known/webauthn` Related Origin Requests manifest, so a single
+# passkey works on all three domains in modern browsers (Chromium 128+,
+# Safari 18+).
+RP_ID = os.environ.get("WEBAUTHN_RP_ID", "autoandbid.bg")
 RP_NAME = os.environ.get("WEBAUTHN_RP_NAME", "Auto&Bid")
 ALLOWED_ORIGINS = [
     "https://autoandbid.com",

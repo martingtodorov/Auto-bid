@@ -5918,7 +5918,7 @@ _inbox = _inbox_router.build_inbox_router(db, get_current_user)
 app.include_router(_inbox)
 
 # WebAuthn / FIDO2 passkey login (alternative to TOTP 2FA + standalone).
-# RP ID is `autoandbid.com`; passkeys created on any of the three brand
+# RP ID is `autoandbid.bg`; passkeys created on any of the three brand
 # TLDs work cross-domain via the `/.well-known/webauthn` manifest.
 from routers import passkey as _passkey_router  # noqa: E402
 
@@ -5955,16 +5955,16 @@ api.include_router(_passkey_router.build_passkey_router(
 @api.get("/.well-known/webauthn")
 async def webauthn_related_origins():
     """Related Origin Requests manifest — lets passkeys created with
-    `rp.id = autoandbid.com` be used on autoandbid.bg / autoandbid.ro
+    `rp.id = autoandbid.bg` be used on autoandbid.com / autoandbid.ro
     too (Chromium 128+, Safari 18+). See:
     https://developer.mozilla.org/en-US/docs/Web/API/Web_Authentication_API/Related_Origin_Requests
     """
     return {
         "origins": [
-            "https://autoandbid.com",
-            "https://www.autoandbid.com",
             "https://autoandbid.bg",
             "https://www.autoandbid.bg",
+            "https://autoandbid.com",
+            "https://www.autoandbid.com",
             "https://autoandbid.ro",
             "https://www.autoandbid.ro",
         ]
