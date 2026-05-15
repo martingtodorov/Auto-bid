@@ -3685,7 +3685,73 @@ async def admin_regenerate_og(auction_id: str, _admin: dict = Depends(require_ad
 
 
 # ---- Admin counters (tab badges) ----
-@api.get("/admin/counters")
+@api.get("/admin/storage-health")
+async def admin_storage_health(_admin: dict = Depends(require_admin)):
+    """Live diagnostic for the image storage backend.
+
+    Returns the configured backend, root path, on-disk ownership, mode,
+    and the result of a write probe. Operators can hit this from a
+    browser (admin auth required) without SSH access to the production
+    box — invaluable when chasing 'submit returns 500' incidents.
+    """
+    import os
+    import stat as stat_module
+    from storage import _get_backend
+
+    info: dict = {}
+    try:
+        backend = _get_backend()
+        info["backend"] = getattr(backend, "name", "?")
+        root = getattr(backend, "root", None)
+        info["root"] = root
+        info["upload_dir_env"] = os.environ.get("UPLOAD_DIR", "(unset)")
+        info["storage_backend_env"] = os.environ.get("STORAGE_BACKEND", "(unset)")
+        info["service_user_uid"] = os.geteuid()
+        info["service_user_gid"] = os.getegid()
+        try:
+            import pwd, grp  # noqa: E401  (stdlib, unix-only)
+            info["service_user"] = pwd.getpwuid(os.geteuid()).pw_name
+            info["service_group"] = grp.getgrgid(os.getegid()).gr_name
+        except Exception:
+            pass
+
+        if root and os.path.exists(root):
+            st = os.stat(root)
+            try:
+                import pwd, grp  # noqa: E401
+                info["dir_owner"] = pwd.getpwuid(st.st_uid).pw_name
+                info["dir_group"] = grp.getgrgid(st.st_gid).gr_name
+            except Exception:
+                info["dir_owner_uid"] = st.st_uid
+                info["dir_group_gid"] = st.st_gid
+            info["dir_mode"] = oct(st.st_mode & 0o777)
+            info["dir_writable_for_process"] = os.access(root, os.W_OK)
+            try:
+                info["children_count"] = len(os.listdir(root))
+            except Exception:
+                info["children_count"] = "(unreadable)"
+        else:
+            info["dir_exists"] = False
+
+        # Actual write probe — uses the real backend.store() path so we
+        # exercise the same code that fails during submit.
+        test_data = (
+            "data:image/png;base64,"
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAEAAAcAAc+8aFQAAAAASUVORK5CYII="
+        )
+        try:
+            ref = backend.store(test_data)
+            info["write_probe"] = "OK"
+            info["write_probe_ref"] = ref
+        except Exception as e:  # noqa: BLE001 — surface the exact error
+            info["write_probe"] = "FAILED"
+            info["write_probe_error"] = str(e)
+    except Exception as e:  # noqa: BLE001
+        info["fatal_error"] = str(e)
+    return info
+
+
+
 async def admin_counters(_admin: dict = Depends(require_admin_or_moderator)):
     """Single-shot aggregate counts for every admin panel tab — used by
     the sidebar to show badge numbers without firing one request per tab.

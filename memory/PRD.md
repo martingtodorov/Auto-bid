@@ -873,6 +873,35 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 
 ---
 
+## 15 May 2026 (v3) — Admin Storage Health Endpoint + DNS Clarification
+
+**Контекст:** Production submit все още показва `Permission denied`. User обърква DNS (img.autoandbid.bg CDN) с disk storage permissions — две напълно отделни неща.
+
+**DNS статус (от user-ския screenshot):**
+- `autoandbid.bg` A → 178.105.37.1 Proxied ✅
+- `img.autoandbid.bg` CNAME → autoandbid.bg Proxied ✅
+- **DNS-те са правилни. Не са причина за submit failure.**
+
+**Submit failure = backend disk write fail** (отделен issue). Снимките се сервират от `/api/uploads/...` (nginx alias на `/opt/autobids/uploads`). DNS-ите служат frontend-а, не disk.
+
+**Нов endpoint `/api/admin/storage-health`** (admin auth required) показва:
+- `backend` (disk/inline/s3), `root` path, env vars
+- `service_user` + UID/GID на процеса
+- `dir_owner` + `dir_group` + `dir_mode` + `dir_writable_for_process`
+- `write_probe`: OK или FAILED + точна exception (грешката от ОS)
+
+**Verified на preview**:
+```json
+{
+  "backend": "disk", "root": "/app/uploads",
+  "service_user": "root", "dir_owner": "root", "dir_mode": "0o755",
+  "dir_writable_for_process": true,
+  "write_probe": "OK"
+}
+```
+
+**За production debug**: hit `https://autoandbid.bg/api/admin/storage-health` (логнат като admin) → ще се види **точният owner + mode** на `/opt/autobids/uploads`. Това решава "защо все още Permission denied" с един curl.
+
 ## 15 May 2026 (v2) — Ansible Disk Permissions Fix — Force chown -R
 
 **Production все още показваше Permission denied** дори след `recurse: yes`. `ansible.builtin.file` с `recurse: yes` понякога silently swallow-ва индивидуални chown грешки от Python-овия walker (legacy root-owned subdirs могат да го блокират).
