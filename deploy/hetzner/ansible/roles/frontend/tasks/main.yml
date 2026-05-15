@@ -174,6 +174,46 @@
   become: yes
   notify: reload nginx
 
+# Belt-and-suspenders: list every other site-config + conf.d snippet
+# the operator may have hand-dropped onto the box during incident
+# response and disable them. Only our managed `autoandbid` symlink
+# survives. This is what prevents the "stale config keeps catching
+# img.autoandbid.bg" failure mode that broke production for 2 days.
+- name: Audit competing nginx site configs (sites-enabled)
+  ansible.builtin.find:
+    paths: /etc/nginx/sites-enabled
+    file_type: any
+    excludes:
+      - autoandbid
+  register: extra_sites
+  become: yes
+
+- name: Remove competing nginx sites
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ extra_sites.files | default([]) }}"
+  when: extra_sites.files | default([]) | length > 0
+  become: yes
+  notify: reload nginx
+
+- name: Audit competing nginx snippets (conf.d)
+  ansible.builtin.find:
+    paths: /etc/nginx/conf.d
+    file_type: any
+    patterns: "*.conf"
+  register: confd_snippets
+  become: yes
+
+- name: List conf.d snippets (informational; not removed automatically)
+  ansible.builtin.debug:
+    msg: |
+      Found {{ confd_snippets.files | length }} conf.d snippets:
+      {% for f in confd_snippets.files %}- {{ f.path }}
+      {% endfor %}
+      If img.autoandbid.bg still 301s after deploy, inspect these
+      manually — one of them may be catching the vhost.
+
 - name: Validate nginx config
   # Fails the play immediately if `nginx -t` errors — cert files must be in
   # place before this task runs. See INITIAL_DEPLOY.md "TLS material" step.
@@ -197,29 +237,71 @@
   become: yes
 
 # ─── Post-deploy CDN smoke test ─────────────────────────────────────────────
-# Catches the "nginx didn't actually reload / wrong vhost still active"
-# class of bugs that have bitten us repeatedly. We hit the local nginx
-# directly (bypass Cloudflare) with the img subdomain Host header.
-# Expected: HTTP 4xx (404 from the dedicated img vhost when the file
-# doesn't exist) or 200 (when the file exists). What's NOT acceptable
-# is a 301 redirect to autoandbid.com — that's the symptom of the bug.
-- name: Smoke test img.autoandbid.bg vhost (origin, bypassing Cloudflare)
+# Three independent probes — any failure proves the deployed nginx config
+# is wrong. We hit local nginx directly (bypass Cloudflare entirely) with
+# the `Host: img.autoandbid.bg` header so the test reflects what the
+# canonical CDN domain serves.
+- name: Smoke test img.autoandbid.bg vhost (3 probes, origin-only)
   ansible.builtin.shell: |
     set -eo pipefail
-    code=$(curl -sk -o /dev/null -w '%{http_code}' \
-      -H 'Host: img.autoandbid.bg' \
-      'https://127.0.0.1/uploads/__nonexistent_probe__.jpg')
-    loc=$(curl -sk -I -H 'Host: img.autoandbid.bg' \
-      'https://127.0.0.1/uploads/__nonexistent_probe__.jpg' \
-      | grep -i '^location:' | tr -d '\r' || true)
-    echo "code=$code location=$loc"
-    # The dedicated img vhost should answer 404 (file missing) or 502
-    # (backend transient). It must NOT 301 to autoandbid.com.
-    case "$code" in
-      404|502|400) exit 0 ;;
-      301|302) echo "FAIL: img.autoandbid.bg is redirecting (deployed config still wrong)"; exit 1 ;;
-      *) echo "WARN: unexpected status $code"; exit 0 ;;
-    esac
+    fail=0
+
+    probe() {
+      local path="$1"
+      local expected="$2"   # comma-separated list of acceptable codes
+      local check_ct="$3"   # "image" → must be image/*, "" → don't check
+      local hdrs
+      hdrs=$(curl -sk -D - -o /dev/null \
+        -H 'Host: img.autoandbid.bg' \
+        "https://127.0.0.1${path}")
+      local code ct loc
+      code=$(echo "$hdrs" | head -n1 | awk '{print $2}')
+      ct=$(echo "$hdrs" | grep -i '^content-type:' | head -1 | tr -d '\r' | sed 's/^[Cc]ontent-[Tt]ype: *//')
+      loc=$(echo "$hdrs" | grep -i '^location:' | head -1 | tr -d '\r' | sed 's/^[Ll]ocation: *//')
+      echo "  path=$path code=$code content-type=$ct location=$loc"
+
+      # Hard fail on cross-domain redirect — this is THE bug the play
+      # exists to prevent.
+      if echo "$loc" | grep -qE 'autoandbid\.(com|ro)'; then
+        echo "  → FAIL: redirect to wrong domain"
+        return 1
+      fi
+      # Verify status code is in the allowed set.
+      if ! echo ",$expected," | grep -q ",$code,"; then
+        echo "  → FAIL: code $code not in {$expected}"
+        return 1
+      fi
+      # Verify content-type starts with image/* when caller asked for it.
+      if [ "$check_ct" = "image" ] && ! echo "$ct" | grep -qE '^image/'; then
+        echo "  → FAIL: content-type '$ct' is not image/*  (← THIS is the ORB block trigger)"
+        return 1
+      fi
+      echo "  → ok"
+    }
+
+    echo "Probe 1: root → must NOT redirect to autoandbid.com"
+    probe "/" "404,403,400" "" || fail=1
+
+    echo "Probe 2: missing image → must 404, not 301"
+    probe "/uploads/__probe_$(date +%s)__.jpg" "404" "" || fail=1
+
+    echo "Probe 3: known-real upload → must be image/*  (uses first .jpg under {{ upload_dir }})"
+    sample=$(find {{ upload_dir }} -type f -name '*.jpg' 2>/dev/null | head -1 || true)
+    if [ -n "$sample" ]; then
+      rel="${sample#{{ upload_dir }}}"
+      probe "/uploads${rel}" "200" "image" || fail=1
+    else
+      echo "  (no .jpg sample on disk yet — skipping)"
+    fi
+
+    if [ "$fail" -ne 0 ]; then
+      echo "============================================================"
+      echo "CDN SMOKE TEST FAILED — img.autoandbid.bg vhost misconfigured"
+      echo "============================================================"
+      echo "Inspect:  sudo nginx -T | grep -B 2 -A 30 'img.autoandbid'"
+      echo "and:      ls -la /etc/nginx/sites-enabled/ /etc/nginx/conf.d/"
+      exit 1
+    fi
   args:
     executable: /bin/bash
   changed_when: false

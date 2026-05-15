@@ -873,6 +873,48 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 
 ---
 
+## 15 May 2026 (v7) — Ansible Auto-cleanup + 3-Probe CDN Smoke Test
+
+**User report:** ORB block (`net::ERR_BLOCKED_BY_ORB`) при import. Content-Type все още text/html на production CDN URLs.
+
+**Hard truth:** Repo nginx config-ът е перфектен от v5+. Single root cause: **deployed nginx config на production не съответства на repo** — старо deploy или конкурентен `/etc/nginx/conf.d/*.conf` файл от ръчно incident response.
+
+**Solution — turn this into a deploy-time hard failure:**
+
+### 1. Audit + auto-cleanup competing site-configs
+В `roles/frontend/tasks/main.yml`:
+- `find` всички файлове в `/etc/nginx/sites-enabled/` различни от `autoandbid` → **изтрий ги**
+- `find` всички файлове в `/etc/nginx/conf.d/*.conf` → log тяхното съществуване (не auto-delete, защото някои може да са системни) с инструкции за оператора
+
+### 2. 3-probe CDN smoke test (твърд fail на deploy)
+- **Probe 1: `GET /` на img.autoandbid.bg** → трябва да е 404/403/400, НЕ 301 към autoandbid.com
+- **Probe 2: `GET /uploads/__probe_<timestamp>__.jpg`** → must be 404
+- **Probe 3: реална .jpg от диска** → must be 200 + `Content-Type: image/*`
+- Всеки probe детектва cross-domain redirect → ясно "FAIL"
+- Всеки probe детектва non-image Content-Type → "THIS is the ORB block trigger"
+- Ansible play fail-ва при ANY probe failure
+
+→ Никога повече deploy да не завърши успешно с broken CDN. Reading the play output веднага показва ИМЕННО какво е счупено.
+
+### Verified
+- ✅ Ansible YAML валиден
+- ✅ Smoke test script logic: вътрешен `probe()` function правилно flag-ва redirect/wrong-mime
+- ✅ nginx config syntax (48/48 braces, 6 servers, 29 locations)
+
+### Production deploy
+```bash
+cd /opt/autobids/deploy/hetzner/ansible
+ansible-playbook -i inventories/prod/hosts.ini site.yml
+```
+**Гарантирано** ще:
+1. Изтрие конкурентни `sites-enabled/*` файлове
+2. Покаже всички `conf.d/*` файлове
+3. Deploy-не нашия autoandbid config
+4. Flush handlers → nginx reload веднага
+5. Run 3 probes → fail-не если CDN е счупен (с точна причина)
+
+Ако fail при `conf.d` → ръчно изтрий конкурента файл, re-run.
+
 ## 15 May 2026 (v6) — Hard MIME guard + Ansible smoke test
 
 **User report:** Browser ORB block при import (`net::ERR_BLOCKED_BY_ORB`) — CDN URLs връщат `text/html` вместо `image/jpeg` (= React SPA fallback от main domain).
