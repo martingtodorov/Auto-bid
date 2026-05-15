@@ -181,9 +181,51 @@
   changed_when: false
   become: yes
 
+# Force-flush deferred handlers RIGHT NOW (don't wait for end of play). The
+# default Ansible behaviour is "run handlers at the end of the role" which
+# means if a later task fails, nginx never reloads even though the config
+# already changed on disk. Flushing here makes the rest of the play see a
+# reloaded nginx + we can sanity-check the new config below.
+- name: Flush handlers (reload nginx now if changed)
+  ansible.builtin.meta: flush_handlers
+
 - name: Ensure nginx running
   ansible.builtin.service:
     name: nginx
     state: started
     enabled: yes
   become: yes
+
+# ─── Post-deploy CDN smoke test ─────────────────────────────────────────────
+# Catches the "nginx didn't actually reload / wrong vhost still active"
+# class of bugs that have bitten us repeatedly. We hit the local nginx
+# directly (bypass Cloudflare) with the img subdomain Host header.
+# Expected: HTTP 4xx (404 from the dedicated img vhost when the file
+# doesn't exist) or 200 (when the file exists). What's NOT acceptable
+# is a 301 redirect to autoandbid.com — that's the symptom of the bug.
+- name: Smoke test img.autoandbid.bg vhost (origin, bypassing Cloudflare)
+  ansible.builtin.shell: |
+    set -eo pipefail
+    code=$(curl -sk -o /dev/null -w '%{http_code}' \
+      -H 'Host: img.autoandbid.bg' \
+      'https://127.0.0.1/uploads/__nonexistent_probe__.jpg')
+    loc=$(curl -sk -I -H 'Host: img.autoandbid.bg' \
+      'https://127.0.0.1/uploads/__nonexistent_probe__.jpg' \
+      | grep -i '^location:' | tr -d '\r' || true)
+    echo "code=$code location=$loc"
+    # The dedicated img vhost should answer 404 (file missing) or 502
+    # (backend transient). It must NOT 301 to autoandbid.com.
+    case "$code" in
+      404|502|400) exit 0 ;;
+      301|302) echo "FAIL: img.autoandbid.bg is redirecting (deployed config still wrong)"; exit 1 ;;
+      *) echo "WARN: unexpected status $code"; exit 0 ;;
+    esac
+  args:
+    executable: /bin/bash
+  changed_when: false
+  become: yes
+  register: cdn_smoke
+
+- name: Display CDN smoke result
+  ansible.builtin.debug:
+    var: cdn_smoke.stdout_lines

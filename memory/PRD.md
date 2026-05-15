@@ -873,6 +873,60 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 
 ---
 
+## 15 May 2026 (v6) — Hard MIME guard + Ansible smoke test
+
+**User report:** Browser ORB block при import (`net::ERR_BLOCKED_BY_ORB`) — CDN URLs връщат `text/html` вместо `image/jpeg` (= React SPA fallback от main domain).
+
+**Корен:** nginx config-ът във repo е fix-нат (v5), но **deploy не е run-нат** на production. Освен това line, Ansible `notify: reload nginx` се изпълнява накрая на role-а — ако нещо fail-не преди това, reload не става.
+
+**Fix:**
+
+### 1. nginx `/uploads/` + `/variants/` (`deploy/hetzner/nginx/autoandbid.conf`)
+Хард override на Content-Type през nginx, независимо какво upstream върне:
+```nginx
+location /uploads/ {
+    proxy_pass http://ab-back1:8001/uploads/;
+    proxy_hide_header Content-Type;
+    types {
+        image/jpeg  jpg jpeg;
+        image/png   png;
+        image/webp  webp;
+        image/avif  avif;
+        ...
+    }
+    default_type application/octet-stream;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Access-Control-Allow-Origin $cors_origin always;
+}
+```
+Това гарантира че дори backend mount-ът да заглъхне или върне грешен type, **nginx ще го override-не на база extension** → ORB ще е happy.
+
+### 2. Ansible: post-deploy CDN smoke test (`roles/frontend/tasks/main.yml`)
+- `flush_handlers` IMMEDIATELY след copy → nginx reload-ва веднага, не на края на role-а
+- **Нов smoke test task**: hit local nginx с `Host: img.autoandbid.bg` за nonexistent path, очаквай 404. Ако върне 301 → Ansible fail-ва с "deployed config still wrong"
+- `debug` task показва точно curl response
+
+Това превръща "submit-ът работи в browser-а?" в hard deploy-time проверка. Никога повече deploy да не завърши успешно докато CDN е счупен.
+
+### Verified (preview)
+- ✅ Backend `/uploads/...jpg` → `content-type: image/jpeg`
+- ✅ Backend `/api/uploads/...jpg` → `content-type: image/jpeg` (legacy)
+- ✅ nginx config syntax balance: 48 opens / 48 closes, 6 server blocks, 29 locations
+- ✅ Ansible YAML валиден
+
+### Действия за production
+```bash
+cd /opt/autobids/deploy/hetzner/ansible
+ansible-playbook -i inventories/prod/hosts.ini site.yml --tags nginx
+```
+След това:
+```bash
+curl -sI https://img.autoandbid.bg/uploads/<existing>.jpg
+# HTTP/2 200, content-type: image/jpeg
+```
+
+Ако smoke test-ът fail-не с "FAIL: img.autoandbid.bg is redirecting" → има друг conf файл в `/etc/nginx/conf.d/` или `/etc/nginx/sites-enabled/` който override-ва. Изтрий го и пусни Ansible пак.
+
 ## 15 May 2026 (v5) — CDN Subdomain: proxy_pass + clean `/uploads/` mount
 
 **User complaint:** `https://img.autoandbid.bg` 301-ва към `autoandbid.com`. Cf-cache-status=DYNAMIC доказва че Hetzner nginx генерира redirect-а, не Cloudflare.
