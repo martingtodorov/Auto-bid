@@ -85,6 +85,11 @@ class AdminDecision(BaseModel):
 
 class CommentCreate(BaseModel):
     text: str = Field(min_length=1, max_length=1200)
+    # Optional photo attachments — base64 data URLs that the backend
+    # decodes + re-encodes to JPEG on disk (same pipeline as auction
+    # images). Authorisation to attach is enforced server-side: only
+    # the auction owner / admins may submit a non-empty `images` list.
+    images: Optional[List[str]] = None
 
 
 class AuctionUpdate(BaseModel):

@@ -555,13 +555,18 @@ export default function AuctionDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  const [commentImages, setCommentImages] = useState([]); // base64 data URLs
+
   const postComment = async () => {
     setError("");
     if (!user) { navigate("/login?next=/auctions/" + id); return; }
-    if (!commentText.trim()) return;
+    if (!commentText.trim() && commentImages.length === 0) return;
     try {
-      await api.post(`/auctions/${id}/comments`, { text: commentText.trim() });
+      const payload = { text: commentText.trim() || "📷" };
+      if (commentImages.length) payload.images = commentImages;
+      await api.post(`/auctions/${id}/comments`, payload);
       setCommentText("");
+      setCommentImages([]);
     } catch (e) { setError(formatError(e)); }
   };
 
@@ -898,21 +903,6 @@ export default function AuctionDetailPage() {
                   </div>
                 )}
               </div>
-              {/* Per-photo caption strip — visible to everyone, editable
-                  only by the auction owner / admins. Lives directly under
-                  the main image so it's tied visually to the active photo. */}
-              <PhotoCaption
-                auctionId={id}
-                photoIdx={photoIdx}
-                caption={a.photo_captions?.[photoIdx] || a.photo_captions?.[String(photoIdx)] || ""}
-                isOwner={!!user && (user.id === a.seller_id || user.role === "admin" || user.role === "moderator")}
-                onSaved={(text) => {
-                  setA((prev) => ({
-                    ...prev,
-                    photo_captions: { ...(prev.photo_captions || {}), [photoIdx]: text || undefined, [String(photoIdx)]: text || undefined },
-                  }));
-                }}
-              />
               {a.images?.length > 1 && (() => {
                 const total = a.images.length;
                 const MOBILE_MAX = 5;
@@ -1132,8 +1122,18 @@ export default function AuctionDetailPage() {
                   className="w-full border border-[hsl(var(--line))] p-3 text-sm resize-none"
                   data-testid="comment-input"
                 />
+                {/* Photo attachments — only the auction owner / admins
+                    may attach. Buyers see a plain text-only composer. */}
+                {user && (user.id === a?.seller_id || ["admin","moderator"].includes(user.role)) && (
+                  <CommentPhotoPicker
+                    images={commentImages}
+                    onChange={setCommentImages}
+                    disabled={!user}
+                    t={t}
+                  />
+                )}
                 <div className="mt-3 flex justify-end">
-                  <button onClick={postComment} disabled={!user || !commentText.trim()} className="btn btn-primary disabled:opacity-40" data-testid="submit-comment">
+                  <button onClick={postComment} disabled={!user || (!commentText.trim() && commentImages.length === 0)} className="btn btn-primary disabled:opacity-40" data-testid="submit-comment">
                     {t("auction.comments_submit")}
                   </button>
                 </div>
@@ -1477,109 +1477,106 @@ export default function AuctionDetailPage() {
  */
 
 /**
- * Per-photo caption.
- *
- * Renders below the active hero photo. Public mode (read-only) just
- * shows the caption text in a subtle gray pill if one exists. Owner
- * mode adds an inline editor (collapsed → "Add note for photo {n}";
- * expanded → textarea + save/cancel). Captions are stored on the
- * auction document at `photo_captions[photo_idx]`.
+ * Photo picker for comments — owner-only by virtue of where it's mounted
+ * (the parent gates rendering on `user.id === seller_id`). Compresses
+ * each pick to a max 1600px JPEG at ~80% quality client-side, then
+ * stores it as a base64 data URL in `images` until the parent posts the
+ * comment. Backend re-compresses to ~250 KB anyway, so this just keeps
+ * the network payload small.
  */
-function PhotoCaption({ auctionId, photoIdx, caption, isOwner, onSaved }) {
-  const { t } = useTranslation();
-  const [editing, setEditing] = React.useState(false);
-  const [text, setText] = React.useState(caption || "");
-  const [saving, setSaving] = React.useState(false);
+function CommentPhotoPicker({ images, onChange, disabled, t }) {
+  const inputRef = React.useRef(null);
+  const MAX = 6;
+  const MAX_BYTES = 12 * 1024 * 1024; // 12 MB raw cap before client-side resize
 
-  // Re-sync local draft when the user navigates to a different photo.
-  React.useEffect(() => { setText(caption || ""); setEditing(false); }, [photoIdx, caption]);
+  const compress = (file) => new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const longEdge = 1600;
+        let w = img.width, h = img.height;
+        if (w > longEdge || h > longEdge) {
+          if (w > h) { h = Math.round((h / w) * longEdge); w = longEdge; }
+          else { w = Math.round((w / h) * longEdge); h = longEdge; }
+        }
+        const c = document.createElement("canvas");
+        c.width = w; c.height = h;
+        const ctx = c.getContext("2d");
+        ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL("image/jpeg", 0.82));
+      };
+      img.onerror = () => reject(new Error("invalid image"));
+      img.src = fr.result;
+    };
+    fr.onerror = () => reject(fr.error);
+    fr.readAsDataURL(file);
+  });
 
-  const save = async () => {
-    setSaving(true);
-    try {
-      const trimmed = (text || "").trim();
-      await api.put(`/auctions/${auctionId}/photo-caption`, { photo_idx: photoIdx, text: trimmed });
-      onSaved && onSaved(trimmed);
-      setEditing(false);
-    } catch (e) {
-      // Surface backend error; otherwise generic.
-      // eslint-disable-next-line no-alert
-      alert(e?.response?.data?.detail || t("common.error", "Грешка"));
-    } finally {
-      setSaving(false);
+  const onPick = async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    const room = MAX - images.length;
+    const slice = files.slice(0, room);
+    const out = [...images];
+    for (const f of slice) {
+      if (f.size > MAX_BYTES) continue;
+      try {
+        out.push(await compress(f));
+      } catch {
+        // skip bad file
+      }
     }
+    onChange(out);
   };
 
-  // Hide entirely when there's no caption AND viewer isn't the owner.
-  if (!caption && !isOwner) return null;
+  const remove = (idx) => onChange(images.filter((_, i) => i !== idx));
 
   return (
-    <div className="mt-2 lg:mt-3 max-w-2xl" data-testid="photo-caption">
-      {!editing && (
-        <div className="flex items-start gap-2 flex-wrap">
-          {caption ? (
-            <div
-              className="text-sm text-[hsl(var(--ink-muted))] bg-[hsl(var(--surface))] border border-[hsl(var(--line))] rounded-card px-3 py-2 leading-snug flex-1 min-w-0"
-              data-testid="photo-caption-text"
-            >
-              <span className="font-medium text-[hsl(var(--ink))] mr-1.5">
-                {t("auction.seller_note", "Бележка от продавача")}:
-              </span>
-              {caption}
+    <div className="mt-3" data-testid="comment-photo-picker">
+      {images.length > 0 && (
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-3">
+          {images.map((src, i) => (
+            <div key={i} className="relative aspect-square rounded-md overflow-hidden bg-[hsl(var(--surface))] border border-[hsl(var(--line))]">
+              <img src={src} alt={`attachment ${i + 1}`} className="w-full h-full object-cover" />
+              <button
+                type="button"
+                onClick={() => remove(i)}
+                aria-label={t("forms.remove", "Премахни")}
+                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/65 text-white text-xs flex items-center justify-center hover:bg-black/85"
+                data-testid={`comment-photo-remove-${i}`}
+              >
+                ×
+              </button>
             </div>
-          ) : null}
-          {isOwner && (
-            <button
-              type="button"
-              onClick={() => setEditing(true)}
-              className="text-xs underline text-[hsl(var(--ink-muted))] hover:text-[hsl(var(--ink))] py-2"
-              data-testid="photo-caption-edit-btn"
-            >
-              {caption
-                ? t("auction.edit_photo_note", "Редактирай")
-                : t("auction.add_photo_note", "Добави бележка към тази снимка")}
-            </button>
-          )}
+          ))}
         </div>
       )}
-      {editing && isOwner && (
-        <div className="space-y-2">
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            rows={2}
-            maxLength={500}
-            placeholder={t("auction.photo_note_placeholder", "напр. Леко надраскване на капака — поправено професионално 2024 г.")}
-            className="w-full border border-[hsl(var(--line))] rounded-card px-3 py-2 text-sm bg-[hsl(var(--surface))]"
-            data-testid="photo-caption-textarea"
-          />
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={save}
-              disabled={saving}
-              className="btn btn-primary btn-sm"
-              data-testid="photo-caption-save-btn"
-            >
-              {saving ? t("common.saving", "Запис...") : t("common.save", "Запиши")}
-            </button>
-            <button
-              type="button"
-              onClick={() => { setText(caption || ""); setEditing(false); }}
-              className="text-xs text-[hsl(var(--ink-muted))] hover:text-[hsl(var(--ink))] underline"
-              data-testid="photo-caption-cancel-btn"
-            >
-              {t("common.cancel", "Откажи")}
-            </button>
-            <span className="text-xs text-[hsl(var(--ink-muted))] ml-auto">
-              {(text || "").length} / 500
-            </span>
-          </div>
-        </div>
-      )}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={onPick}
+        className="hidden"
+        disabled={disabled || images.length >= MAX}
+        data-testid="comment-photo-input"
+      />
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        disabled={disabled || images.length >= MAX}
+        className="inline-flex items-center gap-1.5 text-xs text-[hsl(var(--ink-muted))] hover:text-[hsl(var(--ink))] underline disabled:opacity-40 disabled:no-underline"
+        data-testid="comment-photo-pick-btn"
+      >
+        📎 {t("auction.attach_photo", "Прикачи снимка")} ({images.length}/{MAX})
+      </button>
     </div>
   );
 }
+
+
 
 
 function GalleryDots({ total, active }) {
@@ -1869,6 +1866,26 @@ function CommentItem({ c, t, i18nLang, isAdmin, onDelete }) {
       <p className={`mt-3 text-sm leading-relaxed ${c.deleted ? "italic text-[hsl(var(--ink-muted))]" : ""}`}>
         {c.deleted ? t("auction.comment_removed") : displayText}
       </p>
+      {!c.deleted && c.images?.length > 0 && (
+        <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2" data-testid={`comment-images-${c.id}`}>
+          {c.images.map((src, i) => (
+            <a
+              key={i}
+              href={src}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block aspect-[4/3] rounded-card overflow-hidden bg-[hsl(var(--surface))] border border-[hsl(var(--line))] hover:opacity-90 transition"
+            >
+              <img
+                src={src}
+                alt={`comment attachment ${i + 1}`}
+                loading="lazy"
+                className="w-full h-full object-cover"
+              />
+            </a>
+          ))}
+        </div>
+      )}
       {!c.deleted && (
         <div className="mt-3 flex items-center gap-1" data-testid={`comment-votes-${c.id}`}>
           <button
