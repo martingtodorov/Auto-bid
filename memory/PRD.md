@@ -873,6 +873,26 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 
 ---
 
+## 15 May 2026 — Native CSS Scroll-Snap Gallery + Object-Contain Fix
+
+**Контекст:** Хеланд-офф задачата беше да се верифицира новата CSS `scroll-snap` галерия в `AuctionDetailPage.jsx` (последното неверифицирано имплементиране от предишната сесия). Потребителят съобщи че "снимките са зуумнати".
+
+**Diagnose:**
+- Главната галерия използваше `aspect-[3/2]` + `object-cover` → 16:9 снимки (1600×900) се изрязваха със ~16% от страните.
+- Lightbox-ът използваше `object-contain` → показваше пълната снимка → разликата създаваше усещане за зуум.
+
+**Fix:**
+- `AuctionDetailPage.jsx`: `object-cover` → `object-contain` на главната hero галерия (и `<Picture>` за single-image fast-path). Контейнерът има `bg-[hsl(var(--surface))]` за неутрален letterbox.
+
+**Verified:**
+- ✅ Лайтбоксът се отваря при click върху снимка
+- ✅ IntersectionObserver обновява `photoIdx` правилно при swipe / programmatic scroll (active dot syncs)
+- ✅ Desktop chevron бутоните работят (counter 1→2 при click)
+- ✅ Mixed aspect ratios (3:2 + 16:9) показват пълни снимки без cropping
+
+**Файлове:**
+- `/app/frontend/src/pages/AuctionDetailPage.jsx` (lines 801, 822)
+
 ## Verified: Preauth Notification Bell + Bid Constraint Check (1 May 2026)
 
 **Preauth Notification UI** (последна задача от предишната сесия) — ✅ VERIFIED.
