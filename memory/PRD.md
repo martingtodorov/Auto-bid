@@ -873,6 +873,38 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 
 ---
 
+## 15 May 2026 — External Image CDN Migration (mobile.bg → img.autoandbid.com)
+
+**Bug:** Когато потребител импортира обявa от mobile.bg, external focus.bg URL-ите минаваха през `optimize_data_url()` непокътнати (passthrough за non-`data:` URLs), и `store_image()` също пропускаше `http://...` URLs. Резултат: external URLs се запазваха в DB → click върху снимка отиваше до focus.bg CDN; ако mobile.bg изтрие снимките → broken images forever.
+
+**Root cause:**
+1. `optimize_data_url` правеше pass-through за external URLs (line 144-148 в `services/image_processing.py`)
+2. `fetch_remote_images_as_data_urls` тихо връщаше оригиналните http URL-и при fetch failure → external URLs продължаваха да съществуват в pipeline-а
+
+**Fix:**
+1. `storage.fetch_remote_images_as_data_urls(strict=True)` — нов keyword. При `strict=True` връща `""` за неуспешно fetched URL-и (404, timeout), вместо да passthrough.
+2. `create_auction` (server.py:1592) — pre-fetch external URLs, drop failed ones, raise 400 ако всички failed.
+3. `PATCH /auctions/{id}` & admin `PUT /admin/auctions/{id}` — същия pre-fetch + strict drop.
+4. `import_from_mobile_bg` — `strict=True` + realign `images` array със successful fetches.
+
+**Migration script** (`/app/backend/scripts/migrate_external_images.py`):
+- Idempotent — пропуска вече local обяви.
+- Drop-ва failed (404) URLs вместо да ги passthrough.
+- Регенерира `images_variants` от локалните bytes.
+- Резултат: 3 от 5 обяви ✅ мигрирани локално (24 imgs × 3 variants AVIF/WebP/JPG); 2 от 5 — всички 404 на mobile.bg (мъртви линкове, очаква се ръчно изтриване).
+
+**Verified:**
+- ✅ Mongo: 3 обяви с `/api/uploads/...` URLs + 24 variants
+- ✅ POST /auctions с external URL → веднага rehosted локално
+- ✅ Главна галерия + thumbs зареждат от `/api/uploads/variants/...`
+- ✅ AVIF/WebP `<picture>` sources също локални
+- ✅ Mobile.bg-deleted listings → 400 при retry (no silent external persistence)
+
+**Файлове:**
+- `/app/backend/storage.py` (strict param)
+- `/app/backend/server.py` (create_auction, update endpoints, import_from_mobile_bg)
+- `/app/backend/scripts/migrate_external_images.py` (new)
+
 ## 15 May 2026 — Lightbox Swipe Navigation (Touch + Desktop)
 
 **Touch (mobile):** `onTouchStart/Move/End` handlers с single-finger swipe detection. Threshold ≥40px horizontal + 1.2× horizontal/vertical ratio. Multi-touch (pinch) auto-cancel. Skip при `visualViewport.scale > 1.05`.

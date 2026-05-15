@@ -1579,6 +1579,38 @@ async def create_auction(request: Request, payload: AuctionCreate, user: dict = 
         # Uncategorized upload — tag only the first as main, the rest stay neutral.
         image_categories = ["main" if i == 0 else "other" for i in range(len(merged))]
 
+    # Pre-fetch any external https URLs (e.g. from mobile.bg import) into
+    # data URLs so the standard optimize_many → store_image pipeline takes
+    # ownership of the bytes. Without this step external CDN URLs would
+    # pass through optimize_data_url() untouched and be persisted verbatim,
+    # leaving us dependent on focus.bg/mobistatic.bg uptime + leaking the
+    # buyer's IP to mobile.bg on every gallery view.
+    #
+    # `strict=True` returns an empty string in place of any URL that
+    # failed to download (404, network error). We drop those entries and
+    # the parallel category array so we never persist a broken external
+    # URL on a listing.
+    from storage import fetch_remote_images_as_data_urls
+    fetched = await fetch_remote_images_as_data_urls(merged, strict=True)
+    new_merged: list[str] = []
+    new_categories: list[str] = []
+    dropped = 0
+    for u, c in zip(fetched, image_categories):
+        if not u:
+            dropped += 1
+            continue
+        new_merged.append(u)
+        new_categories.append(c)
+    if dropped:
+        logger.warning("[submit] dropped %d unfetchable external image URLs", dropped)
+    merged = new_merged
+    image_categories = new_categories
+    if not merged:
+        raise HTTPException(
+            status_code=400,
+            detail="Нито една снимка не можа да бъде свалена. Моля, качете снимки директно вместо да импортирате от mobile.bg.",
+        )
+
     # Optimize on a worker thread — Pillow is sync and CPU-bound.
     web_urls, thumb_urls, errs = await asyncio.to_thread(imgproc.optimize_many, merged)
     if errs:
@@ -2228,8 +2260,14 @@ async def import_from_mobile_bg(request: Request, payload: MobileBgImport):
             from storage import fetch_remote_images_as_data_urls, store_image
             from services.image_processing import optimize_many
             from services.image_variants import variants_from_data_url
-            # 1. Download bytes from the source CDN.
-            data_urls = await fetch_remote_images_as_data_urls(images)
+            # 1. Download bytes from the source CDN. `strict=True` returns
+            #    "" for any URL that 404s / times out so we never persist
+            #    a broken external URL on the imported listing.
+            data_urls = await fetch_remote_images_as_data_urls(images, strict=True)
+            # Realign the source `images` list with the successful fetches
+            # so the indices used below for variant generation match.
+            images = [src for src, du in zip(images, data_urls) if du]
+            data_urls = [du for du in data_urls if du]
             # 2. Re-encode (CPU-bound) on the thread pool so we don't
             #    starve the event loop while Pillow chews on 24 images.
             web_urls, thumb_urls, _errs = await asyncio.to_thread(optimize_many, data_urls)
@@ -4220,15 +4258,24 @@ async def update_listing(auction_id: str, payload: AuctionUpdate, user: dict = D
         # Optimize each provided bucket independently — caller wants the
         # bucket structure preserved.
         thumb_buckets: dict[str, list[str]] = {}
+        from storage import fetch_remote_images_as_data_urls, store_images
         for k in image_keys:
             urls = update.get(k)
             if not urls:
                 continue
+            # Pre-fetch external URLs so they're rehosted under our CDN
+            # before being persisted (see create_auction for rationale).
+            # `strict=True` drops 404/timeout entries so they never leak
+            # into DB as external URLs.
+            fetched = await fetch_remote_images_as_data_urls(urls, strict=True)
+            urls = [u for u in fetched if u]
+            if not urls:
+                raise HTTPException(status_code=400, detail=f"Нито една снимка в '{k}' не можа да бъде свалена")
+            update[k] = urls
             web, thumb, errs = await asyncio.to_thread(imgproc.optimize_many, urls)
             if errs:
                 msg = "; ".join(errs[:3])
                 raise HTTPException(status_code=400, detail=f"Грешка при обработката на снимки: {msg}")
-            from storage import store_images
             web = await asyncio.to_thread(store_images, web)
             thumb = await asyncio.to_thread(store_images, thumb)
             update[k] = web
@@ -4465,10 +4512,20 @@ async def admin_update_auction(auction_id: str, payload: AdminAuctionUpdate, _ad
             mb = round(total_raw / 1024 / 1024, 1)
             raise HTTPException(status_code=413, detail=f"Общият размер на снимките е {mb} MB — надвишава лимита от 120 MB.")
         thumb_buckets = {}
+        from storage import fetch_remote_images_as_data_urls
         for k in image_keys:
             urls = update.get(k)
             if not urls:
                 continue
+            # Pre-fetch external URLs (e.g. mobile.bg imports) so the
+            # standard optimize → store pipeline rehosts them locally.
+            # `strict=True` drops failed fetches instead of letting them
+            # pass through as external URLs.
+            fetched = await fetch_remote_images_as_data_urls(urls, strict=True)
+            urls = [u for u in fetched if u]
+            if not urls:
+                raise HTTPException(status_code=400, detail=f"Нито една снимка в '{k}' не можа да бъде свалена")
+            update[k] = urls
             web, thumb, errs = await asyncio.to_thread(imgproc.optimize_many, urls)
             if errs:
                 msg = "; ".join(errs[:3])

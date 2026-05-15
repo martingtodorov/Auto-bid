@@ -272,14 +272,19 @@ async def _fetch_one(client, url: str) -> Optional[str]:
         return None
 
 
-async def fetch_remote_images_as_data_urls(urls: list[str]) -> list[str]:
+async def fetch_remote_images_as_data_urls(urls: list[str], *, strict: bool = False) -> list[str]:
     """Download a list of remote image URLs and return them as base64
     data URLs ready to feed into `optimize_many` + `store_image`.
 
     Concurrency is capped at `REMOTE_FETCH_CONCURRENCY` so a 24-image
-    listing doesn't fan out into 24 simultaneous sockets. Each failed
-    download keeps the original https URL in the returned list (so the
-    user still sees the image even if our copy is missing).
+    listing doesn't fan out into 24 simultaneous sockets.
+
+    By default each failed download keeps the original https URL in the
+    returned list (so the user still sees the image even if our copy is
+    missing). Pass `strict=True` to return an empty string in that
+    position instead — caller can then filter for unfetchable URLs and
+    refuse to persist them as external (which would leave us dependent
+    on the third-party CDN).
     """
     try:
         import httpx
@@ -315,6 +320,8 @@ async def fetch_remote_images_as_data_urls(urls: list[str]) -> list[str]:
                 return u
             async with sem:
                 fetched = await _fetch_one(client, u)
-            return fetched or u  # graceful fallback to the original
+            if fetched is None:
+                return "" if strict else u  # strict drops failures
+            return fetched
 
         return list(await asyncio.gather(*[_guarded(u) for u in urls]))
