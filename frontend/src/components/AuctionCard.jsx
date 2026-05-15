@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { MapPin, Gauge, Fuel, Calendar, Users, Shield, Zap, Star, ArrowRight } from "lucide-react";
+import { MapPin, Gauge, Fuel, Calendar, Users, Check, Zap, Star, ArrowRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { formatEUR, formatLocal, formatKM, timeLeft, formatTimeLeft } from "../lib/apiClient";
 import { translateEnum } from "../lib/carTranslations";
@@ -255,7 +255,7 @@ export default function AuctionCard({ auction, compact = false, priority = false
               <Star size={12} fill="currentColor" strokeWidth={0} />
             </span>
           )}
-          {auction.vat_status === "vat_inclusive" && (
+          {auction.vat_status === "vat_inclusive" && !["sold", "ended"].includes(auction.status) && (
             <span
               className="pill pill-vat"
               data-testid={`vat-badge-${auction.id}`}
@@ -264,9 +264,9 @@ export default function AuctionCard({ auction, compact = false, priority = false
               {t("auction.vat_short", "ДДС")}
             </span>
           )}
-          {auction.seller_is_verified_dealer && (
+          {auction.seller_is_verified_dealer && !["sold", "ended"].includes(auction.status) && (
             <span className="pill pill-verified flex items-center gap-1" data-testid={`verified-dealer-${auction.id}`}>
-              <Shield size={10} /> {t("auction.verified_dealer")}
+              <Check size={11} strokeWidth={3} /> {t("auction.dealer_badge")}
             </span>
           )}
         </div>

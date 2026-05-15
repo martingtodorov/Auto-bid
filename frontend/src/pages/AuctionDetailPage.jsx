@@ -58,115 +58,58 @@ export default function AuctionDetailPage() {
   const wsRef = useRef(null);
   const mainImageRef = useRef(null);
 
-  // ── Hero image swipe (mobile + desktop) ───────────────────────────────────
-  // Same 10° lock rule as the AuctionCard mini-carousel:
-  //   • If the gesture deviates ≤10° from horizontal, lock to horizontal
-  //     and call `preventDefault()` on every touchmove so the page doesn't
-  //     scroll under the finger.
-  //   • Anything steeper → free vertical scroll.
-  // Desktop adds the same handler chain on mouse events so a click-and-drag
-  // also flips photos. A swipe `cancelClick=true` suppresses the click that
-  // would otherwise open the lightbox.
-  const swipeRef = useRef(null);
-  // Separate guard for the synthetic click that fires AFTER touchend
-  // (Chromium synthesises a click ~300ms after touchend even when we
-  // call preventDefault inside touchmove). Keep this flag alive longer
-  // than the click event so the middle-zone onClick can bail without
-  // racing the swipe-state cleanup.
-  const clickGuardRef = useRef(false);
-  const photoIdxRef = useRef(0);
-  useEffect(() => { photoIdxRef.current = photoIdx; }, [photoIdx]);
+  // ── Hero image gallery — native CSS scroll-snap track ─────────────────────
+  // We deliberately do NOT hand-roll touch/mouse handlers any more —
+  // letting the browser do horizontal scroll-snap gives us, for free:
+  //   • Finger-following mobile swipe (frame follows the thumb 1:1)
+  //   • Two-finger trackpad horizontal scroll on macOS / Windows Precision
+  //   • Wheel + Shift on classic mice
+  //   • Momentum / inertial scroll
+  //   • Correct disambiguation between horizontal pan and vertical page scroll
+  // IntersectionObserver updates `photoIdx` whenever a slide becomes the
+  // centred one — same pattern as AuctionCard. Click-on-image opens the
+  // lightbox; if a swipe is in flight `isSwipingRef` swallows the click.
+  const scrollerRef = useRef(null);
+  const isSwipingRef = useRef(false);
+
+  // Sync `photoIdx` from scroller → IntersectionObserver.
   useEffect(() => {
-    const el = mainImageRef.current;
-    if (!el) return;
+    const root = scrollerRef.current;
     const total = a?.images?.length || 0;
-    if (total < 2) return;
-    const ANGLE_TAN = Math.tan((10 * Math.PI) / 180); // ≈ 0.176
-    const COMMIT_PX = 25;        // min horizontal distance to commit a slide change
-    const DETECT_PX = 8;         // min movement before deciding axis lock
-
-    const begin = (x, y) => {
-      swipeRef.current = { x, y, dx: 0, locked: null, cancelClick: false };
-    };
-    const update = (x, y, preventDefault) => {
-      const s = swipeRef.current;
-      if (!s) return;
-      const dx = x - s.x;
-      const dy = y - s.y;
-      const absX = Math.abs(dx), absY = Math.abs(dy);
-      if (s.locked === null) {
-        if (absX < DETECT_PX && absY < DETECT_PX) return;
-        s.locked = absX > absY && absY <= absX * ANGLE_TAN ? "h" : "v";
-      }
-      if (s.locked === "h") {
-        preventDefault && preventDefault();
-        s.dx = dx;
-      }
-    };
-    const finish = () => {
-      const s = swipeRef.current;
-      if (!s) return;
-      if (s.locked === "h" && Math.abs(s.dx) > COMMIT_PX) {
-        const cur = photoIdxRef.current;
-        const next = s.dx < 0
-          ? Math.min(total - 1, cur + 1)
-          : Math.max(0, cur - 1);
-        if (next !== cur) setPhotoIdx(next);
-        // Block the synthetic click that fires right after touchend.
-        // 450ms covers all browsers (Chromium ~300ms, Safari ~350ms).
-        clickGuardRef.current = true;
-        setTimeout(() => { clickGuardRef.current = false; }, 450);
-      }
-      swipeRef.current = null;
-    };
-
-    // ---- Touch (mobile / tablet) ----
-    const onTouchStart = (e) => { const t = e.touches[0]; begin(t.clientX, t.clientY); };
-    const onTouchMove = (e) => {
-      const t = e.touches[0];
-      update(t.clientX, t.clientY, () => e.preventDefault());
-    };
-
-    // ---- Mouse (desktop click-drag) ----
-    // We don't preventDefault on mousemove (text-selection is already
-    // suppressed via `select-none` on the container), but we DO need
-    // to swallow the subsequent click via `cancelClick`. Mouse events
-    // listen on window during a drag so the gesture survives leaving
-    // the image bounds mid-swipe.
-    let mouseDown = false;
-    const onMouseDown = (e) => {
-      // Only react to primary button. Right-click / middle-click bypass.
-      if (e.button !== 0) return;
-      mouseDown = true;
-      begin(e.clientX, e.clientY);
-    };
-    const onMouseMove = (e) => {
-      if (!mouseDown) return;
-      update(e.clientX, e.clientY, null);
-    };
-    const onMouseUp = () => {
-      if (!mouseDown) return;
-      mouseDown = false;
-      finish();
-    };
-
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
-    el.addEventListener("touchmove", onTouchMove, { passive: false });
-    el.addEventListener("touchend", finish, { passive: true });
-    el.addEventListener("touchcancel", finish, { passive: true });
-    el.addEventListener("mousedown", onMouseDown);
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-    return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove", onTouchMove);
-      el.removeEventListener("touchend", finish);
-      el.removeEventListener("touchcancel", finish);
-      el.removeEventListener("mousedown", onMouseDown);
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
+    if (!root || total < 2) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        let best = null;
+        entries.forEach((e) => {
+          if (!best || e.intersectionRatio > best.intersectionRatio) best = e;
+        });
+        if (best && best.isIntersecting) {
+          const idx = Number(best.target.getAttribute("data-slide-index"));
+          if (Number.isFinite(idx)) setPhotoIdx(idx);
+        }
+      },
+      { root, threshold: [0.55] },
+    );
+    const children = root.querySelectorAll("[data-slide-index]");
+    children.forEach((c) => observer.observe(c));
+    return () => observer.disconnect();
   }, [a?.images?.length]);
+
+  // Programmatically jump to a slide (used by desktop chevrons + thumbnails).
+  const scrollToSlide = useCallback((idx) => {
+    const root = scrollerRef.current;
+    if (!root) return;
+    const child = root.querySelector(`[data-slide-index="${idx}"]`);
+    if (child) child.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
+  }, []);
+  useEffect(() => {
+    // Whenever `photoIdx` is changed externally (thumbnail click,
+    // chevron, lightbox close), reflect it in the scroller. Skip when
+    // the change originated from the IntersectionObserver above
+    // (avoided naturally — re-scrolling to the already-visible slide is
+    // a no-op).
+    scrollToSlide(photoIdx);
+  }, [photoIdx, scrollToSlide]);
   const settings = useSiteSettings();
 
   // Client-side buyer fee for preview (mirrors backend _buyer_fee)
@@ -815,90 +758,116 @@ export default function AuctionDetailPage() {
             >
               <div
                 ref={mainImageRef}
-                className="aspect-[4/3] lg:aspect-[3/2] border border-[hsl(var(--line))] rounded-card overflow-hidden bg-[hsl(var(--surface))] relative group select-none"
-                style={{ touchAction: "pan-y" }}
+                className="aspect-[3/2] border border-[hsl(var(--line))] rounded-card overflow-hidden bg-[hsl(var(--surface))] relative group select-none"
                 data-testid="main-gallery-image"
               >
-                <Picture
-                  variant={a.images_variants?.[photoIdx]}
-                  fallbackSrc={a.images?.[photoIdx] || a.thumbnails?.[photoIdx]}
-                  size="gallery"
-                  alt={a.title}
-                  className="w-full h-full object-cover transition group-hover:scale-[1.02] pointer-events-none"
-                  priority
-                />
-                {/* 3-zone click overlay — covers the whole image.
-                    LEFT 30% → prev · MIDDLE 40% → open lightbox · RIGHT 30% → next.
-                    On desktop, hovering the left/right zones reveals a
-                    semi-transparent chevron the full height of the image
-                    (per spec). Mobile: zones still work as tap targets
-                    but chevrons stay hidden — swipe is the primary gesture. */}
                 {a.images?.length > 1 ? (
-                  <>
-                    <button
-                      type="button"
-                      aria-label={t("common.previous", "Previous")}
-                      onClick={(e) => {
-                        if (clickGuardRef.current) { e.preventDefault(); e.stopPropagation(); return; }
-                        e.stopPropagation();
-                        setPhotoIdx((i) => Math.max(0, i - 1));
-                      }}
-                      disabled={photoIdx === 0}
-                      className="absolute inset-y-0 left-0 w-[30%] flex items-center justify-start pl-3 cursor-w-resize lg:cursor-pointer opacity-0 lg:group-hover:opacity-100 transition disabled:cursor-not-allowed disabled:opacity-0"
-                      data-testid="gallery-prev-btn"
-                    >
-                      <span className="hidden lg:flex w-10 h-10 rounded-full bg-black/45 backdrop-blur-sm items-center justify-center text-white shadow-lg">
-                        <ChevronLeft size={22} />
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={t("common.zoom", "Zoom")}
-                      onClick={(e) => {
-                        if (clickGuardRef.current) { e.preventDefault(); e.stopPropagation(); return; }
-                        e.stopPropagation();
-                        setLightboxIdx(photoIdx);
-                      }}
-                      className="absolute inset-y-0 left-[30%] w-[40%] cursor-zoom-in"
-                      data-testid="gallery-zoom-btn"
-                    />
-                    <button
-                      type="button"
-                      aria-label={t("common.next", "Next")}
-                      onClick={(e) => {
-                        if (clickGuardRef.current) { e.preventDefault(); e.stopPropagation(); return; }
-                        e.stopPropagation();
-                        setPhotoIdx((i) => Math.min((a.images?.length || 1) - 1, i + 1));
-                      }}
-                      disabled={photoIdx >= (a.images?.length || 1) - 1}
-                      className="absolute inset-y-0 right-0 w-[30%] flex items-center justify-end pr-3 cursor-e-resize lg:cursor-pointer opacity-0 lg:group-hover:opacity-100 transition disabled:cursor-not-allowed disabled:opacity-0"
-                      data-testid="gallery-next-btn"
-                    >
-                      <span className="hidden lg:flex w-10 h-10 rounded-full bg-black/45 backdrop-blur-sm items-center justify-center text-white shadow-lg">
-                        <ChevronRight size={22} />
-                      </span>
-                    </button>
-                  </>
+                  // ── Scroll-snap track (mobile swipe + desktop trackpad) ─
+                  <div
+                    ref={scrollerRef}
+                    className="absolute inset-0 flex overflow-x-auto snap-x snap-mandatory no-scrollbar"
+                    style={{
+                      // Allow both axes — vertical drags scroll the page,
+                      // horizontal drags slide between photos. Browser
+                      // disambiguates based on initial gesture direction.
+                      touchAction: "pan-x pan-y",
+                      // CSS overscroll containment so the gesture doesn't
+                      // accidentally trigger browser back-swipe on iOS.
+                      overscrollBehaviorX: "contain",
+                    }}
+                    onTouchStart={() => { isSwipingRef.current = false; }}
+                    onTouchMove={() => { isSwipingRef.current = true; }}
+                  >
+                    {a.images.map((src, i) => (
+                      <div
+                        key={i}
+                        data-slide-index={i}
+                        className="min-w-full h-full snap-start shrink-0 cursor-zoom-in"
+                        onClick={(e) => {
+                          if (isSwipingRef.current) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            isSwipingRef.current = false;
+                            return;
+                          }
+                          setLightboxIdx(i);
+                        }}
+                      >
+                        <Picture
+                          variant={a.images_variants?.[i]}
+                          fallbackSrc={src || a.thumbnails?.[i]}
+                          size="gallery"
+                          alt={a.title}
+                          className="w-full h-full object-cover pointer-events-none"
+                          priority={i === 0}
+                          loading={i === 0 ? "eager" : "lazy"}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 ) : (
-                  // Single image — whole surface opens lightbox.
+                  // Single image fast-path.
                   <button
                     type="button"
                     aria-label={t("common.zoom", "Zoom")}
                     onClick={() => setLightboxIdx(photoIdx)}
                     className="absolute inset-0 cursor-zoom-in"
                     data-testid="gallery-zoom-btn"
-                  />
+                  >
+                    <Picture
+                      variant={a.images_variants?.[photoIdx]}
+                      fallbackSrc={a.images?.[photoIdx] || a.thumbnails?.[photoIdx]}
+                      size="gallery"
+                      alt={a.title}
+                      className="w-full h-full object-cover pointer-events-none"
+                      priority
+                    />
+                  </button>
+                )}
+
+                {/* Desktop-only chevron overlays — hidden on touch / mobile.
+                    They sit ABOVE the scroll-snap track via `z-10` but
+                    only take pointer events on the small button area
+                    (the rest of the track surface remains scrollable). */}
+                {a.images?.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      aria-label={t("common.previous", "Previous")}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPhotoIdx((i) => Math.max(0, i - 1));
+                      }}
+                      disabled={photoIdx === 0}
+                      className="hidden lg:flex absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/45 backdrop-blur-sm items-center justify-center text-white shadow-lg z-10 opacity-0 group-hover:opacity-100 transition disabled:opacity-0 disabled:cursor-not-allowed"
+                      data-testid="gallery-prev-btn"
+                    >
+                      <ChevronLeft size={22} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={t("common.next", "Next")}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPhotoIdx((i) => Math.min((a.images?.length || 1) - 1, i + 1));
+                      }}
+                      disabled={photoIdx >= (a.images?.length || 1) - 1}
+                      className="hidden lg:flex absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/45 backdrop-blur-sm items-center justify-center text-white shadow-lg z-10 opacity-0 group-hover:opacity-100 transition disabled:opacity-0 disabled:cursor-not-allowed"
+                      data-testid="gallery-next-btn"
+                    >
+                      <ChevronRight size={22} />
+                    </button>
+                  </>
                 )}
 
                 {/* Instagram-style sliding dot strip — caps at 5 visible
-                    dots, the rest are virtualised via the window. Active
-                    dot is always near the centre when total > 5. */}
+                    dots, the rest are virtualised via the window. */}
                 {a.images?.length > 1 && (
                   <GalleryDots total={a.images.length} active={photoIdx} />
                 )}
 
                 {a.images?.length > 0 && (
-                  <div className="absolute bottom-3 right-3 px-2.5 py-1 rounded-full bg-black/55 text-white text-xs font-mono opacity-0 group-hover:opacity-100 transition pointer-events-none">
+                  <div className="absolute bottom-3 right-3 px-2.5 py-1 rounded-full bg-black/55 text-white text-xs font-mono opacity-0 group-hover:opacity-100 transition pointer-events-none z-10">
                     {photoIdx + 1} / {a.images.length} · {t("common.zoom")}
                   </div>
                 )}
