@@ -203,19 +203,29 @@
     owner: "{{ service_user }}"
     group: "{{ service_group }}"
     mode: "0755"
-    # `recurse: yes` is critical for {{ upload_dir }} — when the
-    # directory pre-exists from an earlier deploy (or was created
-    # manually as root), any subdirectories already inside it (e.g.
-    # auctions/aa/, variants/) stay root-owned and the backend's
-    # `www-data` process gets `Permission denied` when it tries to
-    # write a new content-addressed sha256 file. We recurse so every
-    # existing subdir + file flips to the service user too.
     recurse: yes
   loop:
     - "{{ log_dir }}"
     - "{{ backup_dir }}"
     - "/var/lib/autobids"
-    - "{{ upload_dir }}"   # disk storage backend writes content-addressed images here; nginx aliases /api/uploads/ to this path. Default: /opt/autobids/uploads
+  become: yes
+
+# Upload dir gets a SEPARATE, unconditional `chown -R` via the shell.
+# Reason: `ansible.builtin.file` with `recurse: yes` walks the tree in
+# Python and silently swallows individual chown errors (e.g. one root-
+# owned subdir from a previous deploy can leave the rest of the tree
+# untouched on some versions of Ansible). A raw `chown -R` is the
+# blunt-force-correct primitive — it always rewrites every inode's
+# owner under the path, returns non-zero on failure, and is idempotent.
+# `changed_when: false` keeps the play green on no-op runs.
+- name: Force-chown upload_dir to service user (recursive)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    mkdir -p "{{ upload_dir }}"
+    chown -R "{{ service_user }}:{{ service_group }}" "{{ upload_dir }}"
+    find "{{ upload_dir }}" -type d -exec chmod 0755 {} +
+    find "{{ upload_dir }}" -type f -exec chmod 0644 {} +
+  changed_when: false
   become: yes
 
 - name: Enable & start backend
@@ -232,6 +242,23 @@
 # Submit and got an opaque 500 — operators wouldn't notice until users
 # complained. Probing as the service user during deploy turns it into a
 # fast, obvious red Ansible failure.
+- name: Show upload_dir effective ownership + perms
+  ansible.builtin.shell: |
+    set -eo pipefail
+    echo "=== {{ upload_dir }} (top-level) ==="
+    stat -c '%U:%G %a %n' "{{ upload_dir }}"
+    echo "=== first 5 immediate children (if any) ==="
+    ls -la "{{ upload_dir }}" | head -10 || true
+    echo "=== systemd unit security flags ==="
+    grep -E '^(User|Group|ProtectSystem|ReadWritePaths|ProtectHome)=' /etc/systemd/system/autobids-backend.service || true
+  changed_when: false
+  register: storage_perms
+  become: yes
+
+- name: Display storage diagnostics
+  ansible.builtin.debug:
+    var: storage_perms.stdout_lines
+
 - name: Write probe upload dir as service user
   ansible.builtin.command:
     cmd: "sudo -u {{ service_user }} touch {{ upload_dir }}/.ansible-write-probe"

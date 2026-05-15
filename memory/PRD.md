@@ -873,6 +873,30 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 
 ---
 
+## 15 May 2026 (v2) — Ansible Disk Permissions Fix — Force chown -R
+
+**Production все още показваше Permission denied** дори след `recurse: yes`. `ansible.builtin.file` с `recurse: yes` понякога silently swallow-ва индивидуални chown грешки от Python-овия walker (legacy root-owned subdirs могат да го блокират).
+
+**Fix:** Отделен **explicit `chown -R` shell task** който е unconditional + idempotent:
+```yaml
+- name: Force-chown upload_dir to service user (recursive)
+  ansible.builtin.shell: |
+    set -euo pipefail
+    mkdir -p "{{ upload_dir }}"
+    chown -R "{{ service_user }}:{{ service_group }}" "{{ upload_dir }}"
+    find "{{ upload_dir }}" -type d -exec chmod 0755 {} +
+    find "{{ upload_dir }}" -type f -exec chmod 0644 {} +
+```
+
+**Allowing operator to debug**: добавен е debug task който printва:
+- `stat` на upload_dir (owner:group + mode)
+- `ls -la` на първите 5 children
+- systemd security flags (`User`, `Group`, `ProtectSystem`, `ReadWritePaths`, `ProtectHome`)
+
+Тези stdout_lines се showват преди write probe → ако probe-ът fail-ва, operator-ът веднага вижда защо.
+
+**Verified**: YAML syntax валиден (Python yaml.safe_load).
+
 ## 15 May 2026 — Ansible Disk Permissions Fix (Permission denied bug)
 
 **Production showed:** `Image storage is not writable at '/opt/autobids/uploads' (Permission denied)` → submit 500.
