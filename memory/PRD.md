@@ -873,6 +873,42 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 
 ---
 
+## 15 May 2026 — CDN Storage Diagnostics + Hardened Disk Write Path
+
+**User report:** "Когато копирам URL на снимка, получавам `data:image/jpeg;base64,...` вместо нормален URL". Това разкрива че `DiskStorage` на production fail-ва тихо и snimkите се запазват inline base64 в Mongo (десетки MB on disk-bound document).
+
+**Root cause:** Моят предишен hotfix на 500 → silent fallback при `ImageProcessingError` имаше странична последица: при недостъпен disk write, raw data: URLs leak-ваха в DB вместо да хвърлят грешка.
+
+**Fix в `/app/backend/server.py`**:
+1. `store_images` block ВЪЗСТАНОВЕН да хвърля 500 при `ImageProcessingError` с ясно съобщение "Свържете се с администратора" (по-добре от silent base64 corruption)
+2. Belt-and-suspenders: даже ако data: URLs leak-нат past store_images (бъдеща regression), `_strip_data_urls` помощник ги drop-ва преди да достигнат DB
+3. Нов **startup storage probe** в `on_startup()`:
+   - Опитва test write `data:image/png;base64,...` (1×1 transparent)
+   - Логва `INFO Storage probe OK: backend=disk root=... → /api/uploads/...` при успех
+   - Логва `ERROR Storage probe FAILED ... NOT writable` при OSError → ops веднага вижда от `journalctl -u backend`
+   - Предупреждава ако `STORAGE_BACKEND=inline` (which would balloon DB)
+
+**Действия за production deploy:**
+1. Save to GitHub → Ansible deploy
+2. Проверете `journalctl -u backend | grep "Storage probe"` за първа линия
+3. Очаквано: `Storage probe OK: backend=disk root=/opt/autobids/uploads → /api/uploads/auctions/...`
+4. Ако `FAILED ... NOT writable`: създайте директорията със правилния owner:
+   ```bash
+   sudo mkdir -p /opt/autobids/uploads
+   sudo chown -R autobids:autobids /opt/autobids/uploads  # или www-data, според Ansible role
+   sudo systemctl restart backend
+   ```
+
+**Verified end-to-end (preview)**:
+- ✅ Storage probe OK на preview (backend=disk root=/app/uploads)
+- ✅ Submit с 17 imported URLs → 17 локални, 0 data:
+- ✅ Submit с external URLs → rehosted каквото може, 0 data: в DB
+
+**DNS check (autoandbid.bg)**:
+- ✅ `autoandbid.bg` A → 178.105.37.1 (Hetzner), Proxied → правилно
+- ✅ `img.autoandbid.bg` CNAME → autoandbid.bg, Proxied → правилно
+- ℹ️ За да служи snimkите от `https://img.autoandbid.bg/api/uploads/...` директно (бъдещо подобрение), nginx-ът трябва server_name `img.autoandbid.bg` + alias на `/opt/autobids/uploads`. В момента всичко работи и от `autoandbid.bg`.
+
 ## 15 May 2026 — Submit Resilience: Graceful Rehost Fallback
 
 **Bug на production:** Submit на обявa с external focus.bg URLs → **500 Internal Server Error**. Stack trace недостъпен (production), но reproducible. Корен — submit-ът expected всички image operations да succeed; ImageProcessingError или connect failure → unhandled exception → middleware → 500.

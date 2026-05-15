@@ -1652,23 +1652,43 @@ async def create_auction(request: Request, payload: AuctionCreate, user: dict = 
     doc = payload.model_dump()
     # Persist optimized JPEGs (and thumbnails) to the configured storage
     # backend. Runs off the event loop because S3 uploads can be slow.
+    #
+    # If disk write fails (most often: `/opt/autobids/uploads` missing
+    # or not writable by the backend user), raise a clear 500 instead
+    # of swallowing the error — silently keeping data: URLs would bloat
+    # the DB document to hundreds of MB and make every gallery request
+    # ship base64 bytes back to the browser. The 500 surfaces the
+    # misconfiguration so ops can fix UPLOAD_DIR perms; the user can
+    # retry as soon as it's resolved.
     from storage import store_images
     try:
         web_urls = await asyncio.to_thread(store_images, web_urls)
         thumb_urls = await asyncio.to_thread(store_images, thumb_urls)
     except imgproc.ImageProcessingError as e:
-        # Disk storage couldn't write — most common cause is the upload
-        # directory missing or read-only on production. Log it loudly so
-        # ops can fix it, but don't 500 the seller — keep whatever URLs
-        # we have (already-stored locals stay, external URLs persist
-        # as-is) so they can at least submit the listing.
-        logging.getLogger("storage").error(
-            "Image storage write failed (continuing with raw URLs): %s", e,
+        logging.getLogger("storage").error("Image storage write failed: %s", e)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Съхраняването на снимките не успя: {e}. Свържете се с администратора.",
         )
-    except Exception as e:  # noqa: BLE001
+
+    # Guard against base64 data: URLs leaking into DB. This can only
+    # happen if storage misconfigures *after* the try/except above
+    # (e.g. STORAGE_BACKEND=inline), or if a future code path skips
+    # the optimize pipeline. Belt-and-suspenders.
+    def _strip_data_urls(urls: list[str]) -> list[str]:
+        return [u for u in urls if not (isinstance(u, str) and u.startswith("data:"))]
+    if any(isinstance(u, str) and u.startswith("data:") for u in web_urls):
         logging.getLogger("storage").error(
-            "Image storage unexpected error (continuing with raw URLs): %s", e,
+            "BUG: data: URLs surfaced past store_images — dropping %d entries",
+            sum(1 for u in web_urls if isinstance(u, str) and u.startswith("data:")),
         )
+        web_urls = _strip_data_urls(web_urls)
+        thumb_urls = _strip_data_urls(thumb_urls)
+        if not web_urls:
+            raise HTTPException(
+                status_code=500,
+                detail="Снимките не можаха да бъдат запазени на диска. Свържете се с администратора (STORAGE_BACKEND).",
+            )
     doc["images"] = web_urls
     doc["thumbnails"] = thumb_urls
 
@@ -5400,6 +5420,41 @@ async def seed_admin():
 
 @app.on_event("startup")
 async def on_startup():
+    # ----- Storage writability self-check -----
+    # Production has lost photos to misconfigured UPLOAD_DIR more than
+    # once. Probe the configured backend at boot and log loudly if it
+    # can't write — ops sees the message in `journalctl -u backend`
+    # before the first sell submission fails with a cryptic 500.
+    try:
+        from storage import _get_backend
+        backend = _get_backend()
+        backend_name = getattr(backend, "name", "?")
+        root = getattr(backend, "root", None)
+        if backend_name == "inline":
+            logger.warning(
+                "STORAGE_BACKEND=inline — image bytes will be saved as data: URLs in MongoDB. "
+                "This is fine for tests but will balloon DB size in production. Set STORAGE_BACKEND=disk."
+            )
+        elif backend_name == "disk":
+            test_data = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAEAAAcAAc+8aFQAAAAASUVORK5CYII="
+            try:
+                ref = backend.store(test_data)
+                if ref.startswith(("/api/uploads/", "/uploads/", "http://", "https://")):
+                    logger.info("Storage probe OK: backend=disk root=%s → %s", root, ref[:80])
+                else:
+                    logger.error(
+                        "Storage probe FAILED: backend=disk returned non-URL ref=%r — uploads will leak as data: URLs",
+                        ref[:80],
+                    )
+            except Exception as e:  # noqa: BLE001
+                logger.error(
+                    "Storage probe FAILED: backend=disk root=%s NOT writable: %s. "
+                    "Check directory exists and is owned by the backend user.",
+                    root, e,
+                )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Storage probe skipped: %s", e)
+
     # ----- MongoDB: wait until reachable before creating indexes -----
     # On cold container starts, both Mongo and the API spin up in parallel.
     # We retry up to ~60s instead of crashing the worker loop.
