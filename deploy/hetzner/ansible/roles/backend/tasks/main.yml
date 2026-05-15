@@ -203,7 +203,14 @@
     owner: "{{ service_user }}"
     group: "{{ service_group }}"
     mode: "0755"
-    recurse: no
+    # `recurse: yes` is critical for {{ upload_dir }} — when the
+    # directory pre-exists from an earlier deploy (or was created
+    # manually as root), any subdirectories already inside it (e.g.
+    # auctions/aa/, variants/) stay root-owned and the backend's
+    # `www-data` process gets `Permission denied` when it tries to
+    # write a new content-addressed sha256 file. We recurse so every
+    # existing subdir + file flips to the service user too.
+    recurse: yes
   loop:
     - "{{ log_dir }}"
     - "{{ backup_dir }}"
