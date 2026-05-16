@@ -60,11 +60,24 @@ export default function ImageUploader({
   const [dragOverGrid, setDragOverGrid] = useState(false);
   const [menuOpen, setMenuOpen] = useState(null);
   const [touchDragging, setTouchDragging] = useState(false);
-  // Per-file upload progress: { [tempId]: { name, pct, error? } }
+  // Per-file upload progress: { [tempId]: { name, pct, error?, previewUrl? } }
+  // `previewUrl` is a local `blob:` URL created with URL.createObjectURL so
+  // the user sees their photo in the tile from the moment they pick it,
+  // long before the server returns. Revoked on success / cancel / unmount.
   const [uploads, setUploads] = useState({});
 
-  // Cleanup on unmount
-  useEffect(() => () => { clearGhost(); clearTargetHighlight(); }, []);
+  // Cleanup on unmount — also revoke any active blob: preview URLs so we
+  // don't leak the underlying File objects into the next GC cycle.
+  useEffect(() => () => {
+    clearGhost();
+    clearTargetHighlight();
+    setUploads((u) => {
+      Object.values(u).forEach((up) => {
+        if (up?.previewUrl) try { URL.revokeObjectURL(up.previewUrl); } catch {}
+      });
+      return u;
+    });
+  }, []);
 
   // -----------------------------------------------------------------------
   // Upload pipeline (no client-side compression).
@@ -194,15 +207,25 @@ export default function ImageUploader({
         continue;
       }
 
-      // Show a 0% placeholder right away so the user knows the upload started.
-      setUploads((u) => ({ ...u, [tempId]: { name: f.name, pct: 0 } }));
+      // Show a 0% placeholder right away with the blob URL preview so the
+      // user immediately sees their photo while the upload progresses.
+      const previewUrl = URL.createObjectURL(inputFile);
+      setUploads((u) => ({ ...u, [tempId]: { name: f.name, pct: 0, previewUrl } }));
 
       try {
         const res = await uploadOne(inputFile, tempId);
         accepted.push(res.url);
         runningTotal += inputFile.size;
-        setUploads((u) => { const c = { ...u }; delete c[tempId]; return c; });
+        setUploads((u) => {
+          const c = { ...u };
+          // Revoke before removing so we don't keep the File around.
+          if (c[tempId]?.previewUrl) try { URL.revokeObjectURL(c[tempId].previewUrl); } catch {}
+          delete c[tempId];
+          return c;
+        });
       } catch (e) {
+        // Keep the preview visible on failure — the user can see WHICH
+        // photo failed, decide whether to remove or wait for retry.
         setUploads((u) => ({ ...u, [tempId]: { ...(u[tempId] || {}), error: e.message } }));
         toast.error(e.message || t("uploader.decode_failed", { name: f.name }));
       }
@@ -452,37 +475,69 @@ export default function ImageUploader({
             </div>
           </div>
         ))}
-        {/* In-progress upload tiles — show one placeholder per file
-            currently uploading, with a thin progress bar at the bottom.
-            Failed uploads stick around with an error pill so the user
-            knows what to retry; clicking dismisses the failure tile. */}
+        {/* In-progress upload tiles — show the user's own photo immediately
+            as a blurred preview, layered over a thin progress bar.
+            Failed uploads keep the (un-blurred) preview + an error pill so
+            the user knows WHICH photo failed. */}
         {Object.entries(uploads).map(([tid, u]) => (
           <div
             key={tid}
-            className="relative aspect-[4/3] rounded-md border border-[hsl(var(--line))] overflow-hidden bg-[hsl(var(--surface))] flex flex-col items-center justify-center gap-2"
+            className="relative aspect-[4/3] rounded-md border border-[hsl(var(--line))] overflow-hidden bg-[hsl(var(--surface))]"
             data-testid={`${testId}-uploading-${tid}`}
           >
-            {u.error ? (
-              <>
-                <AlertCircle size={20} className="text-[hsl(var(--danger))]" />
-                <div className="text-[10px] text-[hsl(var(--danger))] px-2 text-center truncate w-full">{u.error}</div>
-                <button
-                  type="button"
-                  onClick={() => setUploads((m) => { const c = { ...m }; delete c[tid]; return c; })}
-                  className="text-[10px] underline text-[hsl(var(--ink-muted))]"
-                >Премахни</button>
-              </>
-            ) : (
-              <>
-                <Loader2 size={20} className="text-[hsl(var(--ink-muted))] animate-spin" />
-                <div className="text-[10px] text-[hsl(var(--ink-muted))] truncate max-w-[90%]">{u.name}</div>
-                <div className="absolute bottom-0 left-0 right-0 h-1 bg-[hsl(var(--line))]">
-                  <div
-                    className="h-full bg-[hsl(var(--accent))] transition-[width]"
-                    style={{ width: `${Math.max(2, u.pct || 0)}%` }}
-                  />
-                </div>
-              </>
+            {/* Local blob preview — visible from t=0, blurred while
+                uploading to telegraph "not finalised yet". On error we
+                drop the blur so the photo is clearly identifiable. */}
+            {u.previewUrl && (
+              <img
+                src={u.previewUrl}
+                alt=""
+                className={`w-full h-full object-cover pointer-events-none transition duration-300 ${
+                  u.error ? "" : "blur-sm scale-105 brightness-95"
+                }`}
+                draggable="false"
+              />
+            )}
+            {/* Translucent overlay to lift the spinner / error icon off
+                the photo without losing the preview underneath. */}
+            <div className={`absolute inset-0 flex flex-col items-center justify-center gap-2 ${
+              u.error ? "bg-black/30" : "bg-black/15 backdrop-blur-[1px]"
+            }`}>
+              {u.error ? (
+                <>
+                  <AlertCircle size={22} className="text-white drop-shadow" />
+                  <div className="text-[10px] text-white px-2 text-center bg-[hsl(var(--danger))]/90 rounded px-2 py-0.5 max-w-[90%] truncate">
+                    {u.error}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setUploads((m) => {
+                      const c = { ...m };
+                      if (c[tid]?.previewUrl) try { URL.revokeObjectURL(c[tid].previewUrl); } catch {}
+                      delete c[tid];
+                      return c;
+                    })}
+                    className="text-[10px] underline text-white/90"
+                  >Премахни</button>
+                </>
+              ) : (
+                <>
+                  <div className="bg-white/85 rounded-full p-1.5 shadow">
+                    <Loader2 size={18} className="text-[hsl(var(--accent))] animate-spin" />
+                  </div>
+                  <div className="text-[10px] text-white font-medium drop-shadow truncate max-w-[90%] tabular-nums">
+                    {Math.max(2, u.pct || 0)}%
+                  </div>
+                </>
+              )}
+            </div>
+            {!u.error && (
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/30">
+                <div
+                  className="h-full bg-[hsl(var(--accent))] transition-[width] duration-150"
+                  style={{ width: `${Math.max(2, u.pct || 0)}%` }}
+                />
+              </div>
             )}
           </div>
         ))}

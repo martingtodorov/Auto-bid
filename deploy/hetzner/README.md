@@ -159,6 +159,23 @@ ansible-playbook -i ansible/inventory.ini ansible/playbooks/deploy_frontend.yml
 
 Both are **idempotent** — they pull the latest commit from the configured git ref, install deps, rebuild, and reload the service in-place.
 
+> ⚠️ **`deploy_frontend.yml` ALSO refreshes nginx config** (since 2026-05-16).
+> Previously the routine playbook only ran `nginx -s reload` and never copied
+> `nginx/autoandbid.conf` from the repo to `/etc/nginx/sites-available/autoandbid`.
+> Every redeploy now:
+>   1. Overwrites the deployed nginx config from the repo (`force: yes`)
+>   2. Greps it for `server_name img.autoandbid.bg;` + `/uploads/` proxy_pass
+>      → FAILS the deploy if either is missing.
+>   3. Re-symlinks `sites-enabled/autoandbid` and removes any competing
+>      enabled sites (e.g. stale `default`).
+>   4. Runs `nginx -t`, reloads, and then smoke-tests `img.autoandbid.bg`
+>      via `curl -H 'Host: img.autoandbid.bg' https://127.0.0.1/...`
+>      to verify the CDN vhost actually answers without cross-domain
+>      301s.
+>
+> If you change `deploy/hetzner/nginx/autoandbid.conf` in the repo,
+> a regular `deploy_frontend.yml` run is enough to roll it out.
+
 ---
 
 ## 5. Cloudflare configuration — three brand domains

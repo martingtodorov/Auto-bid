@@ -1,5 +1,17 @@
 ---
-# Code-only frontend redeploy: pull, build, swap into /var/www, reload nginx.
+# Code-only frontend redeploy: pull, build, swap into /var/www, **refresh
+# nginx config**, reload nginx, smoke-test the CDN vhost.
+#
+# HISTORY:
+# 2026-05-16: Added nginx-config-refresh + CDN audit tasks. Previously
+# this playbook only reloaded nginx but never copied the latest
+# `nginx/autoandbid.conf` from the repo — so any change to the nginx
+# template (e.g. adding the `img.autoandbid.bg` CDN vhost) was silently
+# ignored on routine redeploys. Operators had to run `site.yml` to pick
+# up nginx changes, which nobody did because "just redeploy the frontend"
+# was the documented workflow. Result: production ran for weeks with a
+# stale nginx config that lacked the dedicated CDN server block, causing
+# `img.autoandbid.bg` to be caught by the main vhost and 301-redirected.
 - hosts: frontend
   become: yes
   vars_prompt:
@@ -62,7 +74,124 @@
         delete: yes
       delegate_to: "{{ inventory_hostname }}"
 
+    # ─── nginx config refresh ───────────────────────────────────────────────
+    # CRITICAL: pick up nginx template changes (e.g. img.autoandbid.bg CDN
+    # vhost). The repo's `nginx/autoandbid.conf` is the source of truth —
+    # we copy it over the deployed file every redeploy, with `force: yes`,
+    # so the deployed config can NEVER drift behind the repo.
+    - name: Refresh nginx site config from repo
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../nginx/autoandbid.conf"
+        dest: /etc/nginx/sites-available/autoandbid
+        owner: root
+        group: root
+        mode: "0644"
+        force: yes
+      register: nginx_copy
+
+    # Belt-and-suspenders: ensure the file we just wrote ACTUALLY contains
+    # the CDN vhost. Catches the "merge conflict left the section out"
+    # failure mode where the deploy succeeds but the file is broken.
+    - name: Audit deployed nginx config has img.autoandbid.bg vhost
+      ansible.builtin.shell: |
+        set -eo pipefail
+        if ! grep -qE '^[[:space:]]*server_name[[:space:]]+img\.autoandbid\.bg[[:space:]]*;' /etc/nginx/sites-available/autoandbid; then
+          echo "FATAL: deployed nginx config has no 'server_name img.autoandbid.bg;' line"
+          echo "------- tail of deployed file -------"
+          tail -n 80 /etc/nginx/sites-available/autoandbid
+          exit 1
+        fi
+        if ! grep -qE 'proxy_pass[[:space:]]+http://[^[:space:]]+/uploads/' /etc/nginx/sites-available/autoandbid; then
+          echo "FATAL: deployed nginx config has no '/uploads/' proxy_pass to backend"
+          exit 1
+        fi
+        echo "deployed nginx config has CDN vhost + /uploads/ proxy_pass ✓"
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    # Disable any competing site config that might catch img.autoandbid.bg
+    # before our vhost (e.g. a stale /etc/nginx/sites-enabled/default left
+    # from a manual incident response).
+    - name: Ensure our site is enabled
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/autoandbid
+        dest: /etc/nginx/sites-enabled/autoandbid
+        state: link
+
+    - name: Disable default site if present
+      ansible.builtin.file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+
+    - name: Remove competing sites-enabled symlinks
+      ansible.builtin.shell: |
+        set -eo pipefail
+        for f in /etc/nginx/sites-enabled/*; do
+          [ -e "$f" ] || continue
+          name=$(basename "$f")
+          [ "$name" = "autoandbid" ] && continue
+          echo "Removing competing site: $f"
+          rm -f -- "$f"
+        done
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Validate nginx config
+      ansible.builtin.command: nginx -t
+      changed_when: false
+
     - name: Reload nginx
       ansible.builtin.service:
         name: nginx
         state: reloaded
+
+    # ─── Post-reload CDN smoke test ────────────────────────────────────────
+    # Hits local nginx with `Host: img.autoandbid.bg` to verify the CDN
+    # vhost actually answers and never cross-domain redirects. Any failure
+    # here means the deploy did NOT achieve what it claimed to.
+    - name: Smoke test img.autoandbid.bg vhost (origin-only)
+      ansible.builtin.shell: |
+        set -eo pipefail
+        probe() {
+          local path="$1"
+          local expected="$2"
+          local check_ct="$3"
+          local hdrs
+          hdrs=$(curl -sk -D - -o /dev/null \
+            -H 'Host: img.autoandbid.bg' \
+            "https://127.0.0.1${path}")
+          local code ct loc
+          code=$(echo "$hdrs" | head -n1 | awk '{print $2}')
+          ct=$(echo "$hdrs" | grep -i '^content-type:' | head -1 | tr -d '\r' | sed 's/^[Cc]ontent-[Tt]ype: *//')
+          loc=$(echo "$hdrs" | grep -i '^location:' | head -1 | tr -d '\r' | sed 's/^[Ll]ocation: *//')
+          echo "  path=$path code=$code content-type=$ct location=$loc"
+          if echo "$loc" | grep -qE 'autoandbid\.(com|ro)'; then
+            echo "  → FAIL: redirect to wrong domain"
+            return 1
+          fi
+          if ! echo ",$expected," | grep -q ",$code,"; then
+            echo "  → FAIL: code $code not in {$expected}"
+            return 1
+          fi
+          if [ "$check_ct" = "image" ] && ! echo "$ct" | grep -qE '^image/'; then
+            echo "  → FAIL: content-type '$ct' is not image/*"
+            return 1
+          fi
+          echo "  → ok"
+        }
+        fail=0
+        echo "Probe 1: root → must NOT redirect to autoandbid.com"
+        probe "/" "404,403,400" "" || fail=1
+        echo "Probe 2: missing image → must 404, not 301"
+        probe "/uploads/__probe_$(date +%s)__.jpg" "404" "" || fail=1
+        if [ "$fail" -ne 0 ]; then
+          echo "============================================================"
+          echo "CDN SMOKE TEST FAILED — img.autoandbid.bg vhost misconfigured"
+          echo "============================================================"
+          exit 1
+        fi
+      args:
+        executable: /bin/bash
+      changed_when: false

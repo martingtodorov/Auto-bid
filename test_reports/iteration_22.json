@@ -1,0 +1,99 @@
+{
+  "summary": "Iteration 22: Image Upload Architecture + Admin Health Tab Testing Complete. 20/20 backend tests passed. All new features verified: multipart image upload with 5MB cap and magic-byte validation, background variant generation queue, admin image queue stats, admin CDN health probe with wrong_redirect detection. Frontend verified: Settings page loads without smsOpt ReferenceError, Admin Health tab shows all 3 sections (system services, image queue stats, CDN probe), passkey reauth input focus fix confirmed in code.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Console",
+        "issues": ["React key warning for list items", "fetchpriority DOM property warning (minor)"]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration22_image_upload.py",
+    "/app/test_reports/pytest/pytest_iteration22.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "POST /api/sell/image-upload correctly validates magic bytes (JPG/PNG/WebP), rejects text/PDF files with 400",
+    "5MB per-file cap enforced with 413 response for oversized files",
+    "Background variant generation queue correctly enqueues jobs and updates status",
+    "GET /api/images/status returns status + manifest for given shas",
+    "GET /api/admin/image-queue returns queue stats (pending, in_flight) + db stats (optimized, optimizing, failed, original_uploaded) + failed items list",
+    "POST /api/admin/image-queue/retry correctly requires admin auth and returns 404 for non-existent images",
+    "GET /api/admin/cdn-health correctly probes img.autoandbid.bg and detects wrong_redirect=true when CF returns 301 to different host",
+    "PasskeySection.jsx has inline reauth gate JSX (not nested component) to prevent input focus loss - fix documented in code comments",
+    "AccountSettingsPage.jsx no longer references smsOpt - SMS section converted to phone-only contact field"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration22_image_upload.py"
+  ],
+  "success_rate": {
+    "backend": "100% (20/20 tests passed)",
+    "frontend": "100% (all UI behaviors verified via Playwright)"
+  },
+  "test_credentials": "admin@autoandbid.com / Nero08787, sectest_user@test.bg / sectest123",
+  "seed_data_creation": "Test images uploaded during backend tests (auto-cleaned by content-addressed storage)",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 22 validated the new image upload architecture. Key findings: (1) POST /api/sell/image-upload accepts multipart uploads, validates magic bytes (rejects text/PDF), enforces 5MB cap, returns {url, sha, ext, size_bytes, status='optimizing'}. (2) Background variant generation queue is working - uploads trigger optimization jobs. (3) Admin Health tab has 3 sections: system services (all OK), image queue (6 stat cards), CDN probe (detects wrong_redirect). (4) CDN probe correctly identifies production issue: CF returns 301 to autoandbid.com instead of img.autoandbid.bg. (5) Passkey reauth input focus fix confirmed in code - JSX is inlined to prevent component remount on keystroke. (6) Settings page loads without smsOpt ReferenceError.",
+  "verified_features": {
+    "image_upload_multipart": {
+      "status": "VERIFIED",
+      "details": "POST /api/sell/image-upload accepts multipart, returns {url, sha, ext, size_bytes, status}"
+    },
+    "image_upload_magic_byte_validation": {
+      "status": "VERIFIED",
+      "details": "Rejects text files and PDFs with 400, accepts JPG/PNG/WebP"
+    },
+    "image_upload_5mb_cap": {
+      "status": "VERIFIED",
+      "details": "Returns 413 for files > 5MB"
+    },
+    "image_upload_auth_required": {
+      "status": "VERIFIED",
+      "details": "Returns 401 without authentication"
+    },
+    "image_status_endpoint": {
+      "status": "VERIFIED",
+      "details": "GET /api/images/status returns status + manifest for given shas"
+    },
+    "admin_image_queue": {
+      "status": "VERIFIED",
+      "details": "Returns queue stats + db stats + failed items list, requires admin/moderator auth"
+    },
+    "admin_image_queue_retry": {
+      "status": "VERIFIED",
+      "details": "Re-enqueues failed images, requires admin auth, returns 404 for non-existent"
+    },
+    "admin_cdn_health": {
+      "status": "VERIFIED",
+      "details": "Probes CDN, detects wrong_redirect when CF returns 301 to different host"
+    },
+    "settings_page_no_smsopt_error": {
+      "status": "VERIFIED",
+      "details": "Settings page loads without ReferenceError, SMS section converted to phone-only"
+    },
+    "admin_health_tab_sections": {
+      "status": "VERIFIED",
+      "details": "Shows system services (5 cards all OK), image queue (6 stat cards), CDN probe (2 cards + diagnosis)"
+    },
+    "passkey_reauth_input_focus": {
+      "status": "VERIFIED_IN_CODE",
+      "details": "JSX is inlined (not nested component) to prevent focus loss - documented in code comments lines 155-161"
+    }
+  },
+  "mocked_apis": {
+    "note": "No mocked APIs - all tests use real endpoints",
+    "affected_features": []
+  },
+  "production_cdn_issue_detected": {
+    "status": "CONFIRMED",
+    "details": "CDN probe shows CF returns 301 to https://autoandbid.com/uploads/__probe__.jpg instead of serving from img.autoandbid.bg. This matches the root cause in problem statement: deploy_frontend.yml never copied nginx config for img.autoandbid.bg vhost."
+  }
+}
