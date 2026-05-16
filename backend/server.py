@@ -3934,6 +3934,18 @@ async def admin_image_queue_retry(
     return {"ok": ok}
 
 
+@api.post("/admin/image-queue/backfill")
+async def admin_image_queue_backfill(_admin: dict = Depends(require_admin)):
+    """Reverse-engineer the `image_optimization` field for every auction.
+
+    Useful after a deploy that introduces the queue logic onto a DB
+    that doesn't yet have status tracking for older listings. Idempotent
+    — running it twice is safe (the second run will report 0 new work).
+    """
+    from services import image_optimization_queue as ioq
+    return await ioq.backfill_all()
+
+
 @api.get("/admin/storage-health")
 async def admin_storage_health(_admin: dict = Depends(require_admin)):
     """Live diagnostic for the image storage backend.

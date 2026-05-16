@@ -1,7 +1,91 @@
 # Changelog
 
 
-## 2026-05-16 — Iteration 21: Gallery rapid-click fix
+## 2026-05-16 — Iteration 22: Image queue diagnostics + backfill
+
+### User-reported issue
+Admin Health → Image queue tab showed ALL ZEROS even after fresh
+uploads / mobile.bg imports. Without debug info it was impossible to
+tell whether the queue was broken, the DB write was failing, the
+UPLOAD_DIR was wrong, or the legacy auctions simply pre-dated the
+tracking infrastructure.
+
+### Diagnostics added (`services/image_optimization_queue.py`)
+`stats()` now returns:
+  • `initialized` (bool) — was `init(db)` called at startup?
+  • `worker_started` — has the consumer task launched yet?
+  • `upload_dir` (string) — actual path the queue reads/writes
+  • `upload_dir_exists` / `upload_dir_writable` (bools)
+  • `recent_errors[]` — ring buffer of the last 20 enqueue / status-
+    write errors (cleared on restart). New helper `_record_error()`
+    surfaces silent failures that previously only showed up in journalctl.
+
+`_set_status()` now logs WHY a status write was skipped:
+  • DB handle was None (init wasn't called)
+  • `update_one().matched_count == 0` (auction was deleted between
+    enqueue and worker pickup)
+  • Mongo write exception (network / auth)
+
+`enqueue_for_stored_urls()` now records skip reasons:
+  • URL has no `/uploads/` marker → "can't derive disk path"
+  • File missing on disk → records actual abs_path so admin sees
+    where the queue WAS looking.
+
+### Backfill endpoint
+`POST /api/admin/image-queue/backfill` reverse-engineers status for
+legacy auctions whose images were uploaded before the queue tracking
+existed:
+
+  • Scans every auction's `images[]` array.
+  • Derives the sha from each URL (storage is content-addressed).
+  • Checks the on-disk variant matrix (`<sha>/<size>.<ext>`):
+      - All 12 cells present → mark `optimized` + reconstruct manifest
+        WITHOUT re-encoding (zero Pillow work).
+      - Variants missing → enqueue a fresh background job.
+      - Original missing on disk → count `missing_originals` for the
+        admin's attention.
+  • Idempotent — running it twice does no new work.
+
+Returns counts: `auctions_scanned`, `marked_optimized`, `enqueued`,
+`already_tracked`, `missing_originals`, `errors[]`.
+
+### UI (`AdminHealthTab.jsx`)
+The "Опашка за обработка на изображения" section now shows:
+  1. **Diagnostics strip** (always visible) — init/worker/upload_dir
+     status with red highlighting if anything is wrong.
+  2. **"Backfill статуси" button** — runs the new endpoint, surfaces
+     the result inline (no journalctl required).
+  3. **Recent errors panel** — last 5 enqueue / status errors with
+     stage, message, sha. Auto-hidden when zero.
+
+### Verification
+On preview environment:
+  • `init=true, worker=false, upload_dir=/app/uploads (exists+writable)`
+  • Backfill (1st run): scanned 7 auctions, marked **72 newly-tracked**
+    images as optimized (legacy mobile.bg imports whose JPGs existed
+    but had no DB tracking).
+  • Backfill (2nd run): 0 new work, 108 `already_tracked` — confirming
+    idempotency.
+
+### Files touched
+- `/app/backend/services/image_optimization_queue.py`
+  (diagnostics, _record_error, error-recording in _set_status &
+  enqueue_for_stored_urls, backfill_all)
+- `/app/backend/server.py` (POST /admin/image-queue/backfill endpoint)
+- `/app/frontend/src/components/AdminHealthTab.jsx` (diagnostics strip,
+  Backfill button + result toast, recent-errors panel)
+
+### Required user action (production)
+**On production**, after redeploying the backend:
+  1. Open Admin → Health tab
+  2. Look at the new "init / worker / upload_dir" strip — confirm
+     `init: true` AND `upload_dir_exists: true`.
+  3. Click "Backfill статуси". For ~700 legacy auctions × ~20 images
+     each it should report ~14,000 `marked_optimized` if all variant
+     files already exist on disk; OR `enqueued: N` for any missing
+     variants (queue then processes those in the background).
+
+
 
 ### Bug
 On `AuctionDetailPage`, clicking the next/previous chevron 12 times

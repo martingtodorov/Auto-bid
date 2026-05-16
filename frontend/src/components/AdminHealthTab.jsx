@@ -42,6 +42,8 @@ export default function AdminHealthTab() {
   const [cdnLoading, setCdnLoading] = useState(false);
   const [cdnErr, setCdnErr] = useState(null);
   const [retryBusy, setRetryBusy] = useState(null);
+  const [backfillBusy, setBackfillBusy] = useState(false);
+  const [backfillResult, setBackfillResult] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -90,6 +92,23 @@ export default function AdminHealthTab() {
       setImgQueueErr(e?.response?.data?.detail || e?.message || "Грешка");
     } finally {
       setRetryBusy(null);
+    }
+  }, [loadImgQueue]);
+
+  // Reverse-engineer status for legacy auctions whose images were
+  // uploaded before the queue tracking existed. Idempotent — running
+  // it twice is safe (no new work the second time).
+  const runBackfill = useCallback(async () => {
+    setBackfillBusy(true);
+    setBackfillResult(null);
+    try {
+      const { data } = await api.post("/admin/image-queue/backfill");
+      setBackfillResult(data);
+      await loadImgQueue();
+    } catch (e) {
+      setImgQueueErr(e?.response?.data?.detail || e?.message || "Грешка");
+    } finally {
+      setBackfillBusy(false);
     }
   }, [loadImgQueue]);
 
@@ -207,7 +226,7 @@ export default function AdminHealthTab() {
 
       {/* ── Image optimization queue ─────────────────────────────────── */}
       <div className="pt-6 border-t border-[hsl(var(--line))]">
-        <div className="flex items-center gap-3 mb-3">
+        <div className="flex items-center gap-3 mb-3 flex-wrap">
           <ImageIcon size={18} className="text-[hsl(var(--accent))]" />
           <h2 className="text-lg font-semibold">Опашка за обработка на изображения</h2>
           <button
@@ -215,7 +234,81 @@ export default function AdminHealthTab() {
             className="btn btn-secondary !py-1 !px-2.5 text-[11px] flex items-center gap-1"
             data-testid="img-queue-refresh"
           ><RefreshCw size={11} /> Обнови</button>
+          <button
+            onClick={runBackfill}
+            disabled={backfillBusy}
+            className="btn btn-secondary !py-1 !px-2.5 text-[11px] flex items-center gap-1 disabled:opacity-50"
+            data-testid="img-queue-backfill"
+            title="Сканира всички обяви, открива вече-съществуващи variants на диска и маркира статуса"
+          >
+            <RefreshCw size={11} className={backfillBusy ? "animate-spin" : ""} />
+            {backfillBusy ? "Сканиране…" : "Backfill статуси"}
+          </button>
         </div>
+
+        {/* Diagnostics strip — surfaces init / config issues. The dashboard
+            shows 0 across the board WITHOUT this strip would be impossible
+            to debug remotely. */}
+        {imgQueue?.queue && (
+          <div className="mb-3 p-2.5 rounded-card border border-[hsl(var(--line))] bg-[hsl(var(--surface))] text-[11px] font-mono flex flex-wrap gap-x-4 gap-y-1" data-testid="img-queue-diagnostics">
+            <span>
+              init:&nbsp;<span className={imgQueue.queue.initialized ? "text-emerald-600 font-semibold" : "text-red-500 font-semibold"}>
+                {String(imgQueue.queue.initialized)}
+              </span>
+            </span>
+            <span>
+              worker:&nbsp;<span className={imgQueue.queue.worker_started ? "text-emerald-600" : "text-[hsl(var(--ink-muted))]"}>
+                {String(imgQueue.queue.worker_started)}
+              </span>
+            </span>
+            <span>
+              upload_dir:&nbsp;<span className={imgQueue.queue.upload_dir_exists && imgQueue.queue.upload_dir_writable ? "text-emerald-600" : "text-red-500"}>
+                {imgQueue.queue.upload_dir}
+                {!imgQueue.queue.upload_dir_exists && " (НЕ СЪЩЕСТВУВА)"}
+                {imgQueue.queue.upload_dir_exists && !imgQueue.queue.upload_dir_writable && " (read-only)"}
+              </span>
+            </span>
+            <span>max_concurrency: {imgQueue.queue.max_concurrency}</span>
+            <span>encode_timeout: {imgQueue.queue.encode_timeout_seconds}s</span>
+          </div>
+        )}
+
+        {/* Backfill result toast */}
+        {backfillResult && (
+          <div className="mb-3 p-3 rounded-card border border-emerald-500/30 bg-emerald-500/10 text-sm" data-testid="img-queue-backfill-result">
+            <div className="font-semibold mb-1">Backfill завърши</div>
+            <div className="font-mono text-xs space-y-0.5">
+              <div>Сканирани обяви: {backfillResult.auctions_scanned}</div>
+              <div>Маркирани като оптимизирани: <span className="text-emerald-700 font-semibold">{backfillResult.marked_optimized}</span></div>
+              <div>Поставени в опашка за нова обработка: <span className="text-amber-700 font-semibold">{backfillResult.enqueued}</span></div>
+              <div>Вече следени (skip): {backfillResult.already_tracked}</div>
+              {backfillResult.missing_originals > 0 && (
+                <div className="text-red-500">Липсващи оригинали на диска: {backfillResult.missing_originals}</div>
+              )}
+              {backfillResult.errors?.length > 0 && (
+                <div className="text-red-500">Грешки: {backfillResult.errors.length}</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Recent errors — surfaces "file missing on disk" / "auction not found"
+            without forcing a journalctl trip. Cleared on backend restart. */}
+        {imgQueue?.queue?.recent_errors?.length > 0 && (
+          <div className="mb-3 p-3 rounded-card border border-amber-500/30 bg-amber-500/5" data-testid="img-queue-recent-errors">
+            <div className="text-xs font-semibold text-amber-800 mb-1.5">
+              Скорошни грешки в опашката ({imgQueue.queue.recent_errors.length})
+            </div>
+            <div className="font-mono text-[10px] space-y-0.5 max-h-32 overflow-y-auto">
+              {imgQueue.queue.recent_errors.slice(-5).reverse().map((e, i) => (
+                <div key={i} className="text-amber-900">
+                  <span className="text-[hsl(var(--ink-muted))]">[{e.stage}]</span> {e.message}
+                  {e.sha && <span className="text-[hsl(var(--ink-muted))]"> · sha={e.sha.slice(0, 10)}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {imgQueueErr && (
           <div className="p-3 rounded-card border border-red-500/30 bg-red-500/10 text-sm text-red-500" data-testid="img-queue-error">
             {imgQueueErr}

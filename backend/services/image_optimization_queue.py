@@ -86,6 +86,27 @@ _worker_started = False
 _lock = asyncio.Lock()
 _db = None  # set by `init(db)` at startup
 
+# Diagnostic ring-buffer of the most-recent enqueue / encode errors, so
+# admins can spot misconfiguration (e.g. wrong UPLOAD_DIR, file-not-on-
+# disk for an enqueued sha) without having to grep journalctl on the box.
+# Persisted in-process only; cleared on restart.
+_recent_errors: list[dict] = []
+_RECENT_ERROR_CAP = 20
+
+
+def _record_error(stage: str, message: str, *, sha: Optional[str] = None,
+                  auction_id: Optional[str] = None) -> None:
+    """Append a debug entry to the in-process error ring buffer."""
+    _recent_errors.append({
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "stage": stage,
+        "sha": sha,
+        "auction_id": auction_id,
+        "message": message[:300],
+    })
+    if len(_recent_errors) > _RECENT_ERROR_CAP:
+        del _recent_errors[: len(_recent_errors) - _RECENT_ERROR_CAP]
+
 
 # --- Status field helpers ---------------------------------------------------
 # We store optimization status per image inside the auction document:
@@ -107,6 +128,14 @@ async def _set_status(
     *, attempts: Optional[int] = None, error: Optional[str] = None,
 ):
     if not auction_id or _db is None:
+        # Silent skip: but record why so the admin can see "db_writable: false"
+        # in the diagnostics if this is happening systematically.
+        if _db is None:
+            _record_error(
+                "set_status",
+                "queue DB handle is None — was init(db) called at startup?",
+                sha=sha, auction_id=auction_id,
+            )
         return
     payload: dict = {
         f"image_optimization.{sha}.status": status,
@@ -118,9 +147,19 @@ async def _set_status(
         # Trim to keep the doc small — full traceback already in logs.
         payload[f"image_optimization.{sha}.last_error"] = error[:300]
     try:
-        await _db.auctions.update_one({"id": auction_id}, {"$set": payload})
-    except Exception:  # noqa: BLE001
+        res = await _db.auctions.update_one({"id": auction_id}, {"$set": payload})
+        if res.matched_count == 0:
+            # The auction was deleted/renamed between enqueue and now.
+            # Useful to surface — otherwise an admin chasing 0 counts
+            # would never know their submitted listing got rejected.
+            _record_error(
+                "set_status",
+                f"auction_id not found in DB (matched_count=0) for status={status}",
+                sha=sha, auction_id=auction_id,
+            )
+    except Exception as e:  # noqa: BLE001
         log.exception("failed to set optimization status sha=%s status=%s", sha[:10], status)
+        _record_error("set_status", f"{type(e).__name__}: {e}", sha=sha, auction_id=auction_id)
 
 
 def init(db) -> None:
@@ -293,8 +332,10 @@ async def enqueue_for_stored_urls(
         return 0
     upload_root = os.environ.get("UPLOAD_DIR", "/opt/autobids/uploads")
     enqueued = 0
+    skipped = 0
     for idx, url in enumerate(urls):
         if not isinstance(url, str) or not url:
+            skipped += 1
             continue
         # URL forms accepted:
         #   /api/uploads/auctions/<aa>/<sha>.<ext>
@@ -302,11 +343,23 @@ async def enqueue_for_stored_urls(
         #   /uploads/auctions/<aa>/<sha>.<ext>
         marker = "/uploads/"
         if marker not in url:
+            _record_error(
+                "enqueue_for_stored_urls",
+                f"URL has no '/uploads/' marker, cannot derive disk path: {url[:120]}",
+                auction_id=auction_id,
+            )
+            skipped += 1
             continue
         rel = url.split(marker, 1)[1]
         abs_path = os.path.join(upload_root, rel)
         if not os.path.isfile(abs_path):
             log.warning("ioq.enqueue_for_stored_urls: file missing %s", abs_path)
+            _record_error(
+                "enqueue_for_stored_urls",
+                f"file missing on disk: {abs_path} (UPLOAD_DIR={upload_root})",
+                auction_id=auction_id,
+            )
+            skipped += 1
             continue
         sha = os.path.splitext(os.path.basename(abs_path))[0]
         # Sanity: storage layer should always produce a 64-char hex sha.
@@ -321,6 +374,9 @@ async def enqueue_for_stored_urls(
             auction_id=auction_id, image_idx=idx,
         ):
             enqueued += 1
+    if skipped:
+        log.info("ioq.enqueue_for_stored_urls: enqueued=%d skipped=%d (auction=%s)",
+                 enqueued, skipped, auction_id)
     return enqueued
 
 
@@ -376,13 +432,26 @@ async def resume_pending() -> int:
 
 
 def stats() -> dict:
-    """In-process queue stats for `/admin/storage-health`."""
+    """In-process queue stats for `/admin/storage-health`.
+
+    `initialized` + `upload_dir_exists` are the two fields admins should
+    check first when the dashboard shows zeros despite live uploads:
+    a False on either means the queue can't function on this host.
+    """
+    upload_dir = os.environ.get("UPLOAD_DIR", "/opt/autobids/uploads")
     return {
         "pending": _queue.qsize(),
         "in_flight": len(_in_flight),
         "max_concurrency": MAX_CONCURRENCY,
         "max_attempts": MAX_ATTEMPTS,
         "encode_timeout_seconds": ENCODE_TIMEOUT_SECONDS,
+        # Diagnostics — surface init / config issues without journalctl.
+        "initialized": _db is not None,
+        "worker_started": _worker_started,
+        "upload_dir": upload_dir,
+        "upload_dir_exists": os.path.isdir(upload_dir),
+        "upload_dir_writable": os.access(upload_dir, os.W_OK) if os.path.isdir(upload_dir) else False,
+        "recent_errors": list(_recent_errors),  # last 20 (capped)
     }
 
 
@@ -438,4 +507,116 @@ async def failed_items(limit: int = 50) -> list[dict]:
                     break
     except Exception:  # noqa: BLE001
         log.exception("img-queue failed_items failed")
+    return out
+
+
+
+async def backfill_all() -> dict:
+    """Reverse-engineer the `image_optimization` field for every auction.
+
+    The admin runs this once after an upgrade in which the queue logic
+    was added (or after a deploy where some auctions sneaked through
+    without status tracking). We scan each auction's `images[]`,
+    derive the sha from the URL, then:
+
+      • If the variant files exist on disk → mark `optimized`
+        + reconstruct the manifest. NO Pillow work.
+      • If only the original exists → enqueue a fresh variant job.
+      • If even the original is missing → mark `failed` with a clear
+        error so the admin can investigate (broken DB ref vs deleted file).
+
+    Returns aggregate counts for the UI.
+    """
+    if _db is None:
+        return {"error": "queue DB handle not initialised — restart backend"}
+
+    from services.image_variants import _variant_path, public_variant_url, SIZES
+
+    upload_root = os.environ.get("UPLOAD_DIR", "/opt/autobids/uploads")
+    out = {
+        "auctions_scanned": 0,
+        "marked_optimized": 0,
+        "enqueued": 0,
+        "missing_originals": 0,
+        "already_tracked": 0,
+        "errors": [],
+    }
+
+    cursor = _db.auctions.find(
+        {},
+        {"_id": 0, "id": 1, "images": 1, "image_optimization": 1},
+    )
+    async for doc in cursor:
+        out["auctions_scanned"] += 1
+        urls = doc.get("images") or []
+        existing = doc.get("image_optimization") or {}
+        for idx, url in enumerate(urls):
+            if not isinstance(url, str):
+                continue
+            marker = "/uploads/"
+            if marker not in url:
+                continue
+            rel = url.split(marker, 1)[1]
+            abs_path = os.path.join(upload_root, rel)
+            if not os.path.isfile(abs_path):
+                out["missing_originals"] += 1
+                continue
+            sha = os.path.splitext(os.path.basename(abs_path))[0]
+            if len(sha) != 64 or any(c not in "0123456789abcdef" for c in sha):
+                # Not content-addressed — hash the bytes (slow but rare).
+                import hashlib
+                with open(abs_path, "rb") as f:
+                    sha = hashlib.sha256(f.read()).hexdigest()
+
+            # Already tracked — skip unless explicitly stale.
+            if sha in existing and existing[sha].get("status") in ("optimized", "optimizing", "failed"):
+                out["already_tracked"] += 1
+                continue
+
+            # Probe the on-disk variant matrix. If ALL 12 cells exist,
+            # we can mark `optimized` without re-encoding.
+            all_exist = True
+            partial_manifest = {"sha": sha, "variants": {}}
+            for size_name, _max_edge in SIZES:
+                size_out: dict[str, str] = {}
+                for ext in ("avif", "webp", "jpg"):
+                    p = _variant_path(sha, size_name, ext)
+                    if not os.path.exists(p):
+                        all_exist = False
+                        break
+                    size_out[ext] = public_variant_url(sha, size_name, ext)
+                if not all_exist:
+                    break
+                partial_manifest["variants"][size_name] = size_out
+
+            if all_exist:
+                # Fully encoded — mark optimized and persist manifest.
+                partial_manifest["primary"] = (
+                    partial_manifest["variants"].get("gallery", {}).get("jpg")
+                    or partial_manifest["variants"].get("full", {}).get("jpg")
+                )
+                try:
+                    await _db.auctions.update_one(
+                        {"id": doc["id"]},
+                        {"$set": {
+                            f"image_optimization.{sha}.status": "optimized",
+                            f"image_optimization.{sha}.attempts": 1,
+                            f"image_optimization.{sha}.updated_at": datetime.now(timezone.utc).isoformat(),
+                            f"image_optimization.{sha}.manifest": partial_manifest,
+                        }},
+                    )
+                    out["marked_optimized"] += 1
+                except Exception as e:  # noqa: BLE001
+                    out["errors"].append(f"{doc['id'][:8]}/{sha[:8]}: {e}")
+            else:
+                # Variants missing — enqueue for background encoding.
+                # `enqueue()` is no-op when the sha is already in flight,
+                # so repeated backfill calls are safe.
+                if await enqueue(
+                    sha=sha, src_path=abs_path,
+                    auction_id=doc["id"], image_idx=idx,
+                ):
+                    out["enqueued"] += 1
+
+    log.info("img-queue backfill: %s", out)
     return out
