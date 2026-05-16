@@ -1,7 +1,48 @@
 # Changelog
 
 
-## 2026-05-16 — Iteration 20: Submit + import performance optimization
+## 2026-05-16 — Iteration 21: Gallery rapid-click fix
+
+### Bug
+On `AuctionDetailPage`, clicking the next/previous chevron 12 times
+rapidly only advanced the gallery by ~5-7 slides instead of 12. The
+user wanted each click to map 1:1 to a slide step regardless of click
+cadence.
+
+### Root cause
+A feedback race between the programmatic `scrollIntoView({behavior:
+"smooth"})` and the `IntersectionObserver` that drives `setPhotoIdx`:
+
+  1. Click → `setPhotoIdx(i+1)` → useEffect → `scrollIntoView` (~400 ms).
+  2. During the smooth scroll, intermediate slides crossed the IO's
+     `0.55` threshold → `setPhotoIdx(intermediateIdx)` fired → React
+     re-rendered → useEffect re-ran `scrollIntoView(intermediateIdx)`.
+  3. The new programmatic scroll cancelled the in-flight one and started
+     toward the lower intermediate idx → the user-requested target was
+     silently clobbered.
+
+### Fix (`AuctionDetailPage.jsx`)
+Added a `programmaticScrollRef` flag that:
+  • Is set to `true` at the start of every `scrollToSlide()` call.
+  • Causes the IntersectionObserver callback to return early — IO
+    cannot stomp on the programmatic scroll's target.
+  • Is cleared on the scroller's `scrollend` event (the right
+    signal — fires once per coalesced burst of programmatic scrolls).
+  • Falls back to a 900 ms `setTimeout` clear for Safari < 18, which
+    still doesn't ship `scrollend`.
+
+### Verification
+Playwright test on a 24-photo live auction:
+  • Initial scrollLeft = 0
+  • 12 rapid `Next` clicks fired in 1262 ms
+  • Final scrollLeft = 8762 px, slideWidth = 730 px → **landed slide 12**
+  • UI counter confirms "13 / 24" (slides are 0-indexed internally,
+    1-indexed in the UI label) → ✅ PASS
+
+### Files touched
+- `/app/frontend/src/pages/AuctionDetailPage.jsx`
+
+
 
 ### Bottleneck
 `/auctions` POST and `/auctions/import-mobile-bg` were generating

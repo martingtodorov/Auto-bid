@@ -71,6 +71,16 @@ export default function AuctionDetailPage() {
   // lightbox; if a swipe is in flight `isSwipingRef` swallows the click.
   const scrollerRef = useRef(null);
   const isSwipingRef = useRef(false);
+  // While a programmatic (chevron-driven) smooth scroll is in flight, we
+  // must IGNORE the IntersectionObserver callbacks — otherwise rapid-fire
+  // clicks race against the in-flight scroll: each intermediate slide
+  // entering the viewport fires IO → `setPhotoIdx(intermediateIdx)` →
+  // useEffect re-launches `scrollIntoView` toward that lower idx → the
+  // user-requested target is overridden. Net effect: 12 fast Next clicks
+  // advance only 5-7 slides. This flag short-circuits IO during the
+  // programmatic window (cleared on `scrollend`, with a generous
+  // setTimeout fallback for Safari which still ships without the event).
+  const programmaticScrollRef = useRef(false);
 
   // Sync `photoIdx` from scroller → IntersectionObserver.
   useEffect(() => {
@@ -79,6 +89,12 @@ export default function AuctionDetailPage() {
     if (!root || total < 2) return;
     const observer = new IntersectionObserver(
       (entries) => {
+        // Suppressed while a chevron-driven scroll is animating — see
+        // `programmaticScrollRef` comment above. The chevron handler is
+        // the authoritative source of `photoIdx` in that window; once
+        // the scroll settles (`scrollend`) we re-enable IO so the user's
+        // own swipes/wheel events update the index again.
+        if (programmaticScrollRef.current) return;
         let best = null;
         entries.forEach((e) => {
           if (!best || e.intersectionRatio > best.intersectionRatio) best = e;
@@ -96,11 +112,24 @@ export default function AuctionDetailPage() {
   }, [a?.images?.length]);
 
   // Programmatically jump to a slide (used by desktop chevrons + thumbnails).
+  // Marks the IO observer as suppressed for the duration of the smooth
+  // scroll so rapid clicks accumulate without being clipped by the
+  // observer firing on intermediate slides.
   const scrollToSlide = useCallback((idx) => {
     const root = scrollerRef.current;
     if (!root) return;
     const child = root.querySelector(`[data-slide-index="${idx}"]`);
-    if (child) child.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
+    if (!child) return;
+    programmaticScrollRef.current = true;
+    child.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
+    // Clear the flag when the scroll settles. `scrollend` is the right
+    // signal (no double-firing on coalesced burst scrolls); Safari < 18
+    // doesn't ship it yet so we also schedule a fallback that runs after
+    // the typical 400-600 ms smooth-scroll duration plus a safety margin.
+    const onEnd = () => { programmaticScrollRef.current = false; };
+    root.addEventListener("scrollend", onEnd, { once: true });
+    window.clearTimeout(scrollToSlide._fallback);
+    scrollToSlide._fallback = window.setTimeout(onEnd, 900);
   }, []);
   useEffect(() => {
     // Whenever `photoIdx` is changed externally (thumbnail click,
