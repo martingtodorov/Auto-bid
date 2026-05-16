@@ -86,19 +86,13 @@ export default function AccountSettingsPage() {
         <section className="mt-12 rounded-card border border-[hsl(var(--line))] bg-white p-6 lg:p-8" data-testid="profile-section">
           <div className="flex items-center gap-3">
             <Phone size={18} className="text-[hsl(var(--accent))]" />
-            <h2 className="font-serif text-2xl">{t("settings.sms_title", "SMS известия")}</h2>
+            <h2 className="font-serif text-2xl">{t("settings.phone_title", "Телефон за контакт")}</h2>
           </div>
-          <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">{t("settings.sms_body", "Получавайте SMS когато има наддаване в последните 5 минути от следен или наддаван от вас търг. Нужен е международен формат (+359...).")}</p>
+          <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">{t("settings.phone_body", "Използваме телефона ви само за фактуриране и при нужда от свързване с вас за вече сключена сделка. Препоръчителен международен формат (+359...).")}</p>
 
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-4 items-end">
-            <div>
-              <label className="overline text-[hsl(var(--ink-muted))] block mb-2">{t("settings.phone", "Телефон")}</label>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+359888123456" className="w-full border border-[hsl(var(--line))] h-11 px-3 text-sm" data-testid="phone-input" />
-            </div>
-            <label className="flex items-center gap-2 cursor-pointer pb-3" data-testid="sms-opt-in">
-              <input type="checkbox" checked={smsOpt} onChange={(e) => setSmsOpt(e.target.checked)} className="h-4 w-4" />
-              <span className="text-sm">{t("settings.sms_opt_label", "Искам SMS за финални 5 минути")}</span>
-            </label>
+          <div className="mt-6">
+            <label className="overline text-[hsl(var(--ink-muted))] block mb-2">{t("settings.phone", "Телефон")}</label>
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+359888123456" className="w-full max-w-sm border border-[hsl(var(--line))] h-11 px-3 text-sm" data-testid="phone-input" />
           </div>
 
           <div className="mt-6 flex items-center gap-4">

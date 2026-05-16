@@ -1,5 +1,62 @@
 # Changelog
 
+
+## 2026-05-16 — Iteration 16: Passkey hotfixes (P0)
+
+### Frontend
+- **Passkey reauth input focus loss FIXED** — `PasskeySection.jsx`. Преди:
+  `<ReauthGate />` беше дефиниран ВЪТРЕ в функционалния компонент → на
+  всеки render React виждаше нов component identity и unmount-ваше
+  `<input>` → фокусът се губеше след 1 символ. След: JSX е inline в
+  основния return (canonical React fix).
+- **AccountSettingsPage runtime crash FIXED** — `smsOpt is not defined`
+  ReferenceError след premахването на SMS опции в предишната итерация.
+  Cекцията е преобразувана в чисто "Телефон за контакт" поле (телефонът
+  все още се пази за фактуриране / KYC, без SMS opt-in).
+
+### Backend — WebAuthn multi-domain (passkey.py)
+- `rp_id` сега е **динамичен per request** — извлича се от `Origin`
+  header (`autoandbid.bg` / `.com` / `.ro`), вместо да е hardcoded на
+  `.bg`. www.* се мапва към apex. Preview / dev hostnames използват
+  env `WEBAUTHN_RP_ID` като fallback.
+- Всеки credential съхранява `rp_id_when_created`; verification ползва
+  точно него → пасiquetите enrolled-нати на `.ro` работят на `.ro`,
+  тези на `.bg` работят на `.bg`. Това е правилният WebAuthn модел и
+  единственият, който е надежден на всички съвременни браузъри
+  (Chromium / Safari / Firefox), за разлика от Related Origin Requests
+  manifest, който е counterintuitively unreliable на `.ro` / Safari.
+- `_allowed_origins_for_rp()` ограничава `expected_origin` до apex + www
+  на конкретния brand при verification — допълнителна защита.
+
+### Files touched
+- `/app/frontend/src/components/PasskeySection.jsx`
+- `/app/frontend/src/pages/AccountSettingsPage.jsx`
+- `/app/backend/routers/passkey.py`
+
+### Verification
+- curl test: 4/4 brand origins (bg/com/ro/www.ro) връщат правилен `rpId`.
+- Playwright test: 8 символа въведени в passkey reauth input → фокусът
+  остава върху същия `<input>`, value е пълен. PASS.
+- Settings page рендерира без runtime errors.
+
+### Outstanding (NOT in this iteration)
+- **Production CDN 301** (`img.autoandbid.bg`) — Ansible deploy role
+  вече FAILS с smoke test при тази грешка (виж
+  `deploy/hetzner/ansible/roles/frontend/tasks/main.yml`, "CDN smoke
+  test"). Ако 301 persist-ва **след** успешен `ansible-playbook`, тогава
+  източникът е Cloudflare (Page Rule / Bulk Redirect / orange-cloud на
+  CNAME сочещ грешен origin), НЕ origin nginx. Debug стъпки:
+    1. `curl -sk -D - --resolve img.autoandbid.bg:443:$(dig +short ab-front1) https://img.autoandbid.bg/uploads/foo.jpg`
+       (заобикаля Cloudflare — ако върне 404 image/jpeg → origin OK).
+    2. `curl -sk -D - https://img.autoandbid.bg/uploads/foo.jpg`
+       (минава през CF — ако върне 301 → CF проблем).
+    3. В Cloudflare → Rules → Page Rules + Bulk Redirects:
+       търси правило с pattern съдържащ `img.autoandbid.bg` или
+       `*autoandbid.bg/*`.
+    4. DNS: `img.autoandbid.bg` трябва да е CNAME към `ab-front1`
+       или A към публичния IP, **не** към `autoandbid.bg`.
+
+
 ## 2026-05-04 — Iteration 15: Refactor + Bid Confirmation UX
 
 ### Backend refactor (server.py → routers/)

@@ -152,38 +152,13 @@ export default function PasskeySection() {
     }
   };
 
-  // ── Re-auth gate ───────────────────────────────────────────────────
-  const ReauthGate = () => (
-    <form onSubmit={submitReauth} className="mt-4 border border-[hsl(var(--line))] rounded-md p-3 bg-[hsl(var(--background))]" data-testid="passkey-reauth-gate">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        <Lock size={16} />
-        {t("passkey.reauth_title", "Потвърди паролата си, за да управляваш passkeys")}
-      </div>
-      <p className="text-xs text-[hsl(var(--ink-muted))] mt-1">
-        {t("passkey.reauth_subtitle", "Скорошното потвърждаване остава активно за 10 минути.")}
-      </p>
-      <div className="mt-3 flex flex-col sm:flex-row gap-2">
-        <input
-          type="password"
-          value={reauthPwd}
-          onChange={(e) => setReauthPwd(e.target.value)}
-          placeholder={t("passkey.password", "Парола")}
-          className="flex-1 border border-[hsl(var(--line))] rounded px-3 py-2 text-sm"
-          autoComplete="current-password"
-          data-testid="passkey-reauth-pwd"
-          required
-        />
-        <button
-          type="submit"
-          disabled={reauthBusy || !reauthPwd}
-          className="btn btn-primary btn-sm"
-          data-testid="passkey-reauth-submit"
-        >
-          {reauthBusy ? t("passkey.verifying", "Проверка...") : t("passkey.confirm", "Потвърди")}
-        </button>
-      </div>
-    </form>
-  );
+  // NOTE: Re-auth gate is intentionally inlined in the JSX below.
+  // Defining it as a nested component (e.g. `const ReauthGate = () => …`)
+  // here would make React see a NEW component identity on every parent
+  // render — which happens on every keystroke because `reauthPwd` is in
+  // state — causing the password <input> to unmount + remount and lose
+  // focus after the first character. Keep this JSX inline. See the fix
+  // history in commit log if you're tempted to refactor.
 
   return (
     <section className="border border-[hsl(var(--line))] rounded-card p-5 bg-[hsl(var(--surface))]" data-testid="passkey-section">
@@ -202,7 +177,37 @@ export default function PasskeySection() {
       {err && <div className="mt-3 text-sm text-[hsl(var(--danger))]" data-testid="passkey-error">{err}</div>}
       {info && <div className="mt-3 text-sm text-[hsl(var(--success,#16a34a))]" data-testid="passkey-info">{info}</div>}
 
-      {!reauthRecent && <ReauthGate />}
+      {!reauthRecent && (
+        <form onSubmit={submitReauth} className="mt-4 border border-[hsl(var(--line))] rounded-md p-3 bg-[hsl(var(--background))]" data-testid="passkey-reauth-gate">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Lock size={16} />
+            {t("passkey.reauth_title", "Потвърди паролата си, за да управляваш passkeys")}
+          </div>
+          <p className="text-xs text-[hsl(var(--ink-muted))] mt-1">
+            {t("passkey.reauth_subtitle", "Скорошното потвърждаване остава активно за 10 минути.")}
+          </p>
+          <div className="mt-3 flex flex-col sm:flex-row gap-2">
+            <input
+              type="password"
+              value={reauthPwd}
+              onChange={(e) => setReauthPwd(e.target.value)}
+              placeholder={t("passkey.password", "Парола")}
+              className="flex-1 border border-[hsl(var(--line))] rounded px-3 py-2 text-sm"
+              autoComplete="current-password"
+              data-testid="passkey-reauth-pwd"
+              required
+            />
+            <button
+              type="submit"
+              disabled={reauthBusy || !reauthPwd}
+              className="btn btn-primary btn-sm"
+              data-testid="passkey-reauth-submit"
+            >
+              {reauthBusy ? t("passkey.verifying", "Проверка...") : t("passkey.confirm", "Потвърди")}
+            </button>
+          </div>
+        </form>
+      )}
 
       {!loading && items.length > 0 && (
         <ul className="mt-4 divide-y divide-[hsl(var(--line))]" data-testid="passkey-list">

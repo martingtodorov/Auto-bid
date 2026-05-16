@@ -57,13 +57,30 @@ from webauthn.helpers.structs import (
 log = logging.getLogger(__name__)
 
 # ---- Configuration ---------------------------------------------------------
-# Canonical RP ID is `autoandbid.bg` (BG market is the primary one). The
-# other two brand TLDs (.com, .ro) participate via the
-# `/.well-known/webauthn` Related Origin Requests manifest, so a single
-# passkey works on all three domains in modern browsers (Chromium 128+,
-# Safari 18+).
+# Per-domain RP ID. WebAuthn rp_id must be the registrable domain (eTLD+1)
+# the user is currently browsing — otherwise the browser rejects the call.
+# Historically we tried to use a single canonical `autoandbid.bg` + a
+# Related Origin Requests manifest, but that path is unreliable on `.ro`
+# (Safari + several Chromium-on-Android builds don't honour the manifest),
+# which broke passkeys for Romanian users entirely.
+#
+# New model:
+#   * `_rp_id_for_request(request)` derives the rp_id at request time:
+#     `autoandbid.bg`, `autoandbid.com` or `autoandbid.ro`.
+#   * Each credential stores `rp_id_when_created`, which is used for
+#     verification so a passkey enrolled on `.ro` keeps working on `.ro`.
+#   * Users register a passkey per domain they actually use; this is the
+#     standard WebAuthn model and the only one that works reliably across
+#     all three modern browsers.
+#
+# The env vars below are dev/preview fallbacks only.
 RP_ID = os.environ.get("WEBAUTHN_RP_ID", "autoandbid.bg")
 RP_NAME = os.environ.get("WEBAUTHN_RP_NAME", "Auto&Bid")
+
+# Recognised brand registrable domains. Order matters only for tie-breaking
+# in `_rp_id_for_request` (we match the more specific host first).
+_BRAND_RP_IDS = ("autoandbid.bg", "autoandbid.com", "autoandbid.ro")
+
 ALLOWED_ORIGINS = [
     "https://autoandbid.com",
     "https://autoandbid.bg",
@@ -77,6 +94,54 @@ ALLOWED_ORIGINS = [
 _extra = os.environ.get("WEBAUTHN_EXTRA_ORIGINS", "").strip()
 if _extra:
     ALLOWED_ORIGINS.extend(o.strip() for o in _extra.split(",") if o.strip())
+
+
+def _host_from_origin(origin: str) -> str:
+    """Extract a lower-cased hostname from a full https?:// origin string."""
+    if not origin:
+        return ""
+    try:
+        from urllib.parse import urlparse
+        return (urlparse(origin).hostname or "").lower()
+    except Exception:
+        return ""
+
+
+def _rp_id_for_request(request: Request) -> str:
+    """Derive the WebAuthn RP ID for the *current* request.
+
+    Returns one of `autoandbid.bg / .com / .ro` when the request comes
+    from a known brand domain (apex or `www.`). Falls back to the env
+    `RP_ID` (used by preview / dev / E2E hosts) for anything else.
+
+    The rp_id is the registrable domain — `www.autoandbid.bg` is mapped
+    to `autoandbid.bg` so a passkey registered on the apex is offered on
+    the `www.` mirror too (and vice-versa). Cross-TLD is NOT collapsed:
+    `.bg` and `.ro` are independent RP scopes per the WebAuthn spec.
+    """
+    host = _host_from_origin(request.headers.get("origin") or "")
+    if not host:
+        # Trust Host header only when Origin is missing (e.g. server-side
+        # tooling). Cloudflare + nginx already restrict Host to the SANs
+        # in the Origin Certificate, so this is safe.
+        host = (request.headers.get("host") or "").split(":")[0].lower()
+    if host.startswith("www."):
+        host = host[4:]
+    for brand in _BRAND_RP_IDS:
+        if host == brand:
+            return brand
+    return RP_ID
+
+
+def _allowed_origins_for_rp(rp_id: str) -> list[str]:
+    """Origins the WebAuthn library will accept for the given rp_id.
+
+    Brand rp_ids match both the apex and `www.` variants. The dev env
+    rp_id keeps the full ALLOWED_ORIGINS list (preview hosts + extras).
+    """
+    if rp_id in _BRAND_RP_IDS:
+        return [f"https://{rp_id}", f"https://www.{rp_id}"]
+    return ALLOWED_ORIGINS
 
 # Re-auth window: how long a freshly-verified password remains "fresh"
 # for sensitive operations (add / remove passkey). 10 minutes balances
@@ -182,6 +247,10 @@ async def _audit(db, user_id: str, action: str, request: Request, **extra):
 
 
 def _verify_origin(request: Request) -> str:
+    """Check the request Origin matches one of the configured allow-list
+    entries (brand domains + env-driven preview hosts). Returns the
+    origin string for downstream use.
+    """
     origin = request.headers.get("origin") or ""
     if origin not in ALLOWED_ORIGINS:
         raise HTTPException(
@@ -323,7 +392,7 @@ def build_passkey_router(
         ]
 
         opts = generate_registration_options(
-            rp_id=RP_ID,
+            rp_id=_rp_id_for_request(request),
             rp_name=RP_NAME,
             user_id=user["id"].encode(),
             user_name=user["email"],
@@ -348,13 +417,17 @@ def build_passkey_router(
 
         # Persist the challenge for ~10 min so register-finish can verify it.
         # TTL index on `expires_at` will auto-expire abandoned challenges.
+        # `rp_id` is captured here so finish uses the exact same one even
+        # if the client somehow sends a different Host on the next call.
         challenge_b64 = _b64url_encode(opts.challenge)
+        rp_id_used = _rp_id_for_request(request)
         await db.passkey_challenges.insert_one({
             "id": str(_uuid.uuid4()),
             "challenge": challenge_b64,
             "user_id": user["id"],
             "operation": "register",
             "device_name": device_name[:80],
+            "rp_id": rp_id_used,
             "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
         })
         return {"options": options_to_json(opts), "device_name": device_name}
@@ -374,11 +447,12 @@ def build_passkey_router(
             raise HTTPException(status_code=400, detail="No active passkey challenge — restart registration.")
 
         try:
+            rp_id_used = challenge_doc.get("rp_id") or _rp_id_for_request(request)
             verification = verify_registration_response(
                 credential=payload.credential,
                 expected_challenge=_b64url_decode(challenge_doc["challenge"]),
-                expected_origin=ALLOWED_ORIGINS,  # any of the three brand TLDs
-                expected_rp_id=RP_ID,
+                expected_origin=_allowed_origins_for_rp(rp_id_used),
+                expected_rp_id=rp_id_used,
                 require_user_verification=False,
             )
         except Exception as e:  # noqa: BLE001
@@ -415,7 +489,7 @@ def build_passkey_router(
             "device_name": name[:80],
             "created_at": datetime.now(timezone.utc).isoformat(),
             "last_used_at": None,
-            "rp_id_when_created": RP_ID,
+            "rp_id_when_created": rp_id_used,
             "origin_when_created": origin,
         })
         await _audit(db, user["id"], "passkey_created", request, credential_id=cred_id_b64)
@@ -460,8 +534,9 @@ def build_passkey_router(
                     for c in creds
                 ]
 
+        rp_id_used = _rp_id_for_request(request)
         opts = generate_authentication_options(
-            rp_id=RP_ID,
+            rp_id=rp_id_used,
             allow_credentials=allow if allow else None,
             user_verification=UserVerificationRequirement.PREFERRED,
         )
@@ -471,6 +546,7 @@ def build_passkey_router(
             "challenge": challenge_b64,
             "user_id": target_uid,
             "operation": "authenticate",
+            "rp_id": rp_id_used,
             "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
         })
         return {"options": options_to_json(opts)}
@@ -502,11 +578,22 @@ def build_passkey_router(
             raise HTTPException(status_code=400, detail="No active challenge — start over.")
 
         try:
+            # Prefer the rp_id the credential was created with — this is
+            # what the browser uses to compute the rpIdHash inside the
+            # authenticator data. Legacy creds (pre-multi-domain rollout)
+            # were all bound to `autoandbid.bg`; new creds are domain-
+            # specific. Fall back to the challenge's rp_id, then to the
+            # request-derived rp_id.
+            rp_id_used = (
+                stored.get("rp_id_when_created")
+                or chq.get("rp_id")
+                or _rp_id_for_request(request)
+            )
             verification = verify_authentication_response(
                 credential=credential,
                 expected_challenge=_b64url_decode(chq["challenge"]),
-                expected_rp_id=RP_ID,
-                expected_origin=ALLOWED_ORIGINS,
+                expected_rp_id=rp_id_used,
+                expected_origin=_allowed_origins_for_rp(rp_id_used),
                 credential_public_key=_b64url_decode(stored["public_key"]),
                 credential_current_sign_count=stored["sign_count"],
                 require_user_verification=False,
@@ -573,8 +660,9 @@ def build_passkey_router(
         if not creds:
             raise HTTPException(status_code=400, detail="Няма регистрирани passkeys за акаунта.")
         allow = [PublicKeyCredentialDescriptor(id=_b64url_decode(c["credential_id"])) for c in creds]
+        rp_id_used = _rp_id_for_request(request)
         opts = generate_authentication_options(
-            rp_id=RP_ID,
+            rp_id=rp_id_used,
             allow_credentials=allow,
             user_verification=UserVerificationRequirement.PREFERRED,
         )
@@ -585,6 +673,7 @@ def build_passkey_router(
             "user_id": ch["user_id"],
             "operation": "2fa",
             "auth_challenge_hash": ch_hash,
+            "rp_id": rp_id_used,
             "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
         })
         return {"options": options_to_json(opts)}
