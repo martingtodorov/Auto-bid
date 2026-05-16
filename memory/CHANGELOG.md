@@ -1,7 +1,56 @@
 # Changelog
 
 
-## 2026-05-16 — Iteration 23: Editable email templates — full registry migration
+## 2026-05-16 — Iteration 24: Multi-language email templates (EN + RO)
+
+### Added
+22 new email templates (11 transactional × 2 languages):
+
+  **EN**: password_reset_en, outbid_en, won_en, approved_en, rejected_en,
+  vin_delivery_en, seller_new_bid_en, seller_new_comment_en,
+  ending_soon_watcher_en, ending_soon_bidder_en, reserve_met_en
+
+  **RO**: same 11 slugs with `_ro` suffix.
+
+Total templates: **36** = 12 × 3 languages (BG + EN + RO).
+
+### `localized_render(base_slug, lang, vars)` helper
+Resolution chain:
+  1. `<base>_<lang>` — explicit translation
+  2. `<base>_bg` — Bulgarian fallback (default site language)
+  3. `<base>` — un-suffixed (transitional; existing legacy slugs without
+     lang suffix still work)
+
+Never crashes on a missing locale.
+
+### `emails.py` helpers
+All 11 transactional `email_*` functions now accept `lang="bg"` kwarg.
+Each helper calls `localized_render()` instead of `render()`. Backwards
+compatible — existing callers without `lang=` get BG.
+
+### Callsite updates (server.py + routers/negotiations.py)
+All 16 callsites updated to pass `lang=user.get("lang") or "bg"`. Users'
+language preference is read from the `users` collection's `lang` field
+(already populated at registration via `i18next` detection).
+
+### Files touched
+- `/app/backend/email_templates.py` (22 new templates + helper)
+- `/app/backend/emails.py` (lang param everywhere)
+- `/app/backend/server.py` (16 callsites)
+- `/app/backend/routers/negotiations.py` (1 callsite)
+
+### Verification
+- Backend startup: "Email templates: seeded 22 system defaults" (new seed
+  on top of the 14 from iteration 23).
+- `GET /admin/email-templates` returns 36 entries: 12 BG + 12 EN + 12 RO.
+- Direct `localized_render("outbid", lang)` per-lang test:
+  - BG → "Изпреварени сте · BMW M3"
+  - EN → "You've been outbid · BMW M3"
+  - RO → "Ai fost depășit · BMW M3"
+- Playwright: admin tab shows "Системни (36) / Персонализирани (0)" with
+  36 template cards renderable.
+
+
 
 ### Bug
 The "Шаблони за имейли" admin tab was effectively decorative. Every

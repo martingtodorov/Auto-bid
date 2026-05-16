@@ -2879,7 +2879,7 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
             from services import notif_prefs as _nprefs
             if _nprefs.is_enabled(prev_user, "email", "outbid"):
                 try:
-                    await email_outbid(prev_user["email"], prev_user["name"], a["title"], auction_id, amount)
+                    await email_outbid(prev_user["email"], prev_user["name"], a["title"], auction_id, amount, lang=prev_user.get("lang") or "bg")
                 except Exception as e:
                     logger.error("email_outbid failed: %s", e)
             # Web Push — outbid notification (localized to user's lang)
@@ -2963,7 +2963,7 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
         from services import notif_prefs as _nprefs
         if seller and seller.get("email") and _nprefs.is_enabled(seller, "email", "seller_new_bid"):
             try:
-                await email_seller_new_bid(seller["email"], seller.get("name", ""), a["title"], auction_id, user["name"], amount, result["bid_count"])
+                await email_seller_new_bid(seller["email"], seller.get("name", ""), a["title"], auction_id, user["name"], amount, result["bid_count"], lang=seller.get("lang") or "bg")
             except Exception as e:
                 logger.error("email_seller_new_bid failed: %s", e)
         # Web Push — your car got a bid (localized for the seller)
@@ -3001,7 +3001,7 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
             if seller.get("email") and _nprefs.is_enabled(seller, "email", "reserve_met"):
                 try:
                     from emails import email_reserve_met
-                    await email_reserve_met(seller["email"], seller.get("name", ""), a["title"], auction_id, amount, float(reserve))
+                    await email_reserve_met(seller["email"], seller.get("name", ""), a["title"], auction_id, amount, float(reserve), lang=seller.get("lang") or "bg")
                 except Exception as e:
                     logger.error("email_reserve_met failed: %s", e)
             if _nprefs.is_enabled(seller, "push", "reserve_met"):
@@ -3407,11 +3407,12 @@ async def buy_now_finalize(auction_id: str, body: dict, user: dict = Depends(req
     seller_id = a.get("seller_id")
     if seller_id and seller_id != "platform":
         try:
-            seller = await db.users.find_one({"id": seller_id}, {"_id": 0, "email": 1, "name": 1})
+            seller = await db.users.find_one({"id": seller_id}, {"_id": 0, "email": 1, "name": 1, "lang": 1})
             if seller and seller.get("email"):
                 await email_seller_new_bid(
                     seller["email"], seller.get("name", ""), a["title"], auction_id,
                     user["name"], bn_net, int(a.get("bid_count") or 0),
+                    lang=seller.get("lang") or "bg",
                 )
         except Exception as e:
             logger.warning("buy-now seller email failed: %s", e)
@@ -3596,7 +3597,7 @@ async def add_comment(auction_id: str, payload: CommentCreate, user: dict = Depe
         if seller and seller.get("email"):
             try:
                 snippet = (payload.text.strip()[:200] + "…") if len(payload.text.strip()) > 200 else payload.text.strip()
-                await email_seller_new_comment(seller["email"], seller.get("name", ""), a["title"], auction_id, user["name"], snippet)
+                await email_seller_new_comment(seller["email"], seller.get("name", ""), a["title"], auction_id, user["name"], snippet, lang=seller.get("lang") or "bg")
             except Exception as e:
                 logger.error("email_seller_new_comment failed: %s", e)
 
@@ -3769,7 +3770,7 @@ async def admin_approve(auction_id: str, _admin: dict = Depends(require_admin)):
     seller = await db.users.find_one({"id": a.get("seller_id")}, {"_id": 0})
     if seller and seller.get("email"):
         try:
-            await email_approved(seller["email"], seller.get("name", ""), a["title"], auction_id)
+            await email_approved(seller["email"], seller.get("name", ""), a["title"], auction_id, lang=seller.get("lang") or "bg")
         except Exception as e:
             logger.error("email_approved failed: %s", e)
     # In-app + push notification to seller (user can opt-out via notification_prefs.push.listing_approved)
@@ -4227,7 +4228,7 @@ async def admin_reject(auction_id: str, payload: AdminDecision, _admin: dict = D
     seller = await db.users.find_one({"id": a.get("seller_id")}, {"_id": 0})
     if seller and seller.get("email"):
         try:
-            await email_rejected(seller["email"], seller.get("name", ""), a["title"], payload.reason or "")
+            await email_rejected(seller["email"], seller.get("name", ""), a["title"], payload.reason or "", lang=seller.get("lang") or "bg")
         except Exception as e:
             logger.error("email_rejected failed: %s", e)
     return {"ok": True}
@@ -4311,7 +4312,7 @@ async def admin_capture_premium(auction_id: str, _admin: dict = Depends(require_
         u = await db.users.find_one({"id": winner_id}, {"_id": 0})
         if u:
             try:
-                await email_won(u["email"], u["name"], a["title"], auction_id, float(a["current_bid_eur"]))
+                await email_won(u["email"], u["name"], a["title"], auction_id, float(a["current_bid_eur"]), lang=u.get("lang") or "bg")
             except Exception as e:
                 logger.error("email_won failed: %s", e)
 
@@ -4387,7 +4388,7 @@ async def request_vin(auction_id: str, user: dict = Depends(get_current_user)):
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
     try:
-        await email_vin_delivery(user["email"], user.get("name", ""), a["title"], auction_id, a["vin"].strip().upper())
+        await email_vin_delivery(user["email"], user.get("name", ""), a["title"], auction_id, a["vin"].strip().upper(), lang=user.get("lang") or "bg")
     except Exception as e:
         logger.error("email_vin_delivery failed: %s", e)
     return {"ok": True, "message": f"Изпратихме пълния VIN на {user['email']}"}
@@ -5334,7 +5335,7 @@ async def seller_accept_high_bid(auction_id: str, user: dict = Depends(get_curre
     winner = await db.users.find_one({"id": a["high_bidder_id"]}, {"_id": 0})
     if winner:
         try:
-            await email_won(winner["email"], winner["name"], a["title"], auction_id, float(a["current_bid_eur"]))
+            await email_won(winner["email"], winner["name"], a["title"], auction_id, float(a["current_bid_eur"]), lang=winner.get("lang") or "bg")
         except Exception as e:
             logger.error("email_won failed: %s", e)
     return {"ok": True}
@@ -6164,7 +6165,7 @@ async def _notify_ending_soon_once():
             if u.get("email") and _nprefs.is_enabled(u, "email", "ending_soon"):
                 try:
                     from emails import email_ending_soon
-                    await email_ending_soon(u["email"], u.get("name", ""), title, auction_id, amount, role)
+                    await email_ending_soon(u["email"], u.get("name", ""), title, auction_id, amount, role, lang=u.get("lang") or "bg")
                 except Exception as e:
                     logger.error("email_ending_soon failed for %s: %s", uid, e)
             if _nprefs.is_enabled(u, "push", "ending_soon"):
@@ -6416,7 +6417,7 @@ async def _finalize_expired_auctions_once():
         try:
             winner = await db.users.find_one({"id": a["high_bidder_id"]}, {"_id": 0})
             if winner and winner.get("email"):
-                await email_won(winner["email"], winner["name"], a["title"], auction_id, current_bid)
+                await email_won(winner["email"], winner["name"], a["title"], auction_id, current_bid, lang=winner.get("lang") or "bg")
         except Exception as e:
             logger.error("email_won auto-finalize failed for %s: %s", auction_id, e)
         logger.info("Auto-finalized auction %s → sold (€%.0f)", auction_id, current_bid)

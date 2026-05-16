@@ -12,6 +12,7 @@ import logging
 import resend
 
 from email_templates import render as render_template
+from email_templates import localized_render as render_localized
 
 logger = logging.getLogger(__name__)
 
@@ -84,47 +85,47 @@ def _shell(title: str, body_html: str) -> str:
 """
 
 
-async def email_outbid(to: str, name: str, auction_title: str, auction_id: str, new_bid: float):
-    subject, header, body = render_template("outbid", {
+async def email_outbid(to: str, name: str, auction_title: str, auction_id: str, new_bid: float, lang: str = "bg"):
+    subject, header, body = render_localized("outbid", lang, {
         "name": name, "auction_title": auction_title, "auction_id": auction_id,
         "new_bid": f"{int(new_bid):,}", "app_url": APP_URL,
     })
     await send_email(to, subject, _shell(header, body))
 
 
-async def email_won(to: str, name: str, auction_title: str, auction_id: str, price: float):
-    subject, header, body = render_template("won", {
+async def email_won(to: str, name: str, auction_title: str, auction_id: str, price: float, lang: str = "bg"):
+    subject, header, body = render_localized("won", lang, {
         "name": name, "auction_title": auction_title, "auction_id": auction_id,
         "price": f"{int(price):,}", "app_url": APP_URL,
     })
     await send_email(to, subject, _shell(header, body))
 
 
-async def email_approved(to: str, name: str, auction_title: str, auction_id: str):
-    subject, header, body = render_template("approved", {
+async def email_approved(to: str, name: str, auction_title: str, auction_id: str, lang: str = "bg"):
+    subject, header, body = render_localized("approved", lang, {
         "name": name, "auction_title": auction_title, "auction_id": auction_id,
         "app_url": APP_URL,
     })
     await send_email(to, subject, _shell(header, body))
 
 
-async def email_rejected(to: str, name: str, auction_title: str, reason: str):
-    subject, header, body = render_template("rejected", {
+async def email_rejected(to: str, name: str, auction_title: str, reason: str, lang: str = "bg"):
+    subject, header, body = render_localized("rejected", lang, {
         "name": name, "auction_title": auction_title, "reason": reason or "—",
     })
     await send_email(to, subject, _shell(header, body))
 
 
-async def email_vin_delivery(to: str, name: str, auction_title: str, auction_id: str, vin: str):
-    subject, header, body = render_template("vin_delivery", {
+async def email_vin_delivery(to: str, name: str, auction_title: str, auction_id: str, vin: str, lang: str = "bg"):
+    subject, header, body = render_localized("vin_delivery", lang, {
         "name": name, "auction_title": auction_title, "auction_id": auction_id,
         "vin": vin, "app_url": APP_URL,
     })
     await send_email(to, subject, _shell(header, body))
 
 
-async def email_seller_new_bid(to: str, name: str, auction_title: str, auction_id: str, bidder_name: str, amount: float, bid_count: int):
-    subject, header, body = render_template("seller_new_bid", {
+async def email_seller_new_bid(to: str, name: str, auction_title: str, auction_id: str, bidder_name: str, amount: float, bid_count: int, lang: str = "bg"):
+    subject, header, body = render_localized("seller_new_bid", lang, {
         "name": name, "auction_title": auction_title, "auction_id": auction_id,
         "bidder_name": bidder_name, "amount": f"{int(amount):,}",
         "bid_count": bid_count, "app_url": APP_URL,
@@ -132,26 +133,26 @@ async def email_seller_new_bid(to: str, name: str, auction_title: str, auction_i
     await send_email(to, subject, _shell(header, body))
 
 
-async def email_seller_new_comment(to: str, name: str, auction_title: str, auction_id: str, commenter_name: str, snippet: str):
-    subject, header, body = render_template("seller_new_comment", {
+async def email_seller_new_comment(to: str, name: str, auction_title: str, auction_id: str, commenter_name: str, snippet: str, lang: str = "bg"):
+    subject, header, body = render_localized("seller_new_comment", lang, {
         "name": name, "auction_title": auction_title, "auction_id": auction_id,
         "commenter_name": commenter_name, "snippet": snippet, "app_url": APP_URL,
     })
     await send_email(to, subject, _shell(header, body))
 
 
-async def email_ending_soon(to: str, name: str, auction_title: str, auction_id: str, current_bid: float, role: str = "watcher"):
+async def email_ending_soon(to: str, name: str, auction_title: str, auction_id: str, current_bid: float, role: str = "watcher", lang: str = "bg"):
     """role: 'watcher' (favourited) or 'bidder' (currently leading or active in bidding)."""
-    slug = "ending_soon_bidder" if role == "bidder" else "ending_soon_watcher"
-    subject, header, body = render_template(slug, {
+    base = "ending_soon_bidder" if role == "bidder" else "ending_soon_watcher"
+    subject, header, body = render_localized(base, lang, {
         "name": name, "auction_title": auction_title, "auction_id": auction_id,
         "current_bid": f"{int(current_bid):,}", "app_url": APP_URL,
     })
     await send_email(to, subject, _shell(header, body))
 
 
-async def email_reserve_met(to: str, name: str, auction_title: str, auction_id: str, current_bid: float, reserve: float):
-    subject, header, body = render_template("reserve_met", {
+async def email_reserve_met(to: str, name: str, auction_title: str, auction_id: str, current_bid: float, reserve: float, lang: str = "bg"):
+    subject, header, body = render_localized("reserve_met", lang, {
         "name": name, "auction_title": auction_title, "auction_id": auction_id,
         "current_bid": f"{int(current_bid):,}", "reserve": f"{int(reserve):,}",
         "app_url": APP_URL,

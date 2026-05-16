@@ -323,6 +323,356 @@ SYSTEM_TEMPLATES: dict[str, dict] = {
             f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_PRIMARY}">Виж търга</a></p>'
         ),
     },
+
+    # ── EN translations ────────────────────────────────────────────────
+    "password_reset_en": {
+        "system": True, "lang": "en",
+        "description": "Password reset code (6-digit OTP).",
+        "placeholders": ["name", "code", "ttl_min"],
+        "subject": "autoandbid.com — Password reset code",
+        "header": "Password reset",
+        "body_html": (
+            '<p style="margin:0 0 16px 0;">Hi {{name}},</p>'
+            '<p style="margin:0 0 16px 0;">We received a request to reset the password '
+            "for your autoandbid.com account.</p>"
+            '<p style="margin:0 0 8px 0;">Your verification code (valid {{ttl_min}} minutes):</p>'
+            '<div style="font-family:\'Courier New\',monospace;font-size:32px;'
+            "letter-spacing:8px;background:#f6f7f8;padding:18px;text-align:center;"
+            'border-radius:10px;border:1px solid #e5e7eb;margin:16px 0;">'
+            "<strong>{{code}}</strong></div>"
+            '<p style="color:#6b7280;font-size:13px;margin:24px 0 0 0;">'
+            "If you did not request this, you can safely ignore this email — "
+            "your password will not be changed.</p>"
+        ),
+    },
+    "outbid_en": {
+        "system": True, "lang": "en",
+        "description": "You've been outbid — sent to bidders when a higher offer arrives.",
+        "placeholders": ["name", "auction_title", "auction_id", "new_bid", "app_url"],
+        "subject": "You've been outbid · {{auction_title}}",
+        "header": "A new bid is ahead of yours",
+        "body_html": (
+            "<p>Hi {{name}},</p>"
+            "<p>Someone placed a higher bid on <strong>{{auction_title}}</strong>.</p>"
+            '<p style="font-size:20px;margin:20px 0;">New current bid: <strong>€{{new_bid}}</strong></p>'
+            "<p>Your pre-authorization has been automatically released.</p>"
+            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_DARK}">Back to auction</a></p>'
+        ),
+    },
+    "won_en": {
+        "system": True, "lang": "en",
+        "description": "Congratulations email when the user wins an auction.",
+        "placeholders": ["name", "auction_title", "auction_id", "price", "app_url"],
+        "subject": "🏁 You won · {{auction_title}}",
+        "header": "Your bid was the winning one",
+        "body_html": (
+            "<p>Congratulations, {{name}}!</p>"
+            "<p>You won the auction for <strong>{{auction_title}}</strong>.</p>"
+            '<p style="font-size:20px;margin:20px 0;">Final price: <strong>€{{price}}</strong></p>'
+            "<p>Our team will contact you within 24 hours to finalise. Your pre-authorization "
+            "remains held until the deal is completed.</p>"
+            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_PRIMARY}">View auction</a></p>'
+        ),
+    },
+    "approved_en": {
+        "system": True, "lang": "en",
+        "description": "Listing approved by moderator and published.",
+        "placeholders": ["name", "auction_title", "auction_id", "app_url"],
+        "subject": "Listing approved · {{auction_title}}",
+        "header": "Your listing has been approved",
+        "body_html": (
+            "<p>Hi {{name}},</p>"
+            "<p>Your listing for <strong>{{auction_title}}</strong> has been approved and is now live.</p>"
+            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_DARK}">View listing</a></p>'
+        ),
+    },
+    "rejected_en": {
+        "system": True, "lang": "en",
+        "description": "Listing requires changes — sent with a moderator's note.",
+        "placeholders": ["name", "auction_title", "reason"],
+        "subject": "Changes required · {{auction_title}}",
+        "header": "Your listing needs changes",
+        "body_html": (
+            "<p>Hi {{name}},</p>"
+            "<p>After review, your listing for <strong>{{auction_title}}</strong> was not approved.</p>"
+            '<p style="background:#fafafa;border:1px solid #e5e7eb;padding:14px;border-radius:8px;">'
+            "<strong>Note from the team:</strong><br/>{{reason | —}}</p>"
+            "<p>You can edit and resubmit.</p>"
+        ),
+    },
+    "vin_delivery_en": {
+        "system": True, "lang": "en",
+        "description": "VIN number — sent to the winning bidder.",
+        "placeholders": ["name", "auction_title", "auction_id", "vin", "app_url"],
+        "subject": "VIN number · {{auction_title}}",
+        "header": "Full VIN number",
+        "body_html": (
+            "<p>Hi {{name}},</p>"
+            "<p>Here is the full VIN for <strong>{{auction_title}}</strong>:</p>"
+            '<div style="margin:22px 0;padding:18px;background:#fafafa;border:1px solid #e5e7eb;'
+            'border-radius:10px;text-align:center;">'
+            '<div style="font-family:ui-monospace,\'IBM Plex Mono\',monospace;font-size:22px;'
+            'letter-spacing:4px;font-weight:600;">{{vin}}</div></div>'
+            "<p>You can run a VIN check via a workshop of your choice.</p>"
+            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_PRIMARY}">Back to auction</a></p>'
+            '<p style="color:#6b7280;font-size:12px;margin-top:20px;">The VIN is provided as '
+            "information to help you make an informed bidding decision.</p>"
+        ),
+    },
+    "seller_new_bid_en": {
+        "system": True, "lang": "en",
+        "description": "New bid — notifies the seller in real time.",
+        "placeholders": ["name", "auction_title", "auction_id", "bidder_name", "amount", "bid_count", "app_url"],
+        "subject": "New bid €{{amount}} · {{auction_title}}",
+        "header": "New bid on your auction",
+        "body_html": (
+            "<p>Hi {{name}},</p>"
+            "<p>A new bid was placed on <strong>{{auction_title}}</strong>.</p>"
+            '<div style="margin:20px 0;padding:16px;background:#fafafa;border:1px solid #e5e7eb;border-radius:10px;">'
+            '<div style="font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.1em;">New current</div>'
+            '<div style="font-size:26px;font-weight:700;margin-top:4px;">€{{amount}}</div>'
+            '<div style="font-size:13px;color:#6b7280;margin-top:6px;">from {{bidder_name}} · {{bid_count}} bids total</div>'
+            "</div>"
+            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_PRIMARY}">Follow auction</a></p>'
+        ),
+    },
+    "seller_new_comment_en": {
+        "system": True, "lang": "en",
+        "description": "New comment on the listing — notifies the seller.",
+        "placeholders": ["name", "auction_title", "auction_id", "commenter_name", "snippet", "app_url"],
+        "subject": "New comment · {{auction_title}}",
+        "header": "New comment on your listing",
+        "body_html": (
+            "<p>Hi {{name}},</p>"
+            "<p><strong>{{commenter_name}}</strong> left a comment on the listing "
+            "<strong>{{auction_title}}</strong>.</p>"
+            '<blockquote style="margin:20px 0;padding:14px 18px;background:#fafafa;'
+            'border-left:3px solid #1B4D3E;color:#111827;font-style:italic;">{{snippet}}</blockquote>'
+            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_DARK}">Reply</a></p>'
+        ),
+    },
+    "ending_soon_watcher_en": {
+        "system": True, "lang": "en",
+        "description": "Favourited auction ending soon — sent ~1 hour before end.",
+        "placeholders": ["name", "auction_title", "auction_id", "current_bid", "app_url"],
+        "subject": "⏰ Ending soon · {{auction_title}}",
+        "header": "Favourited auction ending soon",
+        "body_html": (
+            "<p>Hi {{name}},</p>"
+            "<p>About 1 hour remains until the end of <strong>{{auction_title}}</strong>.</p>"
+            '<div style="margin:18px 0;padding:14px 16px;background:#fafafa;border:1px solid #e5e7eb;border-radius:10px;">'
+            '<div style="font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.08em;">Current bid</div>'
+            '<div style="font-size:24px;font-weight:700;margin-top:4px;">€{{current_bid}}</div></div>'
+            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_PRIMARY}">Open auction</a></p>'
+        ),
+    },
+    "ending_soon_bidder_en": {
+        "system": True, "lang": "en",
+        "description": "Auction with your bid ending soon — sent ~1 hour before end.",
+        "placeholders": ["name", "auction_title", "auction_id", "current_bid", "app_url"],
+        "subject": "⏰ Ending soon · {{auction_title}}",
+        "header": "Auction with your bid ending soon",
+        "body_html": (
+            "<p>Hi {{name}},</p>"
+            "<p>About 1 hour remains until the end of <strong>{{auction_title}}</strong>.</p>"
+            '<div style="margin:18px 0;padding:14px 16px;background:#fafafa;border:1px solid #e5e7eb;border-radius:10px;">'
+            '<div style="font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.08em;">Current bid</div>'
+            '<div style="font-size:24px;font-weight:700;margin-top:4px;">€{{current_bid}}</div></div>'
+            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_PRIMARY}">Open auction</a></p>'
+        ),
+    },
+    "reserve_met_en": {
+        "system": True, "lang": "en",
+        "description": "Reserve price reached — congratulations email for the seller.",
+        "placeholders": ["name", "auction_title", "auction_id", "current_bid", "reserve", "app_url"],
+        "subject": "🎯 Reserve met · {{auction_title}}",
+        "header": "Reserve price reached",
+        "body_html": (
+            "<p>Congratulations, {{name}}!</p>"
+            "<p>The reserve price on your listing <strong>{{auction_title}}</strong> has been reached.</p>"
+            '<div style="margin:18px 0;padding:14px 16px;background:#fafafa;border:1px solid #e5e7eb;border-radius:10px;">'
+            '<div style="font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.08em;">Reserve · Current</div>'
+            '<div style="font-size:22px;font-weight:700;margin-top:4px;">€{{reserve}} → '
+            '<span style="color:#1B4D3E;">€{{current_bid}}</span></div></div>'
+            "<p>The auction is now guaranteed to sell at the current or a higher bid.</p>"
+            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_PRIMARY}">View auction</a></p>'
+        ),
+    },
+
+    # ── RO translations ────────────────────────────────────────────────
+    "password_reset_ro": {
+        "system": True, "lang": "ro",
+        "description": "Cod de resetare a parolei (OTP din 6 cifre).",
+        "placeholders": ["name", "code", "ttl_min"],
+        "subject": "autoandbid.com — Cod de resetare a parolei",
+        "header": "Resetare parolă",
+        "body_html": (
+            '<p style="margin:0 0 16px 0;">Bună {{name}},</p>'
+            '<p style="margin:0 0 16px 0;">Am primit o cerere de resetare a parolei '
+            "pentru contul tău autoandbid.com.</p>"
+            '<p style="margin:0 0 8px 0;">Codul tău de verificare (valabil {{ttl_min}} minute):</p>'
+            '<div style="font-family:\'Courier New\',monospace;font-size:32px;'
+            "letter-spacing:8px;background:#f6f7f8;padding:18px;text-align:center;"
+            'border-radius:10px;border:1px solid #e5e7eb;margin:16px 0;">'
+            "<strong>{{code}}</strong></div>"
+            '<p style="color:#6b7280;font-size:13px;margin:24px 0 0 0;">'
+            "Dacă nu ai inițiat această cerere, poți ignora în siguranță acest mesaj — "
+            "parola ta nu va fi schimbată.</p>"
+        ),
+    },
+    "outbid_ro": {
+        "system": True, "lang": "ro",
+        "description": "Ai fost depășit — se trimite ofertanților la apariția unei oferte mai mari.",
+        "placeholders": ["name", "auction_title", "auction_id", "new_bid", "app_url"],
+        "subject": "Ai fost depășit · {{auction_title}}",
+        "header": "O nouă ofertă este înaintea ta",
+        "body_html": (
+            "<p>Bună, {{name}},</p>"
+            "<p>Cineva a plasat o ofertă mai mare pentru <strong>{{auction_title}}</strong>.</p>"
+            '<p style="font-size:20px;margin:20px 0;">Noua ofertă curentă: <strong>€{{new_bid}}</strong></p>'
+            "<p>Pre-autorizarea ta a fost eliberată automat.</p>"
+            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_DARK}">Înapoi la licitație</a></p>'
+        ),
+    },
+    "won_ro": {
+        "system": True, "lang": "ro",
+        "description": "Email de felicitări la câștigarea unei licitații.",
+        "placeholders": ["name", "auction_title", "auction_id", "price", "app_url"],
+        "subject": "🏁 Ai câștigat · {{auction_title}}",
+        "header": "Oferta ta a fost câștigătoare",
+        "body_html": (
+            "<p>Felicitări, {{name}}!</p>"
+            "<p>Ai câștigat licitația pentru <strong>{{auction_title}}</strong>.</p>"
+            '<p style="font-size:20px;margin:20px 0;">Preț final: <strong>€{{price}}</strong></p>'
+            "<p>Echipa noastră te va contacta în 24 de ore pentru finalizare. Pre-autorizarea "
+            "rămâne reținută până la finalizarea tranzacției.</p>"
+            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_PRIMARY}">Vezi licitația</a></p>'
+        ),
+    },
+    "approved_ro": {
+        "system": True, "lang": "ro",
+        "description": "Anunțul a fost aprobat de moderator și este publicat.",
+        "placeholders": ["name", "auction_title", "auction_id", "app_url"],
+        "subject": "Anunț aprobat · {{auction_title}}",
+        "header": "Anunțul tău a fost aprobat",
+        "body_html": (
+            "<p>Bună, {{name}},</p>"
+            "<p>Anunțul tău pentru <strong>{{auction_title}}</strong> a fost aprobat și este activ.</p>"
+            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_DARK}">Vezi anunțul</a></p>'
+        ),
+    },
+    "rejected_ro": {
+        "system": True, "lang": "ro",
+        "description": "Anunțul necesită modificări — trimis cu nota moderatorului.",
+        "placeholders": ["name", "auction_title", "reason"],
+        "subject": "Modificări necesare · {{auction_title}}",
+        "header": "Anunțul necesită modificări",
+        "body_html": (
+            "<p>Bună, {{name}},</p>"
+            "<p>După analiză, anunțul tău pentru <strong>{{auction_title}}</strong> nu a fost aprobat.</p>"
+            '<p style="background:#fafafa;border:1px solid #e5e7eb;padding:14px;border-radius:8px;">'
+            "<strong>Notă de la echipă:</strong><br/>{{reason | —}}</p>"
+            "<p>Poți edita și trimite din nou.</p>"
+        ),
+    },
+    "vin_delivery_ro": {
+        "system": True, "lang": "ro",
+        "description": "Număr VIN — trimis ofertantului câștigător.",
+        "placeholders": ["name", "auction_title", "auction_id", "vin", "app_url"],
+        "subject": "Număr VIN · {{auction_title}}",
+        "header": "Număr VIN complet",
+        "body_html": (
+            "<p>Bună, {{name}},</p>"
+            "<p>Iată VIN-ul complet pentru <strong>{{auction_title}}</strong>:</p>"
+            '<div style="margin:22px 0;padding:18px;background:#fafafa;border:1px solid #e5e7eb;'
+            'border-radius:10px;text-align:center;">'
+            '<div style="font-family:ui-monospace,\'IBM Plex Mono\',monospace;font-size:22px;'
+            'letter-spacing:4px;font-weight:600;">{{vin}}</div></div>'
+            "<p>Poți efectua o verificare VIN printr-un service la alegere.</p>"
+            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_PRIMARY}">Înapoi la licitație</a></p>'
+            '<p style="color:#6b7280;font-size:12px;margin-top:20px;">VIN-ul este furnizat '
+            "informativ pentru a lua o decizie informată la licitație.</p>"
+        ),
+    },
+    "seller_new_bid_ro": {
+        "system": True, "lang": "ro",
+        "description": "Ofertă nouă — anunță vânzătorul în timp real.",
+        "placeholders": ["name", "auction_title", "auction_id", "bidder_name", "amount", "bid_count", "app_url"],
+        "subject": "Ofertă nouă €{{amount}} · {{auction_title}}",
+        "header": "Ofertă nouă în licitația ta",
+        "body_html": (
+            "<p>Bună, {{name}},</p>"
+            "<p>Ofertă nouă pentru <strong>{{auction_title}}</strong>.</p>"
+            '<div style="margin:20px 0;padding:16px;background:#fafafa;border:1px solid #e5e7eb;border-radius:10px;">'
+            '<div style="font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.1em;">Ofertă curentă</div>'
+            '<div style="font-size:26px;font-weight:700;margin-top:4px;">€{{amount}}</div>'
+            '<div style="font-size:13px;color:#6b7280;margin-top:6px;">de la {{bidder_name}} · total {{bid_count}} oferte</div>'
+            "</div>"
+            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_PRIMARY}">Urmărește licitația</a></p>'
+        ),
+    },
+    "seller_new_comment_ro": {
+        "system": True, "lang": "ro",
+        "description": "Comentariu nou la anunț — anunță vânzătorul.",
+        "placeholders": ["name", "auction_title", "auction_id", "commenter_name", "snippet", "app_url"],
+        "subject": "Comentariu nou · {{auction_title}}",
+        "header": "Comentariu nou la anunțul tău",
+        "body_html": (
+            "<p>Bună, {{name}},</p>"
+            "<p><strong>{{commenter_name}}</strong> a lăsat un comentariu la anunțul "
+            "<strong>{{auction_title}}</strong>.</p>"
+            '<blockquote style="margin:20px 0;padding:14px 18px;background:#fafafa;'
+            'border-left:3px solid #1B4D3E;color:#111827;font-style:italic;">{{snippet}}</blockquote>'
+            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_DARK}">Răspunde</a></p>'
+        ),
+    },
+    "ending_soon_watcher_ro": {
+        "system": True, "lang": "ro",
+        "description": "Licitație favorită se încheie curând — trimis cu ~1 oră înainte de final.",
+        "placeholders": ["name", "auction_title", "auction_id", "current_bid", "app_url"],
+        "subject": "⏰ Se încheie curând · {{auction_title}}",
+        "header": "Licitație favorită se încheie curând",
+        "body_html": (
+            "<p>Bună, {{name}},</p>"
+            "<p>Mai este aproximativ 1 oră până la finalul licitației <strong>{{auction_title}}</strong>.</p>"
+            '<div style="margin:18px 0;padding:14px 16px;background:#fafafa;border:1px solid #e5e7eb;border-radius:10px;">'
+            '<div style="font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.08em;">Ofertă curentă</div>'
+            '<div style="font-size:24px;font-weight:700;margin-top:4px;">€{{current_bid}}</div></div>'
+            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_PRIMARY}">Deschide licitația</a></p>'
+        ),
+    },
+    "ending_soon_bidder_ro": {
+        "system": True, "lang": "ro",
+        "description": "Licitație cu oferta ta se încheie curând — trimis cu ~1 oră înainte de final.",
+        "placeholders": ["name", "auction_title", "auction_id", "current_bid", "app_url"],
+        "subject": "⏰ Se încheie curând · {{auction_title}}",
+        "header": "Licitație cu oferta ta se încheie curând",
+        "body_html": (
+            "<p>Bună, {{name}},</p>"
+            "<p>Mai este aproximativ 1 oră până la finalul licitației <strong>{{auction_title}}</strong>.</p>"
+            '<div style="margin:18px 0;padding:14px 16px;background:#fafafa;border:1px solid #e5e7eb;border-radius:10px;">'
+            '<div style="font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.08em;">Ofertă curentă</div>'
+            '<div style="font-size:24px;font-weight:700;margin-top:4px;">€{{current_bid}}</div></div>'
+            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_PRIMARY}">Deschide licitația</a></p>'
+        ),
+    },
+    "reserve_met_ro": {
+        "system": True, "lang": "ro",
+        "description": "Prețul de rezervă a fost atins — email de felicitări pentru vânzător.",
+        "placeholders": ["name", "auction_title", "auction_id", "current_bid", "reserve", "app_url"],
+        "subject": "🎯 Rezerva atinsă · {{auction_title}}",
+        "header": "Prețul de rezervă a fost atins",
+        "body_html": (
+            "<p>Felicitări, {{name}}!</p>"
+            "<p>Prețul de rezervă al anunțului tău <strong>{{auction_title}}</strong> a fost atins.</p>"
+            '<div style="margin:18px 0;padding:14px 16px;background:#fafafa;border:1px solid #e5e7eb;border-radius:10px;">'
+            '<div style="font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.08em;">Rezervă · Curent</div>'
+            '<div style="font-size:22px;font-weight:700;margin-top:4px;">€{{reserve}} → '
+            '<span style="color:#1B4D3E;">€{{current_bid}}</span></div></div>'
+            "<p>Licitația este acum garantat vandabilă la oferta curentă sau una mai mare.</p>"
+            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_PRIMARY}">Vezi licitația</a></p>'
+        ),
+    },
 }
 
 
@@ -381,6 +731,30 @@ def render(slug: str, variables: Optional[dict[str, Any]] = None) -> tuple[str, 
         _substitute(header_tpl, vars_),
         _substitute(body_tpl, vars_),
     )
+
+
+def localized_render(
+    base_slug: str,
+    lang: Optional[str],
+    variables: Optional[dict[str, Any]] = None,
+) -> tuple[str, str, str]:
+    """Same as `render`, but picks the right language variant.
+
+    Resolution order for lang="ro":
+      1. `<base>_ro`     — explicit Romanian translation
+      2. `<base>_bg`     — Bulgarian (default site language)
+      3. `<base>`        — un-suffixed (handles transitional registry state)
+
+    Falls back gracefully so we never crash on a missing locale. Callers
+    pass the user's stored `lang` preference; anonymous flows default to
+    Bulgarian via the recipient_lookup before reaching here.
+    """
+    lang_norm = (lang or "bg").lower()[:2]
+    for candidate in (f"{base_slug}_{lang_norm}", f"{base_slug}_bg", base_slug):
+        if candidate in SYSTEM_TEMPLATES:
+            return render(candidate, variables)
+    # Nothing matched — let the caller see a clear error.
+    raise KeyError(f"No template variant found for base {base_slug!r} (lang={lang_norm!r})")
 
 
 async def seed_defaults_on_startup(db) -> int:

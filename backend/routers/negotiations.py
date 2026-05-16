@@ -140,7 +140,7 @@ async def _complete_negotiation(auction_id: str, negotiation_id: str, price: flo
         winner = await db.users.find_one({"id": a["high_bidder_id"]}, {"_id": 0})
         if winner and winner.get("email"):
             try:
-                await _email_won(winner["email"], winner["name"], a["title"], auction_id, float(price))
+                await _email_won(winner["email"], winner["name"], a["title"], auction_id, float(price), lang=winner.get("lang") or "bg")
             except Exception as e:
                 logger.error("email_won (negotiation) failed: %s", e)
     # Admin push — sale concluded after reserve-not-met negotiation.
