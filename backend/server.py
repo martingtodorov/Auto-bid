@@ -1502,7 +1502,186 @@ async def upload_sell_video(
     }
 
 
+# ---- Image upload (new architecture) --------------------------------------
+# Multipart upload endpoint that mirrors the video pipeline:
+#   1. Accept raw bytes (5 MB hard cap per file).
+#   2. Verify magic bytes — never trust Content-Type or extension.
+#   3. Persist the ORIGINAL to disk (content-addressed by sha256).
+#   4. Enqueue background AVIF/WebP/JPG variant generation.
+#   5. Return the public URL + sha + initial status so the client can show
+#      the image immediately while variants encode in the background.
+#
+# The legacy flow (base64 data URLs + sync `optimize_many`) is preserved
+# for /auctions/* endpoints that already accept them; new uploads from
+# Sell / ImageUploader go through this new path.
+
+IMAGE_UPLOAD_MAX_BYTES = 5 * 1024 * 1024   # 5 MB per file (originals only)
+_IMG_MAGIC = {
+    b"\xff\xd8\xff": "jpg",
+    b"\x89PNG\r\n\x1a\n": "png",
+}
+
+
+def _sniff_image_ext(head: bytes) -> Optional[str]:
+    """Return canonical extension based on the first 12 bytes, or None.
+
+    Supported source formats: JPG, PNG, WebP. HEIC/HEIF are rejected at
+    this layer — the frontend converts iPhone uploads to JPEG via the
+    libheif WASM bundle before they hit this endpoint, so we never see
+    raw HEIC bytes from a well-behaved client. Rejecting them here is a
+    defence-in-depth check; if it ever fires, the user gets a clear error
+    rather than a confusing background-encode failure 30 s later.
+    """
+    if not head or len(head) < 12:
+        return None
+    if head[:3] == b"\xff\xd8\xff":
+        return "jpg"
+    if head[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return "webp"
+    return None
+
+
+@api.post("/sell/image-upload")
+@limiter.limit("60/minute")
+async def upload_sell_image(
+    request: Request,
+    file: UploadFile = File(...),
+    auction_id: Optional[str] = None,
+    user: dict = Depends(require_verified_email),
+):
+    """Upload a single original image and enqueue background optimization.
+
+    Returns:
+        {
+          "url":        "<public original URL>",
+          "sha":        "<sha256>",
+          "ext":        "jpg|png|webp",
+          "size_bytes": int,
+          "status":     "optimizing",  # always — the queue starts immediately
+        }
+
+    The returned `url` is usable in `<img src>` straight away. Once the
+    background worker finishes (typically 1-5 s) the auction document
+    gains an `image_optimization.<sha>.manifest` block with AVIF/WebP
+    variants; frontend should refresh from `/auctions/{id}` to pick them
+    up, OR poll `/admin/images/status?shas=<sha>` for an unattached
+    upload.
+    """
+    import hashlib
+    from services import image_optimization_queue as ioq
+    from storage import _get_backend
+
+    if not file:
+        raise HTTPException(status_code=400, detail="No file uploaded")
+
+    # Stream the body but cap at the size limit so a malicious client
+    # cannot trickle gigabytes through nginx body buffering.
+    chunks = bytearray()
+    while True:
+        chunk = await file.read(64 * 1024)
+        if not chunk:
+            break
+        chunks.extend(chunk)
+        if len(chunks) > IMAGE_UPLOAD_MAX_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Снимката е по-голяма от {IMAGE_UPLOAD_MAX_BYTES // (1024 * 1024)} MB.",
+            )
+    if not chunks:
+        raise HTTPException(status_code=400, detail="Празен файл.")
+
+    ext = _sniff_image_ext(bytes(chunks[:12]))
+    if not ext:
+        raise HTTPException(
+            status_code=400,
+            detail="Файлът не е валидно изображение (JPG / PNG / WebP). "
+                   "HEIC/HEIF трябва да се конвертират към JPEG на устройството.",
+        )
+
+    sha = hashlib.sha256(bytes(chunks)).hexdigest()
+
+    # Persist the ORIGINAL to disk via the disk storage backend's
+    # content-addressed layout. We bypass `store_image()` (which expects
+    # a data URL) and write directly so we avoid an unnecessary base64
+    # round-trip — uploads of 5 MB photos save ~7 MB of memory each.
+    backend = _get_backend()
+    root = getattr(backend, "root", None) or os.environ.get("UPLOAD_DIR", "/opt/autobids/uploads")
+    rel = f"auctions/{sha[:2]}/{sha}.{ext}"
+    abs_path = os.path.join(root, rel)
+    if not os.path.exists(abs_path):
+        try:
+            os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+            tmp = abs_path + ".tmp"
+            with open(tmp, "wb") as fh:
+                fh.write(bytes(chunks))
+            os.replace(tmp, abs_path)
+        except OSError as e:
+            logger.exception("image upload write failed sha=%s: %s", sha[:10], e)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Грешка при запис на диска ({e.strerror}). Опитайте отново.",
+            ) from e
+
+    from storage import public_uploads_base
+    public_url = f"{public_uploads_base()}/{rel}"
+
+    # Kick off variant generation. The queue worker reads the file from
+    # disk, so we don't pass the bytes — saves memory in the queue.
+    await ioq.enqueue(
+        sha=sha, src_path=abs_path,
+        auction_id=auction_id, image_idx=None,
+    )
+
+    return {
+        "url": public_url,
+        "sha": sha,
+        "ext": ext,
+        "size_bytes": len(chunks),
+        "status": "optimizing",
+    }
+
+
+@api.get("/images/status")
+async def image_optimization_status(
+    shas: str,
+    user: dict = Depends(get_current_user),
+):
+    """Poll endpoint for image optimization status.
+
+    `shas` is a comma-separated list of sha256 ids. Returns a map of
+    `{sha: {status, manifest?}}` so the frontend can swap the
+    placeholder `<img>` for the AVIF/WebP `<picture>` once ready.
+
+    Up to 60 shas per request (matches the max images-per-listing cap).
+    """
+    requested = [s.strip() for s in (shas or "").split(",") if s.strip()][:60]
+    if not requested:
+        return {"items": {}}
+
+    out: dict[str, dict] = {s: {"status": "unknown"} for s in requested}
+    # Match any auction that references any of the requested shas.
+    or_clauses = [{f"image_optimization.{s}": {"$exists": True}} for s in requested]
+    cursor = db.auctions.find(
+        {"$or": or_clauses},
+        {"_id": 0, "image_optimization": 1},
+    )
+    async for doc in cursor:
+        mp = doc.get("image_optimization") or {}
+        for s in requested:
+            entry = mp.get(s)
+            if entry and out[s]["status"] == "unknown":
+                out[s] = {
+                    "status": entry.get("status"),
+                    "manifest": entry.get("manifest"),
+                    "attempts": entry.get("attempts"),
+                }
+    return {"items": out}
+
+
 @api.post("/auctions")
+
 @limiter.limit("10/minute")
 async def create_auction(request: Request, payload: AuctionCreate, user: dict = Depends(require_verified_email)):
     # --- Image validation, optimization & thumbnail generation ---
@@ -3685,6 +3864,60 @@ async def admin_regenerate_og(auction_id: str, _admin: dict = Depends(require_ad
 
 
 # ---- Admin counters (tab badges) ----
+@api.get("/admin/image-queue")
+async def admin_image_queue(_admin: dict = Depends(require_admin_or_moderator)):
+    """Live + persistent stats for the image optimization queue.
+
+    Combines:
+      * `stats()`     — in-process queue depth & worker concurrency
+      * `db_stats()`  — count of images in each status across the DB
+      * `failed_items()` — first ~50 auctions with at least one failed
+        image, so the admin can click "Retry" without scrolling through
+        the whole catalog.
+    """
+    from services import image_optimization_queue as ioq
+    return {
+        "queue": ioq.stats(),
+        "db": await ioq.db_stats(),
+        "failed": await ioq.failed_items(limit=50),
+    }
+
+
+class _RetryImagePayload(BaseModel):
+    sha: str
+    auction_id: str
+
+
+@api.post("/admin/image-queue/retry")
+async def admin_image_queue_retry(
+    payload: _RetryImagePayload,
+    _admin: dict = Depends(require_admin),
+):
+    """Re-enqueue a failed image. Locates the original on disk by sha
+    + auction_id and submits a fresh job from attempt 1.
+    """
+    from services import image_optimization_queue as ioq
+
+    upload_root = os.environ.get("UPLOAD_DIR", "/opt/autobids/uploads")
+    sub = payload.sha[:2]
+    d = os.path.join(upload_root, "auctions", sub)
+    src = None
+    if os.path.isdir(d):
+        for name in os.listdir(d):
+            if name.startswith(payload.sha + "."):
+                src = os.path.join(d, name)
+                break
+    if not src:
+        raise HTTPException(
+            status_code=404,
+            detail="Оригиналното изображение не е намерено на диска.",
+        )
+    ok = await ioq.retry_failed(
+        sha=payload.sha, src_path=src, auction_id=payload.auction_id,
+    )
+    return {"ok": ok}
+
+
 @api.get("/admin/storage-health")
 async def admin_storage_health(_admin: dict = Depends(require_admin)):
     """Live diagnostic for the image storage backend.
@@ -3750,6 +3983,148 @@ async def admin_storage_health(_admin: dict = Depends(require_admin)):
         info["fatal_error"] = str(e)
     return info
 
+
+@api.get("/admin/cdn-health")
+async def admin_cdn_health(_admin: dict = Depends(require_admin)):
+    """Live diagnostic for the public image CDN (`img.autoandbid.bg`).
+
+    The CDN failure mode that has burned us in production is:
+
+        1.  Browser requests https://img.autoandbid.bg/uploads/foo.jpg
+        2.  Cloudflare 301-redirects to https://autoandbid.bg/uploads/foo.jpg
+        3.  Main vhost serves index.html (`text/html`) — not a real image
+        4.  Chrome's Opaque Response Blocking (ORB) blocks the `<img>` load
+        5.  All listing photos appear broken until cache TTL expires
+
+    This endpoint helps operators isolate WHERE the 301 originates:
+
+        * `cf_path`        — request through Cloudflare (whatever DNS resolves to)
+        * `origin_path`    — request DIRECTLY to the origin server, bypassing CF,
+                             by overriding the DNS resolution with the origin IP.
+
+    If `cf_path.status` is 301 but `origin_path.status` is 200 (or 404 with
+    image content-type) — the redirect is INJECTED by Cloudflare (Page Rule,
+    Bulk Redirect, or Worker). Fix in the Cloudflare dashboard.
+
+    If both return 301 — the origin nginx is misconfigured (re-run the
+    Ansible deploy or inspect /etc/nginx/sites-enabled).
+
+    Query params:
+        path            — URL path under the CDN to probe (default
+                          `/uploads/__probe__.jpg`; 404 is expected and OK)
+        origin_ip       — IP to use for the origin probe. Defaults to the
+                          `CDN_ORIGIN_IP` env var. Required for the
+                          origin probe; the CF probe still runs without it.
+    """
+    import httpx
+    from urllib.parse import urlparse
+
+    cdn_base = (
+        os.environ.get("CDN_BASE_URL")
+        or os.environ.get("IMAGE_BASE_URL")
+        or "https://img.autoandbid.bg"
+    ).rstrip("/")
+    # Normalise — public_uploads_base() appends /uploads to bare hosts;
+    # we want just the host for the probe.
+    parsed = urlparse(cdn_base if "://" in cdn_base else f"https://{cdn_base}")
+    cdn_host = parsed.netloc or parsed.path
+    probe_path = "/uploads/__probe__.jpg"
+    full_url = f"https://{cdn_host}{probe_path}"
+
+    origin_ip = os.environ.get("CDN_ORIGIN_IP", "").strip()
+
+    def _summarise(resp: httpx.Response | None, error: Optional[str]) -> dict:
+        if resp is None:
+            return {"ok": False, "error": error or "no response"}
+        loc = resp.headers.get("location") or ""
+        ct = (resp.headers.get("content-type") or "").strip()
+        # Detect the WRONG redirect: 30x to a different host. The 301
+        # http→https redirect on the same host is fine.
+        wrong_redirect = False
+        if 300 <= resp.status_code < 400 and loc:
+            try:
+                tgt = urlparse(loc).netloc.lower()
+                if tgt and tgt != cdn_host.lower() and not tgt.endswith(f".{cdn_host.lower()}"):
+                    wrong_redirect = True
+            except Exception:
+                pass
+        return {
+            "ok": (resp.status_code in (200, 404, 416)) and not wrong_redirect,
+            "status": resp.status_code,
+            "location": loc or None,
+            "content_type": ct or None,
+            "server": resp.headers.get("server"),
+            "cf_ray": resp.headers.get("cf-ray"),
+            "wrong_redirect": wrong_redirect,
+        }
+
+    out: dict = {
+        "cdn_host": cdn_host,
+        "cdn_base_env": os.environ.get("CDN_BASE_URL") or os.environ.get("IMAGE_BASE_URL") or "(unset)",
+        "origin_ip_env": origin_ip or "(unset)",
+        "probe_url": full_url,
+    }
+
+    # --- Probe 1: Cloudflare path (normal DNS) ----------------------------
+    cf_err: Optional[str] = None
+    cf_resp: Optional[httpx.Response] = None
+    try:
+        async with httpx.AsyncClient(follow_redirects=False, timeout=8.0) as c:
+            cf_resp = await c.get(full_url, headers={"User-Agent": "AutoAndBid-CDN-Probe/1"})
+    except Exception as e:  # noqa: BLE001
+        cf_err = f"{type(e).__name__}: {e}"
+    out["cf_path"] = _summarise(cf_resp, cf_err)
+
+    # --- Probe 2: Direct origin (bypass Cloudflare) -----------------------
+    if origin_ip:
+        origin_err: Optional[str] = None
+        origin_resp: Optional[httpx.Response] = None
+        try:
+            # Pin the connection to the origin IP while keeping SNI + Host
+            # set to the public CDN hostname. httpx uses urllib3's resolver
+            # via the underlying socket; the cleanest way to override DNS
+            # in httpx is `httpx.HTTPTransport` + a custom resolver, but
+            # for a one-shot probe we just call the IP directly with the
+            # Host header set — this matches what `curl --resolve` does.
+            target_url = f"https://{origin_ip}{probe_path}"
+            async with httpx.AsyncClient(
+                follow_redirects=False,
+                timeout=8.0,
+                verify=False,  # origin uses CF Origin Cert; verification fails when host=IP
+            ) as c:
+                origin_resp = await c.get(
+                    target_url,
+                    headers={"Host": cdn_host, "User-Agent": "AutoAndBid-CDN-Probe/1"},
+                )
+        except Exception as e:  # noqa: BLE001
+            origin_err = f"{type(e).__name__}: {e}"
+        out["origin_path"] = _summarise(origin_resp, origin_err)
+
+        # --- Diagnose -----------------------------------------------------
+        cf_ok = out["cf_path"]["ok"]
+        origin_ok = out["origin_path"]["ok"]
+        cf_redirect = out["cf_path"].get("wrong_redirect")
+        if cf_ok and origin_ok:
+            out["diagnosis"] = "OK — both Cloudflare and origin behave correctly."
+        elif cf_redirect and origin_ok:
+            out["diagnosis"] = (
+                "Cloudflare injects a wrong-domain 301 (origin is fine). "
+                "Inspect Page Rules / Bulk Redirects / Workers in the CF "
+                "dashboard for any rule matching this hostname."
+            )
+        elif not origin_ok:
+            out["diagnosis"] = (
+                "Origin returns a bad response — re-run "
+                "`ansible-playbook playbooks/deploy_frontend.yml` and inspect "
+                "/etc/nginx/sites-enabled/autoandbid on ab-front1."
+            )
+        else:
+            out["diagnosis"] = "Mixed signals — inspect cf_path and origin_path raw fields."
+    else:
+        out["origin_path"] = {"ok": False, "error": "Set CDN_ORIGIN_IP env var to enable origin probe."}
+        out["diagnosis"] = "Origin probe skipped — set CDN_ORIGIN_IP to compare CF vs origin."
+
+    return out
 
 
 async def admin_counters(_admin: dict = Depends(require_admin_or_moderator)):
@@ -5520,6 +5895,17 @@ async def on_startup():
                 )
     except Exception as e:  # noqa: BLE001
         logger.warning("Storage probe skipped: %s", e)
+
+    # ----- Image optimization queue: init + resume pending jobs -----
+    try:
+        from services import image_optimization_queue as _ioq
+        _ioq.init(db)
+        # Resume any jobs that were mid-flight when the previous process
+        # restarted. Runs in the background so startup isn't blocked.
+        asyncio.create_task(_ioq.resume_pending())
+        logger.info("Image optimization queue initialised.")
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Image queue init skipped: %s", e)
 
     # ----- MongoDB: wait until reachable before creating indexes -----
     # On cold container starts, both Mongo and the API spin up in parallel.

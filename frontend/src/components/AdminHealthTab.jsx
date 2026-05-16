@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { CheckCircle2, AlertCircle, XCircle, RefreshCw, Activity, HelpCircle } from "lucide-react";
+import { CheckCircle2, AlertCircle, XCircle, RefreshCw, Activity, HelpCircle, Image as ImageIcon, Globe } from "lucide-react";
 import { api } from "../lib/apiClient";
 
 const STATUS_CFG = {
@@ -33,6 +33,15 @@ export default function AdminHealthTab() {
   const [error, setError] = useState(null);
   const [auto, setAuto] = useState(true);
   const [lastFetch, setLastFetch] = useState(null);
+  // Image-queue + CDN are loaded by their own hooks (slower endpoints —
+  // we don't want them blocking the main health refresh, and CDN probes
+  // hit live Cloudflare so we throttle them to manual refresh only).
+  const [imgQueue, setImgQueue] = useState(null);
+  const [imgQueueErr, setImgQueueErr] = useState(null);
+  const [cdn, setCdn] = useState(null);
+  const [cdnLoading, setCdnLoading] = useState(false);
+  const [cdnErr, setCdnErr] = useState(null);
+  const [retryBusy, setRetryBusy] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -49,14 +58,49 @@ export default function AdminHealthTab() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  const loadImgQueue = useCallback(async () => {
+    setImgQueueErr(null);
+    try {
+      const { data: payload } = await api.get("/admin/image-queue");
+      setImgQueue(payload);
+    } catch (e) {
+      setImgQueueErr(e?.response?.data?.detail || e?.message || "Грешка");
+    }
+  }, []);
+
+  const probeCdn = useCallback(async () => {
+    setCdnLoading(true);
+    setCdnErr(null);
+    try {
+      const { data: payload } = await api.get("/admin/cdn-health");
+      setCdn(payload);
+    } catch (e) {
+      setCdnErr(e?.response?.data?.detail || e?.message || "Грешка");
+    } finally {
+      setCdnLoading(false);
+    }
+  }, []);
+
+  const retryImage = useCallback(async (sha, auction_id) => {
+    setRetryBusy(sha);
+    try {
+      await api.post("/admin/image-queue/retry", { sha, auction_id });
+      await loadImgQueue();
+    } catch (e) {
+      setImgQueueErr(e?.response?.data?.detail || e?.message || "Грешка");
+    } finally {
+      setRetryBusy(null);
+    }
+  }, [loadImgQueue]);
+
+  useEffect(() => { load(); loadImgQueue(); }, [load, loadImgQueue]);
 
   // Auto refresh every 10 seconds when toggled on.
   useEffect(() => {
     if (!auto) return;
-    const id = setInterval(load, 10000);
+    const id = setInterval(() => { load(); loadImgQueue(); }, 10000);
     return () => clearInterval(id);
-  }, [auto, load]);
+  }, [auto, load, loadImgQueue]);
 
   const overall = data?.status || "unknown";
 
@@ -160,6 +204,151 @@ export default function AdminHealthTab() {
       {!data && !error && loading && (
         <div className="p-6 text-center text-sm text-[hsl(var(--ink-muted))]">Зареждане…</div>
       )}
+
+      {/* ── Image optimization queue ─────────────────────────────────── */}
+      <div className="pt-6 border-t border-[hsl(var(--line))]">
+        <div className="flex items-center gap-3 mb-3">
+          <ImageIcon size={18} className="text-[hsl(var(--accent))]" />
+          <h2 className="text-lg font-semibold">Опашка за обработка на изображения</h2>
+          <button
+            onClick={loadImgQueue}
+            className="btn btn-secondary !py-1 !px-2.5 text-[11px] flex items-center gap-1"
+            data-testid="img-queue-refresh"
+          ><RefreshCw size={11} /> Обнови</button>
+        </div>
+        {imgQueueErr && (
+          <div className="p-3 rounded-card border border-red-500/30 bg-red-500/10 text-sm text-red-500" data-testid="img-queue-error">
+            {imgQueueErr}
+          </div>
+        )}
+        {imgQueue && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3" data-testid="img-queue-stats">
+            <StatCard label="Опашка" value={imgQueue.queue?.pending} />
+            <StatCard label="В работа" value={imgQueue.queue?.in_flight} />
+            <StatCard label="Оптимизирани" value={imgQueue.db?.optimized} good />
+            <StatCard label="Обработват се" value={imgQueue.db?.optimizing} />
+            <StatCard label="Неуспешни" value={imgQueue.db?.failed} bad={imgQueue.db?.failed > 0} />
+            <StatCard label="Оригинал само" value={imgQueue.db?.original_uploaded} />
+          </div>
+        )}
+
+        {imgQueue?.failed?.length > 0 && (
+          <div className="mt-4">
+            <div className="text-sm font-semibold mb-2">
+              Неуспешни оптимизации ({imgQueue.failed.length}{imgQueue.failed.length >= 50 && "+"})
+            </div>
+            <div className="border border-[hsl(var(--line))] rounded-card overflow-hidden">
+              {imgQueue.failed.map((row) => (
+                <div key={row.auction_id} className="border-b border-[hsl(var(--line))] last:border-b-0 p-3 bg-[hsl(var(--surface))]" data-testid={`img-failed-${row.auction_id}`}>
+                  <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                    <a href={`/auctions/${row.auction_id}`} className="text-sm font-medium hover:underline truncate">
+                      {row.title || row.auction_id}
+                    </a>
+                    <span className="text-[10px] font-mono text-[hsl(var(--ink-muted))]">
+                      {row.status} · {row.failed_images.length} fail
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {row.failed_images.map((img) => (
+                      <div key={img.sha} className="flex items-center justify-between gap-2 text-xs">
+                        <div className="flex-1 min-w-0">
+                          <span className="font-mono text-[hsl(var(--ink-muted))]">{img.sha.slice(0, 10)}…</span>
+                          {img.last_error && (
+                            <span className="ml-2 text-red-500/80 truncate inline-block max-w-[400px] align-middle">
+                              {img.last_error}
+                            </span>
+                          )}
+                          {img.attempts != null && <span className="ml-2 text-[10px] text-[hsl(var(--ink-muted))]">опити: {img.attempts}</span>}
+                        </div>
+                        <button
+                          onClick={() => retryImage(img.sha, row.auction_id)}
+                          disabled={retryBusy === img.sha}
+                          className="btn btn-secondary !py-1 !px-2 text-[11px] disabled:opacity-50"
+                          data-testid={`img-retry-${img.sha.slice(0, 10)}`}
+                        >{retryBusy === img.sha ? "…" : "Опитай отново"}</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── CDN health probe ─────────────────────────────────────────── */}
+      <div className="pt-6 border-t border-[hsl(var(--line))]">
+        <div className="flex items-center gap-3 mb-3">
+          <Globe size={18} className="text-[hsl(var(--accent))]" />
+          <h2 className="text-lg font-semibold">CDN probe (img.autoandbid.bg)</h2>
+          <button
+            onClick={probeCdn}
+            disabled={cdnLoading}
+            className="btn btn-secondary !py-1 !px-2.5 text-[11px] flex items-center gap-1 disabled:opacity-50"
+            data-testid="cdn-probe-btn"
+          ><RefreshCw size={11} className={cdnLoading ? "animate-spin" : ""} /> Пусни probe</button>
+        </div>
+        {cdnErr && (
+          <div className="p-3 rounded-card border border-red-500/30 bg-red-500/10 text-sm text-red-500" data-testid="cdn-error">
+            {cdnErr}
+          </div>
+        )}
+        {cdn && (
+          <div className="space-y-3" data-testid="cdn-result">
+            <div className="text-xs text-[hsl(var(--ink-muted))] font-mono">
+              Host: <span className="text-[hsl(var(--ink))]">{cdn.cdn_host}</span> ·
+              {" "}Probe URL: <span className="text-[hsl(var(--ink))]">{cdn.probe_url}</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <CdnProbeCard title="Чрез Cloudflare" probe={cdn.cf_path} testid="cdn-cf" />
+              <CdnProbeCard title="Директно към origin" probe={cdn.origin_path} testid="cdn-origin" />
+            </div>
+            {cdn.diagnosis && (
+              <div className={`p-3 rounded-card border text-sm ${
+                cdn.cf_path?.ok && cdn.origin_path?.ok
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
+                  : "border-amber-500/30 bg-amber-500/10 text-amber-800"
+              }`} data-testid="cdn-diagnosis">
+                <span className="font-semibold">Диагноза: </span>{cdn.diagnosis}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, good, bad }) {
+  return (
+    <div className={`p-3 rounded-card border bg-[hsl(var(--surface))] ${
+      bad ? "border-red-500/40" : good ? "border-emerald-500/30" : "border-[hsl(var(--line))]"
+    }`}>
+      <div className="text-[10px] uppercase tracking-wider text-[hsl(var(--ink-muted))] mb-1">{label}</div>
+      <div className={`text-2xl font-mono font-bold ${
+        bad ? "text-red-500" : good ? "text-emerald-600" : "text-[hsl(var(--ink))]"
+      }`}>{value ?? 0}</div>
+    </div>
+  );
+}
+
+function CdnProbeCard({ title, probe, testid }) {
+  if (!probe) return null;
+  const ok = probe.ok;
+  return (
+    <div className={`p-3 rounded-card border bg-[hsl(var(--surface))] ${ok ? "border-emerald-500/30" : "border-red-500/30"}`} data-testid={testid}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-sm font-semibold">{title}</div>
+        <StatusPill status={ok ? "ok" : "error"} />
+      </div>
+      <div className="text-xs font-mono space-y-1">
+        {probe.error && <div className="text-red-500 break-all">{probe.error}</div>}
+        {probe.status != null && <div>HTTP <span className="text-[hsl(var(--ink))] font-semibold">{probe.status}</span></div>}
+        {probe.content_type && <div>Content-Type: <span className={probe.content_type.startsWith("image/") ? "text-emerald-600" : "text-red-500"}>{probe.content_type}</span></div>}
+        {probe.location && <div className="break-all">Location: <span className={probe.wrong_redirect ? "text-red-500" : "text-[hsl(var(--ink))]"}>{probe.location}</span></div>}
+        {probe.server && <div>Server: <span className="text-[hsl(var(--ink))]">{probe.server}</span></div>}
+        {probe.cf_ray && <div>CF-Ray: <span className="text-[hsl(var(--ink))]">{probe.cf_ray}</span></div>}
+      </div>
     </div>
   );
 }
