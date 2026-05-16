@@ -260,41 +260,121 @@ REMOTE_FETCH_TIMEOUT = 15.0                # seconds per image
 REMOTE_FETCH_CONCURRENCY = 6               # parallel downloads per batch
 
 
+def _sniff_image_type(head: bytes) -> Optional[str]:
+    """Return the canonical image extension based on magic bytes.
+
+    Trusts the file's content, not the Content-Type header — focus.bg
+    and other scraping sources occasionally serve HTML error pages with
+    `image/jpeg` headers (login walls, anti-bot 200s), so we never let
+    those reach the storage pipeline. Returns None when the bytes are
+    not a recognised image format.
+    """
+    if not head or len(head) < 12:
+        return None
+    # JPEG: FF D8 FF
+    if head[:3] == b"\xff\xd8\xff":
+        return "jpeg"
+    # PNG: 89 50 4E 47 0D 0A 1A 0A
+    if head[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    # WebP: "RIFF" .... "WEBP"
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return "webp"
+    # GIF
+    if head[:6] in (b"GIF87a", b"GIF89a"):
+        return "gif"
+    # AVIF / HEIF — ISO BMFF box; brand starts at offset 4 ("ftyp" + brand)
+    if head[4:8] == b"ftyp" and head[8:12] in (b"avif", b"avis", b"heic", b"heix", b"mif1"):
+        return "avif" if head[8:12].startswith(b"avi") else "heif"
+    return None
+
+
 async def _fetch_one(client, url: str) -> Optional[str]:
     """Download a single URL and return it as a base64 data URL.
 
-    Returns None on failure (timeout, non-2xx, oversized, unknown content-
-    type) so the caller can keep the original URL as a graceful fallback.
+    Validation layers (all must pass — defence in depth against
+    anti-bot pages, login walls, and content-type spoofing):
+      1. HTTP status must be 2xx
+      2. Content-Type header must not be `text/html` (anti-bot page)
+      3. Payload size must be ≤ REMOTE_FETCH_MAX_BYTES
+      4. First 12 bytes must match a known image magic signature
+         (JPEG / PNG / WebP / GIF / AVIF / HEIF) — this catches HTML
+         pages that lie about their Content-Type and prevents the
+         "image URL fetches HTML, browser later ORB-blocks" failure
+         we hit with focus.bg's bot challenges.
+
+    On any failure we log the source URL, final redirected URL, HTTP
+    status, and Content-Type so operators can debug from the prod
+    log without re-running the import.
     """
     try:
         # Stream the response so we can abort early if it exceeds the
         # byte cap — mobile.bg images are usually 200-500 KB but a
         # rogue source could try to wedge us with a huge payload.
         async with client.stream("GET", url, timeout=REMOTE_FETCH_TIMEOUT, follow_redirects=True) as r:
+            # `r.url` is the FINAL URL after redirects — log it on
+            # failure so we can distinguish "404 from origin" vs
+            # "redirected to a login page".
+            final_url = str(r.url)
+            ct_full = (r.headers.get("content-type") or "").strip()
+            ct = ct_full.lower().split(";")[0].strip()
+
             if r.status_code >= 400:
-                # WARNING (not INFO) so production log scrapers surface
-                # CDN blocks / 404s without requiring DEBUG verbosity.
-                logger.warning("remote fetch %s → HTTP %s", url, r.status_code)
+                logger.warning(
+                    "remote fetch %s → HTTP %s (final=%s ct=%s)",
+                    url, r.status_code, final_url, ct_full,
+                )
                 return None
-            ct = (r.headers.get("content-type") or "").lower().split(";")[0].strip()
-            # Trust either an image/* content-type or fall back to the
-            # URL extension. focus.bg sometimes serves `application/
-            # octet-stream` for .webp so we can't be strict here.
-            if ct and ct.startswith("image/"):
-                ext = ct.split("/", 1)[1].split("+")[0]
-            else:
-                tail = url.lower().rsplit("?", 1)[0].rsplit(".", 1)
-                ext = tail[1] if len(tail) == 2 and len(tail[1]) <= 5 else "jpeg"
-            ext = _EXT_ALIASES.get(ext, ext)
+
+            # Hard reject HTML pages early — saves bandwidth + skips
+            # downloading megabytes of anti-bot challenge HTML before
+            # the magic-byte check would catch it.
+            if ct.startswith("text/") or ct in ("application/xhtml+xml",):
+                logger.warning(
+                    "remote fetch %s rejected: HTML/text content-type (status=%s ct=%s final=%s)",
+                    url, r.status_code, ct_full, final_url,
+                )
+                return None
+
             chunks = bytearray()
             async for chunk in r.aiter_bytes(chunk_size=64 * 1024):
                 chunks.extend(chunk)
                 if len(chunks) > REMOTE_FETCH_MAX_BYTES:
-                    logger.warning("remote fetch %s → oversize abort (>%d B)", url, REMOTE_FETCH_MAX_BYTES)
+                    logger.warning(
+                        "remote fetch %s → oversize abort (>%d B, final=%s)",
+                        url, REMOTE_FETCH_MAX_BYTES, final_url,
+                    )
                     return None
             if not chunks:
-                logger.warning("remote fetch %s → empty body", url)
+                logger.warning(
+                    "remote fetch %s → empty body (status=%s ct=%s final=%s)",
+                    url, r.status_code, ct_full, final_url,
+                )
                 return None
+
+            # ── Magic byte verification ────────────────────────────────
+            # Trust the bytes, not the header. focus.bg/mobile.bg
+            # occasionally serves `<!DOCTYPE html>` anti-bot challenges
+            # with image/jpeg Content-Type. The browser's ORB pipeline
+            # will reject those downstream, so we must too.
+            sniffed = _sniff_image_type(bytes(chunks[:12]))
+            if not sniffed:
+                # Most common reason this fires: bytes are HTML/XML.
+                # Show a small preview so the prod log diagnoses cleanly.
+                preview = bytes(chunks[:64]).decode("ascii", "replace")
+                logger.warning(
+                    "remote fetch %s rejected: bytes are not a valid image "
+                    "(status=%s ct=%s final=%s preview=%r)",
+                    url, r.status_code, ct_full, final_url, preview,
+                )
+                return None
+
+            # Use the sniffed type — it's authoritative. Content-Type
+            # header takes second place; URL extension is only a hint
+            # we no longer trust because mobile.bg .jpg URLs sometimes
+            # actually serve PNG.
+            ext = sniffed
+            ext = _EXT_ALIASES.get(ext, ext)
             b64 = base64.b64encode(bytes(chunks)).decode("ascii")
             return f"data:image/{ext};base64,{b64}"
     except Exception as e:  # noqa: BLE001 — log & continue, do not break the import
@@ -337,12 +417,22 @@ async def fetch_remote_images_as_data_urls(urls: list[str], *, strict: bool = Fa
     sem = asyncio.Semaphore(REMOTE_FETCH_CONCURRENCY)
     async with httpx.AsyncClient(
         headers={
-            # Some CDNs (focus.bg included) refuse to serve images without
-            # a referer that matches the originating listing host. Set a
-            # generic one — the actual content is public.
-            "User-Agent": "Mozilla/5.0 (compatible; AutoBidImporter/1.0)",
+            # mobile.bg/focus.bg blocks default Python User-Agents. Use a
+            # current Chrome UA + Accept-Language + Sec-Fetch-* hints so
+            # the request looks indistinguishable from a real browser
+            # session — they enforce these specifically for image hot-
+            # linking detection.
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/127.0.0.0 Safari/537.36"
+            ),
+            "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+            "Accept-Language": "bg-BG,bg;q=0.9,en-US;q=0.8,en;q=0.7",
             "Referer": "https://www.mobile.bg/",
-            "Accept": "image/avif,image/webp,image/*,*/*;q=0.8",
+            "Sec-Fetch-Dest": "image",
+            "Sec-Fetch-Mode": "no-cors",
+            "Sec-Fetch-Site": "cross-site",
         },
     ) as client:
         async def _guarded(u: str) -> str:

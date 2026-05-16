@@ -873,6 +873,54 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 
 ---
 
+## 15 May 2026 (v8) — Hardened Import: Magic-Byte Validation + Real UA
+
+**User request:** Importer да validate-нe че fetched bytes са REAL images, не HTML anti-bot страници. Realistic User-Agent. Log source/final URL/status/content-type при fail.
+
+**Fix в `/app/backend/storage.py::_fetch_one`:**
+
+### 4-layer validation (defence in depth)
+1. **HTTP status ≥ 400** → reject
+2. **`Content-Type: text/*`** → reject EARLY (преди да download-нем мегабайти HTML)
+3. **Size > 12 MB** → reject
+4. **Magic byte check** — `_sniff_image_type()` чете първите 12 bytes:
+   - JPEG: `FF D8 FF`
+   - PNG: `89 50 4E 47 0D 0A 1A 0A`
+   - WebP: `RIFF....WEBP`
+   - GIF: `GIF87a/GIF89a`
+   - AVIF/HEIF: `ftyp{avif,avis,heic,heix,mif1}`
+   - Anything else → reject, log preview of bytes
+
+### Logging при failure
+Всеки `logger.warning` сега includes:
+- `url` (source)
+- `final` (URL след redirects → `r.url`)
+- `status` (HTTP status code)
+- `ct` (full Content-Type header)
+- `preview` (first 64 bytes на body, ако magic check fail)
+
+Това решава "защо този image fail-на?" debugging без re-running import-а.
+
+### Realistic User-Agent
+```
+Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36
+  (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36
++ Accept-Language: bg-BG,bg;q=0.9...
++ Sec-Fetch-* headers
++ Referer: https://www.mobile.bg/
+```
+mobile.bg/focus.bg block-ват `python-httpx` / `Mozilla/5.0 (compatible; X/1.0)`. Сега изглежда напълно като real browser.
+
+### Authoritative type from bytes
+Преди: extension от URL trusted (.jpg → "jpeg"). Сега: **sniffed bytes са authoritative**. URL extension само като hint, header като second opinion. mobile.bg .jpg URLs понякога реално сервират PNG → правилен `image/png` data URL вместо broken.
+
+### Verified
+- ✅ Real focus.bg .webp → 200 → magic webp → data:image/webp accepted
+- ✅ `google.com/abc.jpg` (404 HTML) → REJECTED + log "HTTP 404 ct=text/html final=..."
+- ✅ Magic byte sniffer: JPEG/PNG/WebP/GIF/AVIF correctly classified, HTML/empty → None
+- ✅ End-to-end Lexus import (17 imgs) → 17 local, 0 external, 17 variants
+- ✅ Lint clean
+
 ## 15 May 2026 (v7) — Ansible Auto-cleanup + 3-Probe CDN Smoke Test
 
 **User report:** ORB block (`net::ERR_BLOCKED_BY_ORB`) при import. Content-Type все още text/html на production CDN URLs.
