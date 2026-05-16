@@ -252,34 +252,21 @@ async def _issue_verification_email(user: dict, ip_addr: str = "", ua: str = "")
         "consumed": False,
     })
     # Build the link → frontend page consumes the token via POST /api/auth/verify-email
-    from emails import APP_URL
+    from emails import APP_URL, _shell
+    from email_templates import render as render_template
     link = f"{APP_URL.rstrip('/')}/verify-email?token={token}"
     lang = (user.get("lang") or "bg").lower()
     if lang.startswith("ro"):
-        subject = "Confirmă-ți adresa de email"
-        body = f"""
-          <p>Bună, {user.get('name','')},</p>
-          <p>Mulțumim că te-ai înregistrat pe autoandbid.com. Te rugăm să-ți confirmi adresa de email apăsând butonul de mai jos:</p>
-          <p><a href="{link}" style="background:#1B4D3E;color:#ffffff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600;display:inline-block;">Confirmă email</a></p>
-          <p style="color:#6b7280;font-size:13px;">Linkul este valabil 48 de ore. Dacă nu ai inițiat această cerere, poți ignora acest mesaj.</p>
-        """
+        slug = "verify_email_ro"
     elif lang.startswith("en"):
-        subject = "Verify your email address"
-        body = f"""
-          <p>Hi {user.get('name','')},</p>
-          <p>Thanks for signing up on autoandbid.com. Please confirm your email address by clicking the button below:</p>
-          <p><a href="{link}" style="background:#1B4D3E;color:#ffffff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600;display:inline-block;">Verify email</a></p>
-          <p style="color:#6b7280;font-size:13px;">This link is valid for 48 hours. If you did not request this, you can safely ignore this email.</p>
-        """
+        slug = "verify_email_en"
     else:
-        subject = "Потвърдете имейл адреса си"
-        body = f"""
-          <p>Здравейте, {user.get('name','')},</p>
-          <p>Благодарим, че се регистрирахте в autoandbid.com. Моля, потвърдете имейл адреса си, като натиснете бутона по-долу:</p>
-          <p><a href="{link}" style="background:#1B4D3E;color:#ffffff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600;display:inline-block;">Потвърди имейл</a></p>
-          <p style="color:#6b7280;font-size:13px;">Линкът е валиден 48 часа. Ако не сте инициирали това действие, можете да игнорирате имейла.</p>
-        """
-    await send_email(user["email"], subject, _shell(subject, body))
+        slug = "verify_email_bg"
+    subject, header, body = render_template(slug, {
+        "name": user.get("name", ""),
+        "link": link,
+    })
+    await send_email(user["email"], subject, _shell(header, body))
 
 
 def register_routes():
@@ -576,17 +563,14 @@ def register_routes():
                 "used": False,
                 "attempts": 0,
             })
-            html = _shell(
-                "Нулиране на парола",
-                f"""
-                <p style="margin:0 0 16px 0;">Здравейте {user.get('name') or ''},</p>
-                <p style="margin:0 0 16px 0;">Получихме заявка за нулиране на паролата за вашия autoandbid.com акаунт.</p>
-                <p style="margin:0 0 8px 0;">Вашият код за потвърждение (валиден {OTP_TTL_MIN} минути):</p>
-                <div style="font-family:'Courier New',monospace;font-size:32px;letter-spacing:8px;background:#f6f7f8;padding:18px;text-align:center;border-radius:10px;border:1px solid #e5e7eb;margin:16px 0;"><strong>{code}</strong></div>
-                <p style="color:#6b7280;font-size:13px;margin:24px 0 0 0;">Ако не сте правили такава заявка, можете спокойно да игнорирате това съобщение — паролата ви няма да бъде променена.</p>
-                """,
-            )
-            await send_email(email, "autoandbid.com — Код за нулиране на парола", html)
+            from email_templates import render as render_template
+            subject, header, body = render_template("password_reset_bg", {
+                "name": user.get("name") or "",
+                "code": code,
+                "ttl_min": OTP_TTL_MIN,
+            })
+            html = _shell(header, body)
+            await send_email(email, subject, html)
         return {"ok": True, "message": f"Ако акаунтът съществува, код е изпратен на {email}. Проверете пощата си."}
 
     @router.post("/reset-password")

@@ -5924,6 +5924,15 @@ async def on_startup():
     except Exception as e:  # noqa: BLE001
         logger.warning("Storage probe skipped: %s", e)
 
+    # ----- Email templates: seed system defaults into site_settings -----
+    try:
+        from email_templates import seed_defaults_on_startup as _seed_templates
+        n = await _seed_templates(db)
+        if n:
+            logger.info("Email templates: seeded %d system defaults into site_settings", n)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Email templates seed skipped: %s", e)
+
     # ----- Image optimization queue: init + resume pending jobs -----
     try:
         from services import image_optimization_queue as _ioq

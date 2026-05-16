@@ -950,20 +950,113 @@ def register_routes():
 
     @router.get("/admin/email-templates")
     async def admin_get_templates(_admin: dict = Depends(_require_admin_or_moderator)):
+        """Return the merged template map (system defaults + admin overrides).
+
+        Each entry includes:
+          subject, body, header (optional), system (bool), lang, description,
+          placeholders[]. The system metadata is read from the in-code
+          registry so it always reflects the running code — admins can't
+          accidentally rename / lose a system slug.
+        """
+        from email_templates import SYSTEM_TEMPLATES
         s = _settings_fn()
-        return s.get("email_templates") or {}
+        stored: dict = s.get("email_templates") or {}
+        result: dict[str, dict] = {}
+        # Start with stored entries (admin overrides + previously-seeded systems).
+        for slug, entry in stored.items():
+            if not isinstance(entry, dict):
+                continue
+            result[slug] = {
+                "subject": entry.get("subject", ""),
+                "body": entry.get("body") or entry.get("body_html", ""),
+                "header": entry.get("header", ""),
+                "system": bool(entry.get("system")),
+                "lang": entry.get("lang", "bg"),
+                "description": entry.get("description", ""),
+                "placeholders": entry.get("placeholders", []),
+            }
+        # Overlay current SYSTEM_TEMPLATES metadata so the UI always shows
+        # the latest description / placeholders even if the seeded entry
+        # was for an older version of the registry.
+        for slug, tpl in SYSTEM_TEMPLATES.items():
+            existing = result.get(slug, {})
+            result[slug] = {
+                "subject": existing.get("subject") or tpl["subject"],
+                "body": existing.get("body") or tpl["body_html"],
+                "header": existing.get("header") or tpl.get("header", ""),
+                "system": True,
+                "lang": tpl.get("lang", "bg"),
+                "description": tpl.get("description", ""),
+                "placeholders": tpl.get("placeholders", []),
+            }
+        return result
+
+    @router.post("/admin/email-templates/{slug}/reset")
+    async def admin_reset_template(
+        slug: str,
+        request: Request,
+        admin: dict = Depends(_require_admin),
+    ):
+        """Restore a system template to its factory default. Admin
+        overrides for the slug are discarded; non-system slugs return 400.
+        """
+        from email_templates import SYSTEM_TEMPLATES
+        tpl = SYSTEM_TEMPLATES.get(slug)
+        if not tpl:
+            raise HTTPException(status_code=400, detail="Не е системен шаблон.")
+        await db.site_settings.update_one(
+            {"id": "global"},
+            {"$set": {
+                f"email_templates.{slug}": {
+                    "subject": tpl["subject"],
+                    "body": tpl["body_html"],
+                    "header": tpl.get("header") or tpl["subject"],
+                    "system": True,
+                    "lang": tpl.get("lang", "bg"),
+                    "description": tpl.get("description", ""),
+                    "placeholders": tpl.get("placeholders", []),
+                },
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }, "$setOnInsert": {"id": "global"}},
+            upsert=True,
+        )
+        await _load_settings_cache()
+        await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
+                        action="email_templates.reset", target_type="email_template", target_id=slug,
+                        details={}, ip=request.client.host if request.client else "",
+                        user_agent=request.headers.get("user-agent", ""))
+        return {"ok": True, "slug": slug}
 
     @router.put("/admin/email-templates")
     async def admin_put_templates(request: Request, payload: dict = Body(...), admin: dict = Depends(_require_admin)):
         if not isinstance(payload, dict):
             raise HTTPException(status_code=400, detail="Очаква се обект с ключ/стойност")
+        # Read existing so we don't drop the `system`/`description`/
+        # `placeholders` metadata on update (admin only edits subject + body).
+        existing_s = await db.site_settings.find_one({"id": "global"}, {"_id": 0, "email_templates": 1}) or {}
+        existing = existing_s.get("email_templates") or {}
+        from email_templates import SYSTEM_TEMPLATES
         cleaned: dict = {}
-        for k, v in list(payload.items())[:20]:
+        for k, v in list(payload.items())[:40]:
             if not isinstance(v, dict):
                 continue
+            slug = str(k)[:60]
             subject = str(v.get("subject", ""))[:200]
-            body = str(v.get("body", ""))[:20000]
-            cleaned[str(k)[:40]] = {"subject": subject, "body": body}
+            body = str(v.get("body", ""))[:50000]
+            header = str(v.get("header", ""))[:200]
+            prev = existing.get(slug, {})
+            sys_tpl = SYSTEM_TEMPLATES.get(slug)
+            cleaned[slug] = {
+                "subject": subject,
+                "body": body,
+                "header": header,
+                # System slug → enforce metadata from registry; custom slug
+                # → carry whatever was stored last (or empty).
+                "system": bool(sys_tpl),
+                "lang": (sys_tpl or {}).get("lang", prev.get("lang", "bg")),
+                "description": (sys_tpl or {}).get("description", prev.get("description", "")),
+                "placeholders": (sys_tpl or {}).get("placeholders", prev.get("placeholders", [])),
+            }
         await db.site_settings.update_one(
             {"id": "global"},
             {"$set": {"email_templates": cleaned, "updated_at": datetime.now(timezone.utc).isoformat()},

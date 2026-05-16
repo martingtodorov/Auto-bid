@@ -1,7 +1,90 @@
 # Changelog
 
 
-## 2026-05-16 — Iteration 22: Image queue diagnostics + backfill
+## 2026-05-16 — Iteration 23: Editable email templates — full registry migration
+
+### Bug
+The "Шаблони за имейли" admin tab was effectively decorative. Every
+transactional email (verify_email, password_reset, outbid, won,
+approved, rejected, vin_delivery, seller_new_bid, seller_new_comment,
+ending_soon × 2, reserve_met) had its subject + HTML body **hard-coded
+in Python** (`emails.py` / `routers/auth.py`). The admin tab listed
+only the 3 user-created custom templates and the system bypassed them
+completely.
+
+### Architecture
+New module `/app/backend/email_templates.py`:
+
+  • `SYSTEM_TEMPLATES` — single source of truth for default subject /
+    header / body / placeholders / description / lang for every email
+    the system sends. Adding a new system email = adding an entry here.
+  • `render(slug, vars) → (subject, header, body)` — resolves admin
+    overrides from `site_settings.email_templates[slug]`, falls back to
+    the registry, substitutes `{{var}}` placeholders (mustache-lite,
+    no conditionals — admins can't accidentally exec code).
+  • `seed_defaults_on_startup(db)` — on backend startup, writes any
+    missing system templates into `site_settings.email_templates`.
+    Idempotent; admin overrides are preserved.
+
+### Migrated emails (all of them — 13 total)
+verify_email × 3 langs, password_reset_bg, outbid, won, approved,
+rejected, vin_delivery, seller_new_bid, seller_new_comment,
+ending_soon_watcher, ending_soon_bidder, reserve_met.
+
+Each `email_*` helper in `emails.py` is now a thin wrapper:
+```python
+async def email_outbid(...):
+    subject, header, body = render_template("outbid", {...})
+    await send_email(to, subject, _shell(header, body))
+```
+
+### New admin endpoints
+  • `GET /api/admin/email-templates` — returns merged map (system
+    defaults overlaid on admin overrides), each entry with: subject,
+    body, header, system (bool), lang, description, placeholders[].
+    Always returns the latest registry metadata, even for slugs whose
+    stored entry was written by an older version of the registry.
+  • `POST /api/admin/email-templates/{slug}/reset` — admin-only,
+    restores a system template to factory defaults. Custom slugs
+    return 400.
+  • `PUT /api/admin/email-templates` — same as before, but preserves
+    `system / description / placeholders / lang` from the registry on
+    update (admin only edits subject + body + header).
+
+### Frontend (`AdminEmailTemplatesTab.jsx` — full rewrite)
+  • **Two tabs**: Системни (14) / Персонализирани (N) — separates the
+    locked system slugs from admin-defined ones.
+  • Per-template metadata pills: lang badge (BG/EN/RO), placeholder
+    chips, description.
+  • **Preview modal** — renders raw HTML in a sandboxed iframe (no
+    JS execution, no network access — `sandbox=""`).
+  • **Reset bтон** on system templates (Trash bтон on custom).
+  • Editable subject + header + body (rich, monospace body editor).
+  • Send-test form retained with optgroups for system vs custom.
+
+### Files touched
+- `/app/backend/email_templates.py` (new — registry + render + seeder)
+- `/app/backend/emails.py` (refactored — every helper now thin wrapper)
+- `/app/backend/routers/auth.py` (verify_email + password_reset)
+- `/app/backend/routers/admin.py` (new endpoints + richer GET)
+- `/app/backend/server.py` (startup hook)
+- `/app/frontend/src/components/AdminEmailTemplatesTab.jsx` (full rewrite)
+
+### Verification
+- Backend startup: "Email templates: seeded 14 system defaults" logged.
+- `GET /admin/email-templates` returns 14 entries, all with `system: true`.
+- Playwright: opened admin → Email templates tab → tabs show "Системни
+  (14) / Персонализирани (0)" with metadata pills + Reset buttons on
+  all 14 cards. Preview modal renders the HTML in a sandboxed iframe.
+
+### Future
+- Multi-language admin overrides for the bidding-lifecycle templates
+  (currently only BG; EN/RO would just need 11 new slugs in the
+  registry).
+- Send-test that substitutes `{{vars}}` with realistic demo values so
+  admins see the final email exactly as users will receive it.
+
+
 
 ### User-reported issue
 Admin Health → Image queue tab showed ALL ZEROS even after fresh
