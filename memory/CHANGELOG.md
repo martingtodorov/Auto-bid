@@ -1,7 +1,52 @@
 # Changelog
 
 
-## 2026-05-16 — Iteration 24: Multi-language email templates (EN + RO)
+## 2026-05-16 — Iteration 25: Email template edits weren't persisting — fix
+
+### Bug
+User reported that edits to email templates appeared to save (UI showed
+"Запазено") but reverted to factory defaults after a page refresh.
+
+### Root cause
+`SETTINGS_DEFAULTS` in `server.py` (the schema used by `_load_settings_cache`)
+did not include `"email_templates"`. The cache loader does:
+```python
+for k in SETTINGS_DEFAULTS:
+    if k in doc and doc[k] is not None:
+        merged[k] = doc[k]
+```
+So every cache refresh **silently dropped** the `email_templates` field
+from the merged settings. Then `GET /admin/email-templates` reads from
+`_settings_fn()` (the cache), finds `email_templates: {}`, and the
+overlay loop falls through to the registry defaults for every slug —
+making admin edits look like they never happened.
+
+DB writes were correct; the cache layer was discarding them on the
+read path.
+
+### Fix
+Added `"email_templates": {}` to `SETTINGS_DEFAULTS` with a defensive
+comment explaining why removing it again would resurrect this bug.
+
+### Verification
+End-to-end test:
+  1. Reset `outbid_en` → factory default `"You've been outbid · ..."`
+  2. PUT edit → `"PERSIST_TEST_99"` (200 OK)
+  3. GET after PUT → `"PERSIST_TEST_99"` ✓ — persists correctly
+  4. Reset back to defaults for clean state.
+
+### Files touched
+- `/app/backend/server.py` (SETTINGS_DEFAULTS — 1 line addition)
+
+### Required user action (production)
+After deploying the backend, your previously-attempted edits ARE still
+in the DB (they were always written correctly — only the read path
+was dropping them). Now they will appear on refresh as expected.
+
+If you want a clean slate, click "Reset" on any individual template
+to restore its factory default.
+
+
 
 ### Added
 22 new email templates (11 transactional × 2 languages):

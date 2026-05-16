@@ -239,6 +239,14 @@ SETTINGS_DEFAULTS = {
     "hero_subtitle_ro": "",
     "hero_headline_en": "",
     "hero_subtitle_en": "",
+    # Editable email subject + body per slug. Keys are slugs like
+    # `outbid_bg` / `verify_email_en`; values are { subject, body, header,
+    # system, lang, description, placeholders }. The schema is enforced
+    # in routers/admin.py:admin_put_templates. Without this key in the
+    # defaults map, `_load_settings_cache` would silently drop the
+    # `email_templates` field on every refresh, making admin edits look
+    # like they reverted after a page reload.
+    "email_templates": {},
 }
 _settings_cache: dict = dict(SETTINGS_DEFAULTS)
 
