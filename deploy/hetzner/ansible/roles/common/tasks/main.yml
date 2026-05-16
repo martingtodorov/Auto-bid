@@ -3,8 +3,23 @@
 # Idempotent. Re-runs are safe.
 #
 # IMPORTANT (SSH safety): the deploy user's public key is installed
-# BEFORE we disable root SSH. Otherwise a failed key push would lock us
+# BEFORE we touch sshd_config. Otherwise a failed key push would lock us
 # out of the box and force a trip to the Hetzner KVM console.
+#
+# SSH POLICY (2026-05-16 update):
+#   PermitRootLogin       prohibit-password   ← key-only root SSH, NO password
+#   PubkeyAuthentication  yes                 ← always on, explicit
+#   PasswordAuthentication no                 ← passwords disabled for every user
+#
+# Previous policy was `PermitRootLogin no` which broke operator jump
+# access. The new policy keeps password login off (which was the actual
+# security win) while letting root in via key — the equivalent of how
+# Hetzner's official cloud-init image ships out of the box.
+#
+# Anti-regression: we also rewrite any /etc/ssh/sshd_config.d/*.conf
+# snippets that contradict the above (Ubuntu 24.04 cloud-init's
+# `50-cloud-init.conf` is the usual culprit — it sets
+# `PasswordAuthentication yes` and overrides our main edit).
 
 - name: Update apt cache
   ansible.builtin.apt:
@@ -46,10 +61,11 @@
     validate: "visudo -cf %s"
   become: yes
 
-# ── Provision deploy SSH key BEFORE disabling root login ─────────────────────
-# `deploy_ssh_public_keys` can be overridden in group_vars/host_vars.
-# Default: drop whichever public keys live next to the role in
-# `files/deploy_authorized_keys` (one per line).
+# ── Provision deploy SSH key BEFORE we touch sshd_config ────────────────────
+# Even with the relaxed policy (root key-only allowed), turning off
+# password auth without a working key in place would lock us out. The
+# assertion below makes that explicit — the play HALTS if no key is
+# configured anywhere.
 - name: Check for bundled deploy authorized_keys file
   ansible.builtin.stat:
     path: "{{ role_path }}/files/deploy_authorized_keys"
@@ -74,17 +90,42 @@
     that:
       - (deploy_ssh_public_keys | default(_deploy_key_lines | default([]))) | length > 0
     fail_msg: >-
-      Refusing to harden SSH — no public key is configured for the `deploy`
+      Refusing to touch sshd — no public key is configured for the `deploy`
       user. Set `deploy_ssh_public_keys` in group_vars/host_vars OR drop one
-      or more keys into `roles/common/files/deploy_authorized_keys`. Disabling
-      root SSH without a working deploy key would lock us out.
+      or more keys into `roles/common/files/deploy_authorized_keys`. Without
+      a working key, turning password auth off would lock us out entirely.
 
-# Only NOW is it safe to harden sshd.
-- name: Disable root SSH login
+# ── sshd hardening — KEY-ONLY for both root and deploy ──────────────────────
+# Policy (intentionally NOT disabling root):
+#   PermitRootLogin       prohibit-password   # root SSH allowed via key only
+#   PubkeyAuthentication  yes                 # explicit — never leave to default
+#   PasswordAuthentication no                 # no password login on any user
+#
+# We use `prohibit-password` rather than `yes` because:
+#   * It still allows `ssh root@host` with the operator's key (which is what
+#     we need for jump access / Hetzner ops);
+#   * It explicitly forbids password fallback for root, which `yes` alone
+#     does NOT do — `PermitRootLogin yes` + a sshd ignoring our explicit
+#     `PasswordAuthentication no` (e.g. via /etc/ssh/sshd_config.d/*.conf
+#     override) would silently re-enable root password login.
+#
+# `validate: sshd -t -f %s` runs sshd's own config syntax checker against
+# the proposed file before lineinfile commits — invalid edits are rolled
+# back automatically instead of breaking the running daemon on reload.
+- name: Allow root SSH (key-only — never password)
   ansible.builtin.lineinfile:
     path: /etc/ssh/sshd_config
-    regexp: '^#?PermitRootLogin'
-    line: 'PermitRootLogin no'
+    regexp: '^[#\s]*PermitRootLogin\b'
+    line: 'PermitRootLogin prohibit-password'
+    validate: 'sshd -t -f %s'
+  become: yes
+  notify: restart sshd
+
+- name: Force public-key authentication on (explicit, never leave to default)
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^[#\s]*PubkeyAuthentication\b'
+    line: 'PubkeyAuthentication yes'
     validate: 'sshd -t -f %s'
   become: yes
   notify: restart sshd
@@ -92,9 +133,48 @@
 - name: Disable password SSH auth
   ansible.builtin.lineinfile:
     path: /etc/ssh/sshd_config
-    regexp: '^#?PasswordAuthentication'
+    regexp: '^[#\s]*PasswordAuthentication\b'
     line: 'PasswordAuthentication no'
     validate: 'sshd -t -f %s'
+  become: yes
+  notify: restart sshd
+
+# Neutralise any /etc/ssh/sshd_config.d/*.conf snippets that flip
+# PermitRootLogin / PasswordAuthentication back to "no" / "yes" — Ubuntu
+# 24.04's cloud-init occasionally drops `50-cloud-init.conf` with
+# `PasswordAuthentication yes`, which would silently override our edits
+# above because the *.d snippets are loaded AFTER the main file. We grep
+# for any conflicting directive and rewrite it.
+- name: Find sshd_config.d snippets that override SSH policy
+  ansible.builtin.shell: |
+    set -eo pipefail
+    if [ ! -d /etc/ssh/sshd_config.d ]; then exit 0; fi
+    grep -lE '^[[:space:]]*(PermitRootLogin|PasswordAuthentication|PubkeyAuthentication)\b' \
+      /etc/ssh/sshd_config.d/*.conf 2>/dev/null || true
+  args:
+    executable: /bin/bash
+  register: _sshd_overrides
+  changed_when: false
+
+- name: Override PermitRootLogin in conflicting sshd_config.d snippets
+  ansible.builtin.lineinfile:
+    path: "{{ item }}"
+    regexp: '^[#\s]*PermitRootLogin\b'
+    line: 'PermitRootLogin prohibit-password'
+    validate: 'sshd -t -f /etc/ssh/sshd_config'
+  loop: "{{ _sshd_overrides.stdout_lines | default([]) }}"
+  when: _sshd_overrides.stdout_lines | default([]) | length > 0
+  become: yes
+  notify: restart sshd
+
+- name: Override PasswordAuthentication in conflicting sshd_config.d snippets
+  ansible.builtin.lineinfile:
+    path: "{{ item }}"
+    regexp: '^[#\s]*PasswordAuthentication\b'
+    line: 'PasswordAuthentication no'
+    validate: 'sshd -t -f /etc/ssh/sshd_config'
+  loop: "{{ _sshd_overrides.stdout_lines | default([]) }}"
+  when: _sshd_overrides.stdout_lines | default([]) | length > 0
   become: yes
   notify: restart sshd
 

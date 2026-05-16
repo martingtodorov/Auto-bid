@@ -1,7 +1,51 @@
 # Changelog
 
 
-## 2026-05-16 — Iteration 18: Deploy playbook nginx fix + image preview
+## 2026-05-16 — Iteration 19: Ansible SSH policy fix — root key-only
+
+### Bug
+`roles/common/tasks/main.yml` had `PermitRootLogin no`. Every `site.yml`
+run rewrote the live `/etc/ssh/sshd_config` back to that and restarted
+sshd → `ssh root@…` and backend jump access were broken on every deploy.
+Manual server fixes were silently undone the next deploy. Operator's
+manual YAML edit corrupted formatting on top, blocking deploys entirely.
+
+### Fix
+Rewrote the sshd hardening section (`roles/common/tasks/main.yml`):
+
+  • `PermitRootLogin prohibit-password` — root SSH allowed via key only,
+    NEVER via password. Stronger than plain `yes` (which alone wouldn't
+    forbid password fallback if `PasswordAuthentication` were ever
+    toggled back on by some other tool).
+  • `PubkeyAuthentication yes` — explicit, never leave to default.
+  • `PasswordAuthentication no` — passwords disabled for every user.
+
+Each task uses `validate: 'sshd -t -f %s'` so any malformed edit is
+rolled back before sshd would refuse to start.
+
+### Anti-regression
+Ubuntu 24.04 cloud-init drops `/etc/ssh/sshd_config.d/50-cloud-init.conf`
+with `PasswordAuthentication yes`, which is loaded AFTER the main file
+and SILENTLY overrides our edits there. The role now greps every
+`*.conf` snippet under `sshd_config.d/` for any conflicting directive
+and rewrites it to match our policy. So the next time cloud-init drops
+a snippet, the next `site.yml` will catch and override it.
+
+### Files touched
+- `/app/deploy/hetzner/ansible/roles/common/tasks/main.yml`
+
+### Verification
+- `python3 -c "yaml.safe_load_all(open(...))"` → all 21 tasks parse cleanly.
+- Handler `restart sshd` exists and is referenced via `notify:`.
+
+### Required user action (production)
+Re-run `ansible-playbook -i ansible/inventory.ini playbooks/site.yml`
+on both hosts. After it completes:
+  • `ssh root@178.105.37.1 -i ~/.ssh/your_key` → works
+  • `ssh root@178.105.37.1` (password) → refused (correct)
+  • `ssh deploy@178.105.37.1 -i ~/.ssh/your_key` → works
+
+
 
 ### Root cause of production CDN 301 — DEPLOY PLAYBOOK BUG
 Investigated why `/etc/nginx/sites-available/autoandbid` on production
