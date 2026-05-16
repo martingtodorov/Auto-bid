@@ -16,7 +16,6 @@ export default function AccountSettingsPage() {
   const { t } = useTranslation();
   const { user, loading, refresh } = useAuth();
   const [phone, setPhone] = useState("");
-  const [smsOpt, setSmsOpt] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
@@ -25,7 +24,6 @@ export default function AccountSettingsPage() {
   useEffect(() => {
     if (!user) return;
     setPhone(user.phone || "");
-    setSmsOpt(!!user.sms_opt_in);
     loadSearches();
   }, [user]);
 
@@ -40,7 +38,10 @@ export default function AccountSettingsPage() {
   const save = async () => {
     setMsg(""); setErr(""); setSaving(true);
     try {
-      await api.patch("/me/profile", { phone: phone.trim(), sms_opt_in: smsOpt });
+      // SMS notifications have been removed from the product entirely —
+      // only phone (kept for invoice / KYC contact) is persisted here.
+      // Push + email channels live in their own sections above.
+      await api.patch("/me/profile", { phone: phone.trim() });
       await refresh();
       setMsg("Запазено");
       setTimeout(() => setMsg(""), 2000);
