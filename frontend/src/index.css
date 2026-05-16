@@ -15,6 +15,21 @@ html {
     text-size-adjust: 100%;
 }
 
+/* iOS Safari auto-zooms into form fields when their font-size is below
+   16 px. The zoom is jarring and never quite recovers — the viewport
+   stays slightly enlarged after the field blurs. We force a 16 px
+   minimum on every focusable input/select/textarea ONLY on touch
+   devices so desktop typography keeps the existing scale. Pinch-zoom
+   itself is still available — we're only suppressing the involuntary
+   focus zoom, not user-initiated zoom. */
+@media (max-width: 1024px) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+    select,
+    textarea {
+        font-size: 16px;
+    }
+}
+
 
 :root {
     --bg: 0 0% 100%;
