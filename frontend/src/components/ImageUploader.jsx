@@ -117,15 +117,31 @@ export default function ImageUploader({
     // onUploadProgress but the shared instance is configured for JSON.
     // Using XHR here keeps the multipart path simple and lets us update
     // a per-file progress bar in real time.
+    //
+    // CSRF: apiClient's interceptor reads `csrf_token` cookie per request
+    // and sets `X-CSRF-Token`. We DO NOT go through axios here, so we
+    // must replicate that — read the cookie directly. Falling back to
+    // `api.defaults.headers.common` would silently fail because the
+    // interceptor never writes there.
+    const readCookie = (name) => {
+      if (typeof document === "undefined") return null;
+      const m = document.cookie.match(
+        new RegExp("(?:^|; )" + name.replace(/([.$?*|{}()[\]\\/+^])/g, "\\$1") + "=([^;]*)")
+      );
+      return m ? decodeURIComponent(m[1]) : null;
+    };
+
     const fd = new FormData();
     fd.append("file", file, file.name);
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `${api.defaults.baseURL.replace(/\/$/, "")}/sell/image-upload`);
-      xhr.withCredentials = true;
-      // CSRF cookie is auto-attached; X-CSRF-Token from api defaults.
-      const csrf = api.defaults.headers?.common?.["X-CSRF-Token"];
+      xhr.withCredentials = true;   // send httpOnly auth + csrf cookies
+      const csrf = readCookie("csrf_token");
       if (csrf) xhr.setRequestHeader("X-CSRF-Token", csrf);
+      // Bearer fallback for legacy sessions still using localStorage token.
+      const tok = typeof localStorage !== "undefined" ? localStorage.getItem("autobid_token") : null;
+      if (tok) xhr.setRequestHeader("Authorization", `Bearer ${tok}`);
       xhr.upload.onprogress = (e) => {
         if (!e.lengthComputable) return;
         const pct = Math.round((e.loaded / e.total) * 100);
@@ -134,9 +150,9 @@ export default function ImageUploader({
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) {
           try { resolve(JSON.parse(xhr.responseText)); }
-          catch (e) { reject(new Error("Невалиден отговор от сървъра.")); }
+          catch { reject(new Error("Невалиден отговор от сървъра.")); }
         } else {
-          let msg = "Грешка при качване.";
+          let msg = `Грешка ${xhr.status} при качване.`;
           try { msg = JSON.parse(xhr.responseText)?.detail || msg; } catch {}
           reject(new Error(msg));
         }
