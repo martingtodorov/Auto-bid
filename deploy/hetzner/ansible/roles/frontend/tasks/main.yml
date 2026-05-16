@@ -156,8 +156,38 @@
     owner: root
     group: root
     mode: "0644"
+    # Always run handlers AND force-write — `force: yes` is default but
+    # makes the intent explicit. Without it Ansible compares hashes and
+    # silently skips when content matches; we want the touch even on
+    # "no-op" runs so timestamp updates and operators can `stat` it.
+    force: yes
   become: yes
   notify: reload nginx
+  register: nginx_copy
+
+- name: Audit deployed config has img.autoandbid.bg dedicated vhost
+  # Fail the deploy IMMEDIATELY if the just-copied file is missing
+  # the dedicated CDN vhost. Catches the case where someone reverted
+  # the repo file by accident, or the playbook is run with --check
+  # against an older branch. Greps the file we literally just wrote
+  # so we know we're checking the real deployed content.
+  ansible.builtin.shell: |
+    set -eo pipefail
+    if ! grep -qE '^[[:space:]]*server_name[[:space:]]+img\.autoandbid\.bg[[:space:]]*;' /etc/nginx/sites-available/autoandbid; then
+      echo "FATAL: deployed config has no 'server_name img.autoandbid.bg;' line"
+      echo "------- last 50 lines of deployed file -------"
+      tail -n 50 /etc/nginx/sites-available/autoandbid
+      exit 1
+    fi
+    if ! grep -qE 'proxy_pass[[:space:]]+http://ab-back1:8001/uploads/' /etc/nginx/sites-available/autoandbid; then
+      echo "FATAL: deployed config has no '/uploads/' proxy_pass to backend"
+      exit 1
+    fi
+    echo "deployed config has dedicated img.autoandbid.bg vhost + uploads proxy_pass ✓"
+  args:
+    executable: /bin/bash
+  changed_when: false
+  become: yes
 
 - name: Enable site
   ansible.builtin.file:
