@@ -269,6 +269,61 @@ async def enqueue(
     return True
 
 
+async def enqueue_for_stored_urls(
+    urls: list[str],
+    *,
+    auction_id: Optional[str] = None,
+    categories: Optional[list[str]] = None,
+) -> int:
+    """Enqueue variant generation for images already persisted to disk.
+
+    Called by `/auctions` submit + `/auctions/import-mobile-bg` so the
+    HTTP response returns AS SOON AS the optimized JPGs are stored —
+    AVIF/WebP variants for the responsive `<Picture>` element generate
+    in the background, not on the submit request thread.
+
+    `urls` are public URLs as returned by `storage.store_image()` —
+    they end in `<sha>.<ext>` because the disk backend is
+    content-addressed. We extract sha + extension from the URL, locate
+    the file on disk, and submit one queue job per image.
+
+    Returns the number of jobs successfully enqueued.
+    """
+    if not urls:
+        return 0
+    upload_root = os.environ.get("UPLOAD_DIR", "/opt/autobids/uploads")
+    enqueued = 0
+    for idx, url in enumerate(urls):
+        if not isinstance(url, str) or not url:
+            continue
+        # URL forms accepted:
+        #   /api/uploads/auctions/<aa>/<sha>.<ext>
+        #   https://img.autoandbid.bg/uploads/auctions/<aa>/<sha>.<ext>
+        #   /uploads/auctions/<aa>/<sha>.<ext>
+        marker = "/uploads/"
+        if marker not in url:
+            continue
+        rel = url.split(marker, 1)[1]
+        abs_path = os.path.join(upload_root, rel)
+        if not os.path.isfile(abs_path):
+            log.warning("ioq.enqueue_for_stored_urls: file missing %s", abs_path)
+            continue
+        sha = os.path.splitext(os.path.basename(abs_path))[0]
+        # Sanity: storage layer should always produce a 64-char hex sha.
+        # If the URL isn't sha-addressed (e.g. legacy import) hash the
+        # file bytes — slow but correct.
+        if len(sha) != 64 or any(c not in "0123456789abcdef" for c in sha):
+            import hashlib
+            with open(abs_path, "rb") as f:
+                sha = hashlib.sha256(f.read()).hexdigest()
+        if await enqueue(
+            sha=sha, src_path=abs_path,
+            auction_id=auction_id, image_idx=idx,
+        ):
+            enqueued += 1
+    return enqueued
+
+
 async def retry_failed(*, sha: str, src_path: str, auction_id: str) -> bool:
     """Admin-triggered retry of a previously-failed image. Resets the
     status to `optimizing` and re-enqueues the job from attempt 1.
