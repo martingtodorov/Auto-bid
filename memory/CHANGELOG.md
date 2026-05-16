@@ -1,7 +1,77 @@
 # Changelog
 
 
-## 2026-05-16 — Iteration 17: Image Upload Architecture overhaul + CDN debug
+## 2026-05-16 — Iteration 18: Deploy playbook nginx fix + image preview
+
+### Root cause of production CDN 301 — DEPLOY PLAYBOOK BUG
+Investigated why `/etc/nginx/sites-available/autoandbid` on production
+contained ZERO `img.autoandbid.bg` config even though the repo file
+(`deploy/hetzner/nginx/autoandbid.conf`) clearly has the dedicated vhost.
+
+The bug: `deploy_frontend.yml` (the routine code-only redeploy) only
+runs `nginx -s reload` — it NEVER copies `nginx/autoandbid.conf` from
+the repo to `/etc/nginx/sites-available/autoandbid`. The nginx-config
+tasks (Copy → Audit → Smoke-test) live only in `roles/frontend/tasks/
+main.yml`, which runs ONLY via `site.yml` (the bootstrap-only playbook).
+
+So once the routine deploy workflow was adopted (`deploy_frontend.yml`),
+any change to `nginx/autoandbid.conf` was silently ignored, including
+the entire `img.autoandbid.bg` server block added weeks ago. nginx kept
+running the stale config → `img.autoandbid.bg` traffic was caught by
+the main vhost → `301 → autoandbid.com/...` → text/html → Chrome ORB
+blocked the images → import flows failed.
+
+### Fix applied to `deploy/hetzner/ansible/playbooks/deploy_frontend.yml`
+Added FIVE tasks after the build swap:
+  1. **Refresh nginx config** — `force: yes` copy of `nginx/autoandbid.conf`
+     → `/etc/nginx/sites-available/autoandbid`. Always overwrites.
+  2. **Audit deployed file** — greps for `server_name img.autoandbid.bg;`
+     AND `proxy_pass http://.../uploads/`. Fails the deploy IMMEDIATELY
+     if either is missing (so a bad merge can't slip through).
+  3. **Re-symlink** sites-enabled/autoandbid + remove default + remove
+     any other competing site-config symlinks.
+  4. **`nginx -t`** validation before reload.
+  5. **Origin smoke test** — `curl -H 'Host: img.autoandbid.bg' https://127.0.0.1/`
+     verifying root returns 4xx (not a redirect to autoandbid.com) and
+     a missing /uploads/ asset returns 404 (not 301). FAILS the deploy
+     on a cross-domain redirect.
+
+Documented in README.md so operators know the routine playbook is
+nginx-aware now.
+
+### Frontend — client-side blob preview with blur while uploading
+`ImageUploader.jsx`:
+  - On file pick, `URL.createObjectURL(file)` gives an instant local
+    preview — the photo is on the tile before the first XHR byte goes
+    out. `blur-sm scale-105 brightness-95` differentiates "still
+    uploading" from "saved".
+  - On error: drop the blur so the user can clearly see WHICH photo
+    failed; "Премахни" pill revokes the blob and clears the tile.
+  - On success: revoke the blob URL before deleting from state so the
+    File object isn't held by the browser one render longer than needed.
+  - Translucent overlay + percent counter + spinner sit on top of the
+    preview without obscuring it.
+  - Final progress bar at the bottom, animated.
+
+### Files touched
+- `/app/deploy/hetzner/ansible/playbooks/deploy_frontend.yml` (rewritten)
+- `/app/deploy/hetzner/README.md` (added warning callout)
+- `/app/frontend/src/components/ImageUploader.jsx` (blob preview tiles)
+
+### Verification
+- `testing_agent_v3_fork` ran iteration 22: **20/20 backend tests passed,
+  all frontend behaviour verified via Playwright. CDN probe confirmed
+  production wrong_redirect=true.**
+
+### Outstanding user action
+- **Run `ansible-playbook -i ansible/inventory.ini playbooks/deploy_frontend.yml`
+  on production.** The new tasks will:
+    * Copy the (correct) nginx config over the (stale) deployed one
+    * Fail the deploy if it lacks the CDN vhost (catches bad merges)
+    * Smoke-test img.autoandbid.bg from inside the box
+  After it succeeds, the production 301 will be GONE.
+
+
 
 ### Backend — async image optimization queue
 - New module `/app/backend/services/image_optimization_queue.py`:
