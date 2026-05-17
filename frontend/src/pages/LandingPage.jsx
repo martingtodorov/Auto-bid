@@ -111,7 +111,7 @@ export default function LandingPage() {
   const featuredIds = new Set(featured.map((f) => f.id));
   const promotedActive = auctionsEx.filter((a) => featuredIds.has(a.id) || a.featured);
   const regularActive = auctionsEx.filter((a) => !featuredIds.has(a.id) && !a.featured);
-  const activeOverview = [...promotedActive, ...regularActive].slice(0, 6);
+  const activeOverview = [...promotedActive, ...regularActive].slice(0, 9);
 
   // CMS-editable hero text per language (falls back to static i18n)
   const cmsHeadline = settings?.[`hero_headline_${lang}`];
@@ -186,6 +186,17 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 stagger" data-testid="landing-auctions-grid">
             {activeOverview.map((a) => <AuctionCard key={a.id} auction={a} />)}
           </div>
+          {/* Mobile-only CTA — desktop already has the top-right "View all"
+              link, so showing it again on wide screens just duplicates.
+              On small screens the section is a long scroll and the bottom
+              CTA is what users actually reach. */}
+          <Link
+            to="/auctions"
+            className="sm:hidden btn btn-secondary w-full mt-6 inline-flex items-center justify-center gap-2"
+            data-testid="landing-view-all-auctions-mobile"
+          >
+            {t("cta.view_all_auctions")} <ArrowRight size={14} />
+          </Link>
         </div>
       </section>
 
