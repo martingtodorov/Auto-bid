@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { X, Gavel, ShieldCheck, Plus, Wallet, AlertTriangle } from "lucide-react";
+import { X, Gavel, ShieldCheck, Wallet, AlertTriangle } from "lucide-react";
 import { formatEUR } from "../lib/apiClient";
 
 /**
@@ -235,10 +235,10 @@ export default function BidConfirmModal({
                 type="button"
                 onClick={() => onTopUp && onTopUp(Math.ceil(Math.abs(remainingGross) / 1000) * 1000)}
                 disabled={busy}
-                className="btn btn-secondary flex-1 inline-flex items-center justify-center gap-1.5"
+                className="btn btn-secondary flex-1 inline-flex items-center justify-center"
                 data-testid="bid-confirm-topup"
               >
-                <Plus size={13} /> {t("bid_confirm.topup", "Зареди още")}
+                {t("bid_confirm.topup", "Зареди")}
               </button>
             )}
             <button
