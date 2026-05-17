@@ -760,15 +760,33 @@ def localized_render(
 async def seed_defaults_on_startup(db) -> int:
     """Write any missing system templates into `site_settings.email_templates`.
 
-    Idempotent: existing admin overrides are preserved. Returns the number
-    of new entries seeded so the startup log can show what happened.
+    DEPLOY SAFETY (per user request, 2026-05-16):
+    Admin-edited templates are NEVER overwritten by a redeploy. The seeder
+    skips every slug that already exists in the DB — even if the in-code
+    registry default has been updated since the last deploy. This is by
+    design: HTML edits made through the admin UI are the source of truth
+    once written.
+
+    Operationally:
+      • First-ever deploy on a fresh DB → all 36 system templates seeded.
+      • Subsequent deploys → only NEW slugs (e.g. a freshly-added one in
+        the registry) are seeded; everything else is left alone.
+      • To force-restore a specific template to its in-code default,
+        the admin clicks "Reset" in the UI, which calls
+        `POST /admin/email-templates/{slug}/reset`.
+
+    Idempotent. Returns the number of new entries seeded so the startup
+    log shows what happened.
     """
     from datetime import datetime, timezone
     s = await db.site_settings.find_one({"id": "global"}, {"_id": 0, "email_templates": 1}) or {}
     existing = s.get("email_templates") or {}
     additions: dict[str, dict] = {}
+    skipped_existing = 0
     for slug, tpl in SYSTEM_TEMPLATES.items():
         if slug in existing:
+            # Admin-edited or previously-seeded — leave untouched.
+            skipped_existing += 1
             continue
         additions[slug] = {
             "subject": tpl["subject"],
@@ -780,6 +798,10 @@ async def seed_defaults_on_startup(db) -> int:
             "placeholders": tpl.get("placeholders", []),
         }
     if not additions:
+        logger.info(
+            "email_templates: no new system defaults to seed (preserved %d existing entries — admin edits intact)",
+            skipped_existing,
+        )
         return 0
     merged = {**existing, **additions}
     await db.site_settings.update_one(
@@ -790,7 +812,10 @@ async def seed_defaults_on_startup(db) -> int:
         }, "$setOnInsert": {"id": "global"}},
         upsert=True,
     )
-    logger.info("email_templates: seeded %d system defaults", len(additions))
+    logger.info(
+        "email_templates: seeded %d new system defaults (preserved %d existing — admin edits intact)",
+        len(additions), skipped_existing,
+    )
     return len(additions)
 
 

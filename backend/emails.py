@@ -63,17 +63,26 @@ async def send_email(to: str, subject: str, html: str) -> bool:
 
 
 def _shell(title: str, body_html: str) -> str:
+    """Wrap an inner HTML body in the brand chrome (header + footer).
+
+    The `title` parameter is kept for backwards-compatibility with the
+    template renderer (`render_localized` returns subject/header/body)
+    but is INTENTIONALLY no longer rendered as an `<h1>` inside the
+    email — per user request the brand label "Auto&Bid" is the only
+    title shown, in the brand green (`#1B4D3E`) without any underline /
+    hyperlink styling. Individual templates can include their own
+    heading inside `body_html` if needed.
+    """
     return f"""
 <!doctype html>
 <html><body style="margin:0;background:#f6f7f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Manrope,Roboto,sans-serif;color:#111827;">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f6f7f8;padding:32px 0;">
   <tr><td align="center">
     <table role="presentation" width="560" cellspacing="0" cellpadding="0" style="background:#ffffff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;">
-      <tr><td style="padding:28px 32px;border-bottom:1px solid #e5e7eb;">
-        <div style="font-weight:700;font-size:22px;letter-spacing:-0.03em;">autoandbid<span style="color:#1B4D3E">.bg</span></div>
+      <tr><td style="padding:28px 32px;border-bottom:1px solid #e5e7eb;text-align:left;">
+        <span style="font-weight:800;font-size:22px;letter-spacing:-0.02em;color:#1B4D3E;text-decoration:none;">Auto&amp;Bid</span>
       </td></tr>
       <tr><td style="padding:32px;">
-        <h1 style="margin:0 0 16px 0;font-size:24px;letter-spacing:-0.02em;">{title}</h1>
         {body_html}
       </td></tr>
       <tr><td style="padding:20px 32px;background:#fafafa;border-top:1px solid #e5e7eb;color:#6b7280;font-size:12px;">

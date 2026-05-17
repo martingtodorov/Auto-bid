@@ -270,19 +270,6 @@ export default function AdminEmailTemplatesTab() {
                 data-testid={`template-subject-${k}`}
               />
             </div>
-            {isSystem && (
-              <div className="mt-3">
-                <label className="overline text-[hsl(var(--ink-muted))] block mb-1.5">Заглавие в имейла (header)</label>
-                <input
-                  type="text"
-                  value={tpl.header || ""}
-                  onChange={(e) => update(k, "header", e.target.value)}
-                  maxLength={200}
-                  className="w-full border border-[hsl(var(--line))] h-11 px-3 text-sm"
-                  data-testid={`template-header-${k}`}
-                />
-              </div>
-            )}
             <div className="mt-3">
               <label className="overline text-[hsl(var(--ink-muted))] block mb-1.5">Съдържание (HTML)</label>
               <textarea

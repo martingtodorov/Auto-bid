@@ -1,7 +1,55 @@
 # Changelog
 
 
-## 2026-05-16 — Iteration 25: Email template edits weren't persisting — fix
+## 2026-05-16 — Iteration 26: Email shell polish + deploy-safe seeding
+
+### Three changes per user request
+
+1. **Removed the `<h1>` header rectangle** from `_shell()` in `emails.py`.
+   Templates no longer render a duplicate title above the body content
+   — the user found it visually redundant given each template's body
+   already opens with a greeting (`<p>Здравейте, {{name}},</p>`).
+   The `header` parameter is still accepted for backwards-compat but
+   silently ignored.
+
+2. **"Auto&Bid" brand label** in the email header:
+   • Brand green `#1B4D3E` (same as the site logo color).
+   • `font-weight: 800` (matches the React logo's bold variant).
+   • `text-decoration: none` — explicitly no underline / hyperlink
+     styling even when an email client tries to auto-link it.
+   • Replaces the previous "autoandbid.bg" + `<span>` two-tone styling.
+
+3. **Deploy-safe seeding** of system templates (anti-regression hardening
+   of the existing logic in `seed_defaults_on_startup`):
+   • Confirmed the loop already does `if slug in existing: continue` —
+     admin-edited HTML is preserved across deploys.
+   • Strengthened the docstring + log line so the behaviour is
+     unambiguous: subsequent deploys log
+     `"no new system defaults to seed (preserved 36 existing entries —
+     admin edits intact)"`.
+   • Forced-restore is still possible via the per-slug "Reset" button
+     in the admin UI.
+
+### Frontend
+Removed the "Заглавие в имейла (header)" input from system template
+cards — the field is no longer used. Custom (non-system) templates
+also have no header input by design.
+
+### Files touched
+- `/app/backend/emails.py` (_shell rewrite)
+- `/app/backend/email_templates.py` (seeder docstring + log line)
+- `/app/frontend/src/components/AdminEmailTemplatesTab.jsx` (drop header input)
+
+### Verification
+- Backend startup log: `email_templates: no new system defaults to seed
+  (preserved 36 existing entries — admin edits intact)` ✓
+- Visual smoke test of rendered email HTML:
+  - `<h1>` count: 0 (was 1)
+  - "Auto&Bid" computed color: `rgb(27, 77, 62)` (brand green)
+  - `text-decoration: none` ✓
+  - `font-weight: 800` ✓
+
+
 
 ### Bug
 User reported that edits to email templates appeared to save (UI showed
