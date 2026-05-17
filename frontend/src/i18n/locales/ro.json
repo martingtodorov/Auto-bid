@@ -34,7 +34,16 @@
     "success": "Adresa de email a fost confirmată. Poți licita, comenta și vinde.",
     "invalid": "Link invalid sau expirat.",
     "no_token": "Lipsește token-ul din link.",
-    "go_dashboard": "Mergi la cont"
+    "go_dashboard": "Mergi la cont",
+    "passkey_title": "Adaugă un passkey",
+    "passkey_subtitle": "Conectează-te fără parolă — cu amprentă, Face ID sau PIN-ul dispozitivului.",
+    "passkey_add_cta": "Adaugă passkey",
+    "passkey_adding": "Se adaugă…",
+    "passkey_continue": "Continuă către passkey",
+    "passkey_done": "Passkey adăugat cu succes.",
+    "passkey_error": "Înregistrarea passkey-ului a eșuat.",
+    "reauth_label": "Confirmă parola",
+    "skip_passkey": "Omite — mergi la cont"
   },
   "verify_banner": {
     "body": "Confirmă-ți emailul ca să poți licita, comenta și vinde.",

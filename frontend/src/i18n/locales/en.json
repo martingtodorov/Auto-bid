@@ -34,7 +34,16 @@
     "success": "Your email has been verified. You can now bid, comment and sell.",
     "invalid": "Invalid or expired verification link.",
     "no_token": "No token in the link.",
-    "go_dashboard": "Go to dashboard"
+    "go_dashboard": "Go to dashboard",
+    "passkey_title": "Add a passkey",
+    "passkey_subtitle": "Sign in without a password — using fingerprint, Face ID or device PIN.",
+    "passkey_add_cta": "Add passkey",
+    "passkey_adding": "Adding…",
+    "passkey_continue": "Continue to passkey",
+    "passkey_done": "Passkey added successfully.",
+    "passkey_error": "Passkey registration failed.",
+    "reauth_label": "Confirm your password",
+    "skip_passkey": "Skip — go to dashboard"
   },
   "verify_banner": {
     "body": "Verify your email to bid, comment and sell.",

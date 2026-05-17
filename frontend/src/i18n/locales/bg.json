@@ -34,7 +34,16 @@
     "success": "Имейлът е потвърден успешно. Вече можете да наддавате, коментирате и продавате.",
     "invalid": "Невалиден или изтекъл линк за потвърждение.",
     "no_token": "Липсва токен в линка.",
-    "go_dashboard": "Към профила"
+    "go_dashboard": "Към профила",
+    "passkey_title": "Добави passkey",
+    "passkey_subtitle": "Влизай без парола — с пръстов отпечатък, Face ID или PIN на устройството.",
+    "passkey_add_cta": "Добави passkey",
+    "passkey_adding": "Добавяне…",
+    "passkey_continue": "Продължи към passkey",
+    "passkey_done": "Passkey е добавен успешно.",
+    "passkey_error": "Регистрацията на passkey се провали.",
+    "reauth_label": "Потвърди паролата си",
+    "skip_passkey": "Пропусни — към профила"
   },
   "verify_banner": {
     "body": "Потвърдете имейла си, за да наддавате, коментирате и продавате.",

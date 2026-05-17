@@ -149,7 +149,31 @@ export default function LoginPage() {
         <h1 className="font-serif text-4xl mt-3">{t("auth.welcome_back")}</h1>
         <p className="mt-3 text-sm text-[hsl(var(--ink-muted))]">{t("auth.login_subtitle")}</p>
 
-        <form onSubmit={submit} className="mt-10 space-y-5">
+        {supportsPasskey && (
+          <div className="mt-8" data-testid="login-passkey-section">
+            <button
+              type="button"
+              onClick={onPasskeyLogin}
+              disabled={loading}
+              className="w-full btn btn-primary flex items-center justify-center gap-2"
+              data-testid="login-passkey-btn"
+            >
+              <Fingerprint size={18} />
+              {emailHasPasskey
+                ? t("auth.passkey_login_for_email", "Влез с passkey за {{email}}", { email })
+                : t("auth.passkey_login", "Влез с passkey")}
+            </button>
+            <div className="mt-6 flex items-center gap-3" aria-hidden="true">
+              <div className="flex-1 h-px bg-[hsl(var(--line))]"></div>
+              <span className="text-xs text-[hsl(var(--ink-muted))] uppercase tracking-wider">
+                {t("auth.or", "или")}
+              </span>
+              <div className="flex-1 h-px bg-[hsl(var(--line))]"></div>
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={submit} className={`${supportsPasskey ? "mt-6" : "mt-10"} space-y-5`}>
           <div>
             <label className="overline text-[hsl(var(--ink-muted))] block mb-2">{t("forms.email")}</label>
             <input
@@ -188,28 +212,10 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {supportsPasskey && (
-          <>
-            <div className="mt-8 flex items-center gap-3" aria-hidden="true">
-              <div className="flex-1 h-px bg-[hsl(var(--line))]"></div>
-              <span className="text-xs text-[hsl(var(--ink-muted))] uppercase tracking-wider">
-                {t("auth.or", "или")}
-              </span>
-              <div className="flex-1 h-px bg-[hsl(var(--line))]"></div>
-            </div>
-            <button
-              type="button"
-              onClick={onPasskeyLogin}
-              disabled={loading}
-              className="mt-4 w-full btn btn-outline flex items-center justify-center gap-2"
-              data-testid="login-passkey-btn"
-            >
-              <Fingerprint size={18} />
-              {emailHasPasskey
-                ? t("auth.passkey_login_for_email", "Влез с passkey за {{email}}", { email })
-                : t("auth.passkey_login", "Влез с passkey")}
-            </button>
-          </>
+        {supportsPasskey && emailHasPasskey && (
+          <p className="mt-6 text-xs text-[hsl(var(--ink-muted))] text-center" data-testid="login-passkey-hint">
+            {t("auth.passkey_email_hint", "За {{email}} имате активен passkey — използвайте бутона горе.", { email })}
+          </p>
         )}
 
         <p className="mt-8 text-sm text-[hsl(var(--ink-muted))]">
