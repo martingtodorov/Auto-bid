@@ -14,7 +14,6 @@ export default function HowItWorksPage() {
   const { t, i18n } = useTranslation();
   const brand = useBrandName();
   const settings = useSiteSettings();
-  const { user } = useAuth();
   const html = pickCmsHtml(settings, "how_it_works", i18n.language);
   const custom = pickCmsContent(settings, "how_it_works_content", i18n.language);
   useInfoPageSeo({
@@ -41,6 +40,7 @@ export default function HowItWorksPage() {
 }
 
 function DefaultHowItWorks({ pct, brand, t }) {
+  const { user } = useAuth();
   const steps = [
     { n: "01", i: Shield, t: t("how_it_works.step_01_t"), d: t("how_it_works.step_01_d") },
     { n: "02", i: FileCheck, t: t("how_it_works.step_02_t"), d: t("how_it_works.step_02_d") },
