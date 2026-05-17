@@ -78,14 +78,14 @@ def _shell(title: str, body_html: str) -> str:
 <html><body style="margin:0;background:#f6f7f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Manrope,Roboto,sans-serif;color:#111827;">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f6f7f8;padding:32px 0;">
   <tr><td align="center">
-    <table role="presentation" width="560" cellspacing="0" cellpadding="0" style="background:#ffffff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;">
+    <table role="presentation" width="560" cellspacing="0" cellpadding="0" style="background:#ffffff;">
       <tr><td style="padding:28px 32px 12px 32px;text-align:left;">
         <span style="font-weight:800;font-size:22px;letter-spacing:-0.02em;color:#1B4D3E;text-decoration:none;">Auto&amp;Bid</span>
       </td></tr>
       <tr><td style="padding:8px 32px 32px 32px;">
         {body_html}
       </td></tr>
-      <tr><td style="padding:20px 32px;background:#fafafa;border-top:1px solid #e5e7eb;color:#6b7280;font-size:12px;">
+      <tr><td style="padding:20px 32px;background:#fafafa;color:#6b7280;font-size:12px;">
         autoandbid.com · Редакционна платформа за автомобилни търгове · София
       </td></tr>
     </table>
