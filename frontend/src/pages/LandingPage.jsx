@@ -192,7 +192,7 @@ export default function LandingPage() {
               CTA is what users actually reach. */}
           <Link
             to="/auctions"
-            className="sm:hidden btn btn-secondary w-full mt-6 inline-flex items-center justify-center gap-2"
+            className="sm:hidden btn btn-sell-gradient w-full mt-6 inline-flex items-center justify-center gap-2"
             data-testid="landing-view-all-auctions-mobile"
           >
             {t("auction.view_all_auctions")} <ArrowRight size={14} />
