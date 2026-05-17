@@ -75,10 +75,10 @@ def _shell(title: str, body_html: str) -> str:
     """
     return f"""
 <!doctype html>
-<html><body style="margin:0;background:#f6f7f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Manrope,Roboto,sans-serif;color:#111827;">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f6f7f8;padding:32px 0;">
-  <tr><td align="center">
-    <table role="presentation" width="560" cellspacing="0" cellpadding="0" style="background:#ffffff;">
+<html><body style="margin:0;background:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Manrope,Roboto,sans-serif;color:#111827;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#ffffff;">
+  <tr><td>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#ffffff;">
       <tr><td style="padding:28px 32px 12px 32px;text-align:left;">
         <span style="font-weight:800;font-size:22px;letter-spacing:-0.02em;color:#1B4D3E;text-decoration:none;">Auto&amp;Bid</span>
       </td></tr>
