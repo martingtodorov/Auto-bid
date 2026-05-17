@@ -63,13 +63,20 @@ async def send_email(to: str, subject: str, html: str) -> bool:
 
 
 def _shell(title: str, body_html: str) -> str:
-    """Pass-through wrapper. Per user request (2026-05-16) no chrome is
-    added — no logo header, no footer, no font-family override, no
-    background colors. The body HTML is returned as-is inside a minimal
-    `<html><body>` envelope so email clients render their own default
-    typography (matching plain Gmail compose).
+    """Pass-through wrapper with a minimal CSS reset.
+
+    Per user request (2026-05-16) no chrome is added — no logo header,
+    no footer, no font-family override. The single style block zeroes
+    out the default browser margin on `<p>` so paragraph-to-paragraph
+    spacing looks like Gmail compose (which wraps lines in `<div>`
+    instead of `<p>`). Without this reset, every `<p>` rendered ~16px
+    top + 16px bottom margin = visible empty line between paragraphs.
     """
-    return f"<!doctype html><html><body>{body_html}</body></html>"
+    return (
+        "<!doctype html><html><head>"
+        "<style>p{margin:0;padding:0}p+p{margin-top:4px}</style>"
+        "</head><body>" + body_html + "</body></html>"
+    )
 
 
 async def email_outbid(to: str, name: str, auction_title: str, auction_id: str, new_bid: float, lang: str = "bg"):
