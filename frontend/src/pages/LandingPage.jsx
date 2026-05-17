@@ -111,7 +111,7 @@ export default function LandingPage() {
   const featuredIds = new Set(featured.map((f) => f.id));
   const promotedActive = auctionsEx.filter((a) => featuredIds.has(a.id) || a.featured);
   const regularActive = auctionsEx.filter((a) => !featuredIds.has(a.id) && !a.featured);
-  const activeOverview = [...promotedActive, ...regularActive].slice(0, 9);
+  const activeOverview = [...promotedActive, ...regularActive].slice(0, 6);
 
   // CMS-editable hero text per language (falls back to static i18n)
   const cmsHeadline = settings?.[`hero_headline_${lang}`];
