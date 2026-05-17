@@ -62,15 +62,39 @@ async def send_email(to: str, subject: str, html: str) -> bool:
     return ok
 
 
-def _shell(title: str, body_html: str) -> str:
+def _shell(title: str, body_html: str, to: str = "", lang: str = "bg") -> str:
     """Branded transactional email envelope (auto&bid design system).
 
-    Per user reference (2026-05-17 screenshots): no top logo bar, content
-    starts directly with the template's own eyebrow + H1. We provide a
-    centered card on a subtle grey background with rounded corners + a
-    minimal centered disclaimer at the bottom. Everything else (headings,
-    cards, CTA buttons) lives inside the template body.
+    Layout:
+      - Top brand bar: "Auto&Bid" with the ampersand rendered in the brand green.
+      - White card with template content (eyebrow + H1 inside body_html).
+      - Footer disclaimer + Unsubscribe link (per recipient).
     """
+    # Localized labels (footer + unsubscribe)
+    lang_norm = (lang or "bg").lower()[:2]
+    if lang_norm == "en":
+        footer_note = "This is an automated message related to your account on autoandbid.com."
+        unsub_label = "Unsubscribe"
+        prefs_label = "Notification preferences"
+    elif lang_norm == "ro":
+        footer_note = "Acesta este un mesaj automat legat de contul tău pe autoandbid.com."
+        unsub_label = "Dezabonare"
+        prefs_label = "Preferințe notificări"
+    else:
+        footer_note = "Това е автоматично съобщение, свързано с акаунта ви в autoandbid.com."
+        unsub_label = "Отпиши се"
+        prefs_label = "Настройки за известия"
+    # Per-recipient unsubscribe link (token-less: backend validates by email
+    # against the recipient's account). The /unsubscribe route disables all
+    # marketing/notification emails for that address and returns a confirmation
+    # page. We URL-encode the email defensively.
+    try:
+        from urllib.parse import quote as _quote
+        to_q = _quote((to or "").strip(), safe="@.")
+    except Exception:
+        to_q = ""
+    unsub_url = f"{APP_URL}/api/unsubscribe?email={to_q}" if to_q else f"{APP_URL}/account/notifications"
+    prefs_url = f"{APP_URL}/account/notifications"
     return (
         "<!doctype html>"
         '<html><head><meta charset="utf-8">'
@@ -80,7 +104,11 @@ def _shell(title: str, body_html: str) -> str:
         "color:#111827;-webkit-font-smoothing:antialiased;}"
         "p{margin:0 0 14px 0;line-height:1.55;font-size:15px;}"
         "p:last-child{margin-bottom:0;}"
-        ".wrap{max-width:560px;margin:32px auto;background:#ffffff;"
+        ".brandbar{max-width:560px;margin:32px auto 0 auto;padding:0 36px;text-align:center;}"
+        ".brand{display:inline-block;font-size:22px;font-weight:700;letter-spacing:-0.01em;"
+        "color:#0b0f1a;text-decoration:none;}"
+        ".brand .amp{color:#1B4D3E;font-weight:800;}"
+        ".wrap{max-width:560px;margin:18px auto 0 auto;background:#ffffff;"
         "border-radius:18px;padding:40px 36px;}"
         ".eyebrow{font-size:11px;letter-spacing:0.14em;text-transform:uppercase;"
         "color:#6b7280;margin:0 0 10px 0;font-weight:600;}"
@@ -93,15 +121,21 @@ def _shell(title: str, body_html: str) -> str:
         ".cta{display:inline-block;background:#1B4D3E;color:#ffffff!important;"
         "padding:13px 26px;border-radius:999px;text-decoration:none;font-weight:600;"
         "font-size:15px;}"
-        ".disclaimer{max-width:560px;margin:14px auto 32px auto;text-align:center;"
+        ".disclaimer{max-width:560px;margin:14px auto 8px auto;text-align:center;"
+        "color:#9ca3af;font-size:12px;padding:0 16px;line-height:1.5;}"
+        ".unsub{max-width:560px;margin:0 auto 32px auto;text-align:center;"
         "color:#9ca3af;font-size:12px;padding:0 16px;}"
+        ".unsub a{color:#6b7280;text-decoration:underline;}"
         "code.mono{font-family:ui-monospace,'IBM Plex Mono',monospace;"
         "letter-spacing:4px;font-size:22px;font-weight:600;}"
         "</style></head>"
-        '<body><div class="wrap">'
+        '<body><div class="brandbar"><span class="brand">Auto<span class="amp">&amp;</span>Bid</span></div>'
+        '<div class="wrap">'
         + body_html +
         "</div>"
-        '<div class="disclaimer">Това е автоматично съобщение, свързано с акаунта ви в autoandbid.com.</div>'
+        f'<div class="disclaimer">{footer_note}</div>'
+        f'<div class="unsub"><a href="{unsub_url}">{unsub_label}</a>'
+        f' &nbsp;·&nbsp; <a href="{prefs_url}">{prefs_label}</a></div>'
         "</body></html>"
     )
 
@@ -111,15 +145,51 @@ async def email_outbid(to: str, name: str, auction_title: str, auction_id: str, 
         "name": name, "auction_title": auction_title, "auction_id": auction_id,
         "new_bid": f"{int(new_bid):,}", "app_url": APP_URL,
     })
-    await send_email(to, subject, _shell(header, body))
+    await send_email(to, subject, _shell(header, body, to=to, lang=lang))
 
 
-async def email_won(to: str, name: str, auction_title: str, auction_id: str, price: float, lang: str = "bg"):
-    subject, header, body = render_localized("won", lang, {
+async def email_won(to: str, name: str, auction_title: str, auction_id: str, price: float, lang: str = "bg",
+                    seller_name: str = "", seller_email: str = "", seller_phone: str = ""):
+    """Buyer wins — uses the rich `auction_won_buyer` template that includes
+    seller contact details + the insurance/notary helper note. Falls back to
+    the legacy `won` template if the new one isn't available for the locale.
+    """
+    vars_ = {
         "name": name, "auction_title": auction_title, "auction_id": auction_id,
         "price": f"{int(price):,}", "app_url": APP_URL,
+        "seller_name": seller_name or "—",
+        "seller_email": seller_email or "—",
+        "seller_phone": seller_phone or "—",
+    }
+    try:
+        subject, header, body = render_localized("auction_won_buyer", lang, vars_)
+    except KeyError:
+        subject, header, body = render_localized("won", lang, vars_)
+    await send_email(to, subject, _shell(header, body, to=to, lang=lang))
+
+
+async def email_auction_won_seller(to: str, name: str, auction_title: str, auction_id: str, price: float,
+                                    buyer_name: str, buyer_email: str, buyer_phone: str, lang: str = "bg"):
+    """Seller notification: their car was won. Includes buyer contact details."""
+    subject, header, body = render_localized("auction_won_seller", lang, {
+        "name": name, "auction_title": auction_title, "auction_id": auction_id,
+        "price": f"{int(price):,}", "app_url": APP_URL,
+        "buyer_name": buyer_name or "—",
+        "buyer_email": buyer_email or "—",
+        "buyer_phone": buyer_phone or "—",
     })
-    await send_email(to, subject, _shell(header, body))
+    await send_email(to, subject, _shell(header, body, to=to, lang=lang))
+
+
+async def email_digest_3day(to: str, name: str, new_html: str, ending_html: str, lang: str = "bg"):
+    """3-day digest of new listings + auctions ending soon. The two HTML chunks
+    are pre-rendered lists from the digest worker (one row per auction).
+    """
+    subject, header, body = render_localized("digest_3day", lang, {
+        "name": name, "new_html": new_html, "ending_html": ending_html,
+        "app_url": APP_URL,
+    })
+    await send_email(to, subject, _shell(header, body, to=to, lang=lang))
 
 
 async def email_approved(to: str, name: str, auction_title: str, auction_id: str, lang: str = "bg"):
@@ -127,14 +197,14 @@ async def email_approved(to: str, name: str, auction_title: str, auction_id: str
         "name": name, "auction_title": auction_title, "auction_id": auction_id,
         "app_url": APP_URL,
     })
-    await send_email(to, subject, _shell(header, body))
+    await send_email(to, subject, _shell(header, body, to=to, lang=lang))
 
 
 async def email_rejected(to: str, name: str, auction_title: str, reason: str, lang: str = "bg"):
     subject, header, body = render_localized("rejected", lang, {
         "name": name, "auction_title": auction_title, "reason": reason or "—",
     })
-    await send_email(to, subject, _shell(header, body))
+    await send_email(to, subject, _shell(header, body, to=to, lang=lang))
 
 
 async def email_vin_delivery(to: str, name: str, auction_title: str, auction_id: str, vin: str, lang: str = "bg"):
@@ -142,7 +212,7 @@ async def email_vin_delivery(to: str, name: str, auction_title: str, auction_id:
         "name": name, "auction_title": auction_title, "auction_id": auction_id,
         "vin": vin, "app_url": APP_URL,
     })
-    await send_email(to, subject, _shell(header, body))
+    await send_email(to, subject, _shell(header, body, to=to, lang=lang))
 
 
 async def email_seller_new_bid(to: str, name: str, auction_title: str, auction_id: str, bidder_name: str, amount: float, bid_count: int, lang: str = "bg"):
@@ -151,7 +221,7 @@ async def email_seller_new_bid(to: str, name: str, auction_title: str, auction_i
         "bidder_name": bidder_name, "amount": f"{int(amount):,}",
         "bid_count": bid_count, "app_url": APP_URL,
     })
-    await send_email(to, subject, _shell(header, body))
+    await send_email(to, subject, _shell(header, body, to=to, lang=lang))
 
 
 async def email_seller_new_comment(to: str, name: str, auction_title: str, auction_id: str, commenter_name: str, snippet: str, lang: str = "bg"):
@@ -159,7 +229,7 @@ async def email_seller_new_comment(to: str, name: str, auction_title: str, aucti
         "name": name, "auction_title": auction_title, "auction_id": auction_id,
         "commenter_name": commenter_name, "snippet": snippet, "app_url": APP_URL,
     })
-    await send_email(to, subject, _shell(header, body))
+    await send_email(to, subject, _shell(header, body, to=to, lang=lang))
 
 
 async def email_ending_soon(to: str, name: str, auction_title: str, auction_id: str, current_bid: float, role: str = "watcher", lang: str = "bg"):
@@ -169,7 +239,7 @@ async def email_ending_soon(to: str, name: str, auction_title: str, auction_id: 
         "name": name, "auction_title": auction_title, "auction_id": auction_id,
         "current_bid": f"{int(current_bid):,}", "app_url": APP_URL,
     })
-    await send_email(to, subject, _shell(header, body))
+    await send_email(to, subject, _shell(header, body, to=to, lang=lang))
 
 
 async def email_reserve_met(to: str, name: str, auction_title: str, auction_id: str, current_bid: float, reserve: float, lang: str = "bg"):
@@ -178,4 +248,48 @@ async def email_reserve_met(to: str, name: str, auction_title: str, auction_id: 
         "current_bid": f"{int(current_bid):,}", "reserve": f"{int(reserve):,}",
         "app_url": APP_URL,
     })
-    await send_email(to, subject, _shell(header, body))
+    await send_email(to, subject, _shell(header, body, to=to, lang=lang))
+
+
+async def notify_auction_finalized(db, auction: dict) -> None:
+    """Centralised post-finalization notification: emails the buyer (with seller
+    contact) AND the seller (with buyer contact). Best-effort — every failure is
+    logged but never raised, so the auction state stays consistent.
+
+    Idempotent: relies on the caller having already moved the auction to "sold".
+    Safe to invoke multiple times only when at-most-once semantics are not
+    required (current call sites guard with finalised_at).
+    """
+    winner_id = auction.get("high_bidder_id")
+    seller_id = auction.get("seller_id") or auction.get("owner_id")
+    title = auction.get("title") or ""
+    auction_id = auction.get("id") or ""
+    price = float(auction.get("current_bid_eur") or 0)
+    winner = await db.users.find_one({"id": winner_id}, {"_id": 0}) if winner_id else None
+    seller = await db.users.find_one({"id": seller_id}, {"_id": 0}) if seller_id else None
+    # Buyer email (rich version with seller contacts)
+    if winner and winner.get("email"):
+        try:
+            await email_won(
+                winner["email"], winner.get("name") or "",
+                title, auction_id, price,
+                lang=(winner.get("lang") or "bg"),
+                seller_name=(seller or {}).get("name", ""),
+                seller_email=(seller or {}).get("email", ""),
+                seller_phone=(seller or {}).get("phone", ""),
+            )
+        except Exception as e:
+            logger.error("email_won (buyer) failed: %s", e)
+    # Seller email (buyer contacts attached)
+    if seller and seller.get("email") and winner:
+        try:
+            await email_auction_won_seller(
+                seller["email"], seller.get("name") or "",
+                title, auction_id, price,
+                buyer_name=winner.get("name") or "",
+                buyer_email=winner.get("email") or "",
+                buyer_phone=winner.get("phone") or "",
+                lang=(seller.get("lang") or "bg"),
+            )
+        except Exception as e:
+            logger.error("email_auction_won_seller failed: %s", e)

@@ -266,7 +266,7 @@ async def _issue_verification_email(user: dict, ip_addr: str = "", ua: str = "")
         "name": user.get("name", ""),
         "link": link,
     })
-    await send_email(user["email"], subject, _shell(header, body))
+    await send_email(user["email"], subject, _shell(header, body, to=user["email"], lang=lang[:2]))
 
 
 def register_routes():
@@ -602,7 +602,7 @@ def register_routes():
                 "code": code,
                 "ttl_min": OTP_TTL_MIN,
             })
-            html = _shell(header, body)
+            html = _shell(header, body, to=email, lang=(user.get("lang") or "bg"))
             await send_email(email, subject, html)
         return {"ok": True, "message": f"Ако акаунтът съществува, код е изпратен на {email}. Проверете пощата си."}
 

@@ -673,6 +673,196 @@ SYSTEM_TEMPLATES: dict[str, dict] = {
             f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_PRIMARY}">Vezi licitația</a></p>'
         ),
     },
+
+    # ── Auction won — Buyer (rich version with seller contacts + helper note) ──
+    "auction_won_buyer_bg": {
+        "system": True, "lang": "bg",
+        "description": "Купувачът печели търга — съдържа контакти на продавача и бележка за застраховка/нотариус.",
+        "placeholders": ["name", "auction_title", "auction_id", "price", "seller_name", "seller_email", "seller_phone", "app_url"],
+        "subject": "🏁 Поздравления — спечелихте · {{auction_title}}",
+        "header": "Поздравления — спечелихте търга",
+        "body_html": (
+            "<p>Здравейте, {{name}},</p>"
+            "<p>Вие сте печелившият купувач за <strong>{{auction_title}}</strong>.</p>"
+            '<p style="font-size:20px;margin:20px 0;">Крайна цена: <strong>€{{price}}</strong></p>'
+            '<div style="margin:22px 0;padding:18px 20px;border:1px solid #e5e7eb;border-radius:14px;">'
+            '<div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#6b7280;font-weight:600;margin-bottom:8px;">Контакти на продавача</div>'
+            '<div style="font-size:15px;font-weight:600;color:#0b0f1a;">{{seller_name}}</div>'
+            '<div style="font-size:14px;margin-top:6px;"><a href="mailto:{{seller_email}}" style="color:#1B4D3E;">{{seller_email}}</a></div>'
+            '<div style="font-size:14px;margin-top:4px;"><a href="tel:{{seller_phone}}" style="color:#1B4D3E;">{{seller_phone}}</a></div>'
+            "</div>"
+            '<div style="margin:22px 0;padding:18px 20px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:14px;">'
+            '<div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#166534;font-weight:600;margin-bottom:6px;">Помощ от Auto&amp;Bid</div>'
+            "<p style=\"margin:0;\">За <strong>застрахователна оценка</strong> при прехвърлянето или за "
+            "<strong>препоръка за нотариус</strong>, можете да се обърнете към нашия екип — ще ви свържем "
+            "с проверени партньори.</p></div>"
+            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_PRIMARY}">Виж търга</a></p>'
+        ),
+    },
+    "auction_won_buyer_en": {
+        "system": True, "lang": "en",
+        "description": "Buyer wins the auction — contains seller contacts + insurance/notary helper note.",
+        "placeholders": ["name", "auction_title", "auction_id", "price", "seller_name", "seller_email", "seller_phone", "app_url"],
+        "subject": "🏁 Congratulations — you won · {{auction_title}}",
+        "header": "Congratulations — you won the auction",
+        "body_html": (
+            "<p>Hi {{name}},</p>"
+            "<p>You are the winning buyer for <strong>{{auction_title}}</strong>.</p>"
+            '<p style="font-size:20px;margin:20px 0;">Final price: <strong>€{{price}}</strong></p>'
+            '<div style="margin:22px 0;padding:18px 20px;border:1px solid #e5e7eb;border-radius:14px;">'
+            '<div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#6b7280;font-weight:600;margin-bottom:8px;">Seller contact</div>'
+            '<div style="font-size:15px;font-weight:600;color:#0b0f1a;">{{seller_name}}</div>'
+            '<div style="font-size:14px;margin-top:6px;"><a href="mailto:{{seller_email}}" style="color:#1B4D3E;">{{seller_email}}</a></div>'
+            '<div style="font-size:14px;margin-top:4px;"><a href="tel:{{seller_phone}}" style="color:#1B4D3E;">{{seller_phone}}</a></div>'
+            "</div>"
+            '<div style="margin:22px 0;padding:18px 20px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:14px;">'
+            '<div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#166534;font-weight:600;margin-bottom:6px;">Help from Auto&amp;Bid</div>'
+            "<p style=\"margin:0;\">For an <strong>insurance valuation</strong> during transfer or a "
+            "<strong>notary recommendation</strong>, you can reach out to our team — we'll connect you with vetted partners.</p></div>"
+            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_PRIMARY}">View auction</a></p>'
+        ),
+    },
+    "auction_won_buyer_ro": {
+        "system": True, "lang": "ro",
+        "description": "Cumpărătorul câștigă licitația — conține contactele vânzătorului + notă despre asigurare/notar.",
+        "placeholders": ["name", "auction_title", "auction_id", "price", "seller_name", "seller_email", "seller_phone", "app_url"],
+        "subject": "🏁 Felicitări — ai câștigat · {{auction_title}}",
+        "header": "Felicitări — ai câștigat licitația",
+        "body_html": (
+            "<p>Bună, {{name}},</p>"
+            "<p>Ești cumpărătorul câștigător pentru <strong>{{auction_title}}</strong>.</p>"
+            '<p style="font-size:20px;margin:20px 0;">Preț final: <strong>€{{price}}</strong></p>'
+            '<div style="margin:22px 0;padding:18px 20px;border:1px solid #e5e7eb;border-radius:14px;">'
+            '<div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#6b7280;font-weight:600;margin-bottom:8px;">Contact vânzător</div>'
+            '<div style="font-size:15px;font-weight:600;color:#0b0f1a;">{{seller_name}}</div>'
+            '<div style="font-size:14px;margin-top:6px;"><a href="mailto:{{seller_email}}" style="color:#1B4D3E;">{{seller_email}}</a></div>'
+            '<div style="font-size:14px;margin-top:4px;"><a href="tel:{{seller_phone}}" style="color:#1B4D3E;">{{seller_phone}}</a></div>'
+            "</div>"
+            '<div style="margin:22px 0;padding:18px 20px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:14px;">'
+            '<div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#166534;font-weight:600;margin-bottom:6px;">Ajutor de la Auto&amp;Bid</div>'
+            "<p style=\"margin:0;\">Pentru o <strong>evaluare de asigurare</strong> la transfer sau o "
+            "<strong>recomandare de notar</strong>, ne poți contacta — te punem în legătură cu parteneri verificați.</p></div>"
+            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_PRIMARY}">Vezi licitația</a></p>'
+        ),
+    },
+
+    # ── Auction won — Seller (notifies seller; includes buyer contacts) ─────
+    "auction_won_seller_bg": {
+        "system": True, "lang": "bg",
+        "description": "Уведомява продавача, че колата му е спечелена; съдържа имейл и телефон на купувача.",
+        "placeholders": ["name", "auction_title", "auction_id", "price", "buyer_name", "buyer_email", "buyer_phone", "app_url"],
+        "subject": "🎉 Продадена — {{auction_title}}",
+        "header": "Вашата кола е продадена",
+        "body_html": (
+            "<p>Поздравления, {{name}}!</p>"
+            "<p>Търгът за <strong>{{auction_title}}</strong> приключи успешно — имате печеливш купувач.</p>"
+            '<p style="font-size:20px;margin:20px 0;">Крайна цена: <strong>€{{price}}</strong></p>'
+            '<div style="margin:22px 0;padding:18px 20px;border:1px solid #e5e7eb;border-radius:14px;">'
+            '<div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#6b7280;font-weight:600;margin-bottom:8px;">Контакти на купувача</div>'
+            '<div style="font-size:15px;font-weight:600;color:#0b0f1a;">{{buyer_name}}</div>'
+            '<div style="font-size:14px;margin-top:6px;"><a href="mailto:{{buyer_email}}" style="color:#1B4D3E;">{{buyer_email}}</a></div>'
+            '<div style="font-size:14px;margin-top:4px;"><a href="tel:{{buyer_phone}}" style="color:#1B4D3E;">{{buyer_phone}}</a></div>'
+            "</div>"
+            "<p>Свържете се с купувача в рамките на 48 часа, за да договорите детайлите по плащане и прехвърляне на собствеността. "
+            "Екипът на Auto&amp;Bid е насреща с препоръки за нотариус и застрахователна оценка.</p>"
+            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_PRIMARY}">Виж обявата</a></p>'
+        ),
+    },
+    "auction_won_seller_en": {
+        "system": True, "lang": "en",
+        "description": "Notifies the seller that their car was won; includes buyer's email and phone.",
+        "placeholders": ["name", "auction_title", "auction_id", "price", "buyer_name", "buyer_email", "buyer_phone", "app_url"],
+        "subject": "🎉 Sold — {{auction_title}}",
+        "header": "Your car has been sold",
+        "body_html": (
+            "<p>Congratulations, {{name}}!</p>"
+            "<p>The auction for <strong>{{auction_title}}</strong> ended successfully — you have a winning buyer.</p>"
+            '<p style="font-size:20px;margin:20px 0;">Final price: <strong>€{{price}}</strong></p>'
+            '<div style="margin:22px 0;padding:18px 20px;border:1px solid #e5e7eb;border-radius:14px;">'
+            '<div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#6b7280;font-weight:600;margin-bottom:8px;">Buyer contact</div>'
+            '<div style="font-size:15px;font-weight:600;color:#0b0f1a;">{{buyer_name}}</div>'
+            '<div style="font-size:14px;margin-top:6px;"><a href="mailto:{{buyer_email}}" style="color:#1B4D3E;">{{buyer_email}}</a></div>'
+            '<div style="font-size:14px;margin-top:4px;"><a href="tel:{{buyer_phone}}" style="color:#1B4D3E;">{{buyer_phone}}</a></div>'
+            "</div>"
+            "<p>Please reach out to the buyer within 48 hours to arrange payment and ownership transfer. "
+            "The Auto&amp;Bid team is on hand with notary recommendations and insurance valuations.</p>"
+            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_PRIMARY}">View listing</a></p>'
+        ),
+    },
+    "auction_won_seller_ro": {
+        "system": True, "lang": "ro",
+        "description": "Anunță vânzătorul că mașina sa a fost câștigată; conține emailul și telefonul cumpărătorului.",
+        "placeholders": ["name", "auction_title", "auction_id", "price", "buyer_name", "buyer_email", "buyer_phone", "app_url"],
+        "subject": "🎉 Vândut — {{auction_title}}",
+        "header": "Mașina ta a fost vândută",
+        "body_html": (
+            "<p>Felicitări, {{name}}!</p>"
+            "<p>Licitația pentru <strong>{{auction_title}}</strong> s-a încheiat cu succes — ai un cumpărător câștigător.</p>"
+            '<p style="font-size:20px;margin:20px 0;">Preț final: <strong>€{{price}}</strong></p>'
+            '<div style="margin:22px 0;padding:18px 20px;border:1px solid #e5e7eb;border-radius:14px;">'
+            '<div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#6b7280;font-weight:600;margin-bottom:8px;">Contact cumpărător</div>'
+            '<div style="font-size:15px;font-weight:600;color:#0b0f1a;">{{buyer_name}}</div>'
+            '<div style="font-size:14px;margin-top:6px;"><a href="mailto:{{buyer_email}}" style="color:#1B4D3E;">{{buyer_email}}</a></div>'
+            '<div style="font-size:14px;margin-top:4px;"><a href="tel:{{buyer_phone}}" style="color:#1B4D3E;">{{buyer_phone}}</a></div>'
+            "</div>"
+            "<p>Contactează cumpărătorul în maxim 48 de ore pentru a stabili plata și transferul proprietății. "
+            "Echipa Auto&amp;Bid te ajută cu recomandări de notar și evaluări de asigurare.</p>"
+            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_PRIMARY}">Vezi anunțul</a></p>'
+        ),
+    },
+
+    # ── 3-day digest (new listings + ending soon) ───────────────────────────
+    "digest_3day_bg": {
+        "system": True, "lang": "bg",
+        "description": "Дайджест на всеки 3 дни: нови обяви и скоро изтичащи търгове.",
+        "placeholders": ["name", "new_html", "ending_html", "app_url"],
+        "subject": "Auto&Bid · Какво ново — нови обяви и скоро изтичащи",
+        "header": "Какво ново в Auto&Bid",
+        "body_html": (
+            "<p>Здравейте, {{name}},</p>"
+            "<p>Ето кратък преглед на новите обяви и търговете, които приключват скоро.</p>"
+            '<div style="margin:24px 0 6px 0;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#1B4D3E;font-weight:600;">Нови обяви</div>'
+            "{{new_html}}"
+            '<div style="margin:28px 0 6px 0;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#9a3412;font-weight:600;">Скоро изтичат</div>'
+            "{{ending_html}}"
+            f'<p style="margin-top:24px;"><a href="{{{{app_url}}}}/auctions" style="{_BTN_PRIMARY}">Виж всички търгове</a></p>'
+            '<p style="color:#6b7280;font-size:12px;margin-top:24px;">Получавате този дайджест на всеки 3 дни. Можете да го изключите от настройките за известия.</p>'
+        ),
+    },
+    "digest_3day_en": {
+        "system": True, "lang": "en",
+        "description": "Every-3-day digest: new listings and auctions ending soon.",
+        "placeholders": ["name", "new_html", "ending_html", "app_url"],
+        "subject": "Auto&Bid · What's new — new listings and ending soon",
+        "header": "What's new on Auto&Bid",
+        "body_html": (
+            "<p>Hi {{name}},</p>"
+            "<p>Here's a quick look at the new listings and auctions ending soon.</p>"
+            '<div style="margin:24px 0 6px 0;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#1B4D3E;font-weight:600;">New listings</div>'
+            "{{new_html}}"
+            '<div style="margin:28px 0 6px 0;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#9a3412;font-weight:600;">Ending soon</div>'
+            "{{ending_html}}"
+            f'<p style="margin-top:24px;"><a href="{{{{app_url}}}}/auctions" style="{_BTN_PRIMARY}">View all auctions</a></p>'
+            '<p style="color:#6b7280;font-size:12px;margin-top:24px;">You receive this digest every 3 days. You can disable it in your notification preferences.</p>'
+        ),
+    },
+    "digest_3day_ro": {
+        "system": True, "lang": "ro",
+        "description": "Newsletter la fiecare 3 zile: anunțuri noi și licitații care se încheie curând.",
+        "placeholders": ["name", "new_html", "ending_html", "app_url"],
+        "subject": "Auto&Bid · Ce e nou — anunțuri noi și care se încheie",
+        "header": "Ce e nou pe Auto&Bid",
+        "body_html": (
+            "<p>Bună, {{name}},</p>"
+            "<p>Iată un rezumat al anunțurilor noi și al licitațiilor care se încheie curând.</p>"
+            '<div style="margin:24px 0 6px 0;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#1B4D3E;font-weight:600;">Anunțuri noi</div>'
+            "{{new_html}}"
+            '<div style="margin:28px 0 6px 0;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#9a3412;font-weight:600;">Se încheie curând</div>'
+            "{{ending_html}}"
+            f'<p style="margin-top:24px;"><a href="{{{{app_url}}}}/auctions" style="{_BTN_PRIMARY}">Vezi toate licitațiile</a></p>'
+            '<p style="color:#6b7280;font-size:12px;margin-top:24px;">Primești acest rezumat la fiecare 3 zile. Îl poți dezactiva din preferințele de notificare.</p>'
+        ),
+    },
 }
 
 

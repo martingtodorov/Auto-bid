@@ -137,12 +137,11 @@ async def _complete_negotiation(auction_id: str, negotiation_id: str, price: flo
     )
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     if a and a.get("high_bidder_id"):
-        winner = await db.users.find_one({"id": a["high_bidder_id"]}, {"_id": 0})
-        if winner and winner.get("email"):
-            try:
-                await _email_won(winner["email"], winner["name"], a["title"], auction_id, float(price), lang=winner.get("lang") or "bg")
-            except Exception as e:
-                logger.error("email_won (negotiation) failed: %s", e)
+        try:
+            from emails import notify_auction_finalized
+            await notify_auction_finalized(db, a)
+        except Exception as e:
+            logger.error("notify_auction_finalized (negotiation) failed: %s", e)
     # Admin push — sale concluded after reserve-not-met negotiation.
     # Uses the same VAT-aware helper as the live-sold flow so the admin
     # sees gross price + 2 % commission when VAT applies.

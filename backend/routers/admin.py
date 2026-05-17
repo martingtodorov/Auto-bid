@@ -855,6 +855,7 @@ def register_routes():
             html = _shell(
                 "Потвърдете акаунта си",
                 f"<p>Здравейте {u.get('name','')},</p><p>Admin екипът ви подсеща да потвърдите своя акаунт в autoandbid.com. Моля, влезте в профила си и актуализирайте данните за контакт, ако е необходимо.</p>",
+                to=u["email"], lang=(u.get("lang") or "bg"),
             )
             await send_email(u["email"], "autoandbid.com — напомняне за акаунта", html)
             await db.users.update_one({"id": user_id}, {"$set": {"verification_sent_at": datetime.now(timezone.utc).isoformat()}})
@@ -1082,7 +1083,7 @@ def register_routes():
         if "@" not in to or not subject or not body:
             raise HTTPException(status_code=400, detail="Необходими са валиден email, тема и съдържание.")
         from emails import send_email, _shell
-        ok = await send_email(to, subject, _shell(subject, f"<div>{body}</div>"))
+        ok = await send_email(to, subject, _shell(subject, f"<div>{body}</div>", to=to))
         await audit_log(db, actor_id=admin["id"], actor_email=admin.get("email", ""), actor_role=admin.get("role", ""),
                         action="email.manual", target_type="email", target_id=to,
                         details={"subject": subject[:120], "ok": ok},

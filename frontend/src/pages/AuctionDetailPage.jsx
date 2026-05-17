@@ -828,7 +828,7 @@ export default function AuctionDetailPage() {
                           fallbackSrc={src || a.thumbnails?.[i]}
                           size="gallery"
                           alt={a.title}
-                          className="w-full h-full object-contain pointer-events-none"
+                          className="w-full h-full object-cover pointer-events-none"
                           priority={i === 0}
                           loading={i === 0 ? "eager" : "lazy"}
                         />
@@ -849,7 +849,7 @@ export default function AuctionDetailPage() {
                       fallbackSrc={a.images?.[photoIdx] || a.thumbnails?.[photoIdx]}
                       size="gallery"
                       alt={a.title}
-                      className="w-full h-full object-contain pointer-events-none"
+                      className="w-full h-full object-cover pointer-events-none"
                       priority
                     />
                   </button>

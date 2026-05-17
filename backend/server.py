@@ -26,7 +26,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import ReturnDocument
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
 
-from emails import email_outbid, email_won, email_approved, email_rejected, email_seller_new_bid, email_seller_new_comment, email_vin_delivery
+from emails import email_outbid, email_won, email_approved, email_rejected, email_seller_new_bid, email_seller_new_comment, email_vin_delivery, notify_auction_finalized
 from ws import hub
 from sms import send_sms
 
@@ -4270,12 +4270,10 @@ async def admin_finalize(auction_id: str, _admin: dict = Depends(require_admin))
     )
     winner_id = a.get("high_bidder_id")
     if winner_id:
-        u = await db.users.find_one({"id": winner_id}, {"_id": 0})
-        if u:
-            try:
-                await email_won(u["email"], u["name"], a["title"], auction_id, float(a["current_bid_eur"]))
-            except Exception as e:
-                logger.error("email_won failed: %s", e)
+        try:
+            await notify_auction_finalized(db, a)
+        except Exception as e:
+            logger.error("notify_auction_finalized failed: %s", e)
     return {"ok": True}
 
 
@@ -4326,12 +4324,10 @@ async def admin_capture_premium(auction_id: str, _admin: dict = Depends(require_
     )
 
     if winner_id:
-        u = await db.users.find_one({"id": winner_id}, {"_id": 0})
-        if u:
-            try:
-                await email_won(u["email"], u["name"], a["title"], auction_id, float(a["current_bid_eur"]), lang=u.get("lang") or "bg")
-            except Exception as e:
-                logger.error("email_won failed: %s", e)
+        try:
+            await notify_auction_finalized(db, a)
+        except Exception as e:
+            logger.error("notify_auction_finalized failed: %s", e)
 
     return {"ok": True, "captured_eur": captured_amount}
 
@@ -4409,6 +4405,99 @@ async def request_vin(auction_id: str, user: dict = Depends(get_current_user)):
     except Exception as e:
         logger.error("email_vin_delivery failed: %s", e)
     return {"ok": True, "message": f"Изпратихме пълния VIN на {user['email']}"}
+
+
+# ---- One-click unsubscribe (from email footer; token-less) -------------------
+@api.get("/unsubscribe")
+async def email_unsubscribe(email: str = "", kind: str = ""):
+    """Token-less unsubscribe link embedded in every transactional email.
+
+    Behaviour:
+      • Without `kind` → disable ALL email channels for the address (marketing
+        + transactional notifications). Login / password-reset / verification
+        emails are routed via separate flows and unaffected.
+      • With `kind` → disable only that specific kind (e.g. `digest_3day`).
+
+    We do not require a token because the worst-case outcome is a malicious
+    third party silencing notifications for an email they control or guess;
+    no PII is exposed and the user can re-enable from Account → Notifications.
+    """
+    from services import notif_prefs as _nprefs
+    email_lc = (email or "").strip().lower()
+    if "@" not in email_lc:
+        return Response(
+            content="<h2>Invalid request</h2><p>Missing or invalid email address.</p>",
+            media_type="text/html",
+            status_code=400,
+        )
+    user = await db.users.find_one({"email": email_lc}, {"_id": 0, "id": 1, "lang": 1})
+    if not user:
+        # Don't leak whether an address exists — return a generic confirmation.
+        return Response(
+            content=_unsub_html_response(email_lc, kind=kind, lang="bg"),
+            media_type="text/html",
+        )
+    update: dict = {}
+    kind_l = (kind or "").strip().lower()
+    if kind_l and kind_l in _nprefs.NOTIF_KINDS:
+        update[f"notification_prefs.email.{kind_l}"] = False
+    else:
+        for k in _nprefs.NOTIF_KINDS:
+            update[f"notification_prefs.email.{k}"] = False
+        update["email_unsubscribed_at"] = datetime.now(timezone.utc).isoformat()
+    if update:
+        await db.users.update_one({"id": user["id"]}, {"$set": update})
+    return Response(
+        content=_unsub_html_response(email_lc, kind=kind_l, lang=(user.get("lang") or "bg")),
+        media_type="text/html",
+    )
+
+
+def _unsub_html_response(email: str, kind: str, lang: str) -> str:
+    """Confirmation page shown after the user clicks the email Unsubscribe link."""
+    from emails import APP_URL as _APP_URL
+    lang_norm = (lang or "bg").lower()[:2]
+    if lang_norm == "en":
+        title = "You've been unsubscribed"
+        msg = (
+            f"We won't send any more notification emails to <strong>{email}</strong>."
+            if not kind
+            else f"You won't receive emails of type <strong>{kind}</strong> anymore."
+        )
+        prefs = "Manage all notification preferences"
+    elif lang_norm == "ro":
+        title = "Te-am dezabonat"
+        msg = (
+            f"Nu vom mai trimite emailuri de notificare la <strong>{email}</strong>."
+            if not kind
+            else f"Nu vei mai primi emailuri de tipul <strong>{kind}</strong>."
+        )
+        prefs = "Gestionează toate preferințele"
+    else:
+        title = "Отписани сте"
+        msg = (
+            f"Няма повече да изпращаме известия на <strong>{email}</strong>."
+            if not kind
+            else f"Повече няма да получавате имейли от тип <strong>{kind}</strong>."
+        )
+        prefs = "Управление на всички известия"
+    return (
+        f"<!doctype html><html><head><meta charset='utf-8'><title>{title}</title>"
+        "<style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;"
+        "background:#f6f7f8;color:#111827;margin:0;padding:0;}"
+        ".card{max-width:520px;margin:64px auto;background:#fff;border-radius:18px;"
+        "padding:40px 36px;box-shadow:0 1px 2px rgba(0,0,0,.04);}"
+        ".brand{font-size:22px;font-weight:700;color:#0b0f1a;margin-bottom:18px;}"
+        ".brand .amp{color:#1B4D3E;font-weight:800;}"
+        "h1{font-size:26px;margin:0 0 14px 0;color:#0b0f1a;}"
+        "p{line-height:1.55;margin:0 0 14px 0;}"
+        "a{color:#1B4D3E;text-decoration:underline;}"
+        "</style></head><body><div class='card'>"
+        "<div class='brand'>Auto<span class='amp'>&amp;</span>Bid</div>"
+        f"<h1>{title}</h1><p>{msg}</p>"
+        f"<p><a href='{_APP_URL}/account/notifications'>{prefs}</a></p>"
+        "</div></body></html>"
+    )
 
 
 # ---- Profile ----
@@ -4541,7 +4630,7 @@ async def notify_matching_saved_searches(auction: dict):
                       <p style="font-size:18px;margin:16px 0;"><strong>{auction['title']}</strong></p>
                       <p>{auction.get("year","")} г. · {auction.get("city","")} · начална цена €{int(auction.get("starting_bid_eur",0)):,}</p>
                       <p><a href="{APP_URL}/auctions/{auction['id']}" style="display:inline-block;background:#1B4D3E;color:#fff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:600;">Виж обявата</a></p>
-                    """)
+                    """, to=u["email"], lang=(u.get("lang") or "bg"))
                     await send_email(u["email"], f"Нова обява · {auction['title']}", html)
                 except Exception as e:
                     logger.error("saved search email failed: %s", e)
@@ -4681,6 +4770,7 @@ async def _notify_followers_new_listing(auction: dict) -> None:
                           Виж обявата
                         </a></p>
                         """,
+                        to=u["email"], lang=(u.get("lang") or "bg"),
                     )
                     await send_email(u["email"], f"Нова обява от {seller_name}", html)
                 except Exception as e:
@@ -5349,12 +5439,10 @@ async def seller_accept_high_bid(auction_id: str, user: dict = Depends(get_curre
     if not a.get("high_bidder_id"):
         raise HTTPException(status_code=400, detail="Няма водещ наддавач")
     await db.auctions.update_one({"id": auction_id}, {"$set": {"status": "sold", "finalized_at": datetime.now(timezone.utc).isoformat()}})
-    winner = await db.users.find_one({"id": a["high_bidder_id"]}, {"_id": 0})
-    if winner:
-        try:
-            await email_won(winner["email"], winner["name"], a["title"], auction_id, float(a["current_bid_eur"]), lang=winner.get("lang") or "bg")
-        except Exception as e:
-            logger.error("email_won failed: %s", e)
+    try:
+        await notify_auction_finalized(db, a)
+    except Exception as e:
+        logger.error("notify_auction_finalized failed: %s", e)
     return {"ok": True}
 
 
@@ -6055,6 +6143,9 @@ async def on_startup():
     # Stripe authorization lifecycle worker (7-day auto-extend)
     from services import stripe_lifecycle
     stripe_lifecycle.start_worker(db)
+    # 3-day digest emails (new listings + ending soon)
+    from services import digest_worker
+    digest_worker.start(db)
 
 
 async def _seed_makes():
@@ -6430,13 +6521,11 @@ async def _finalize_expired_auctions_once():
                 )
         except Exception as e:
             logger.warning("[stripe] capture/grace pipeline failed for %s: %s", auction_id, e)
-        # Notify winner
+        # Notify winner + seller
         try:
-            winner = await db.users.find_one({"id": a["high_bidder_id"]}, {"_id": 0})
-            if winner and winner.get("email"):
-                await email_won(winner["email"], winner["name"], a["title"], auction_id, current_bid, lang=winner.get("lang") or "bg")
+            await notify_auction_finalized(db, a)
         except Exception as e:
-            logger.error("email_won auto-finalize failed for %s: %s", auction_id, e)
+            logger.error("notify_auction_finalized auto-finalize failed for %s: %s", auction_id, e)
         logger.info("Auto-finalized auction %s → sold (€%.0f)", auction_id, current_bid)
 
     # ---- Process expired "loser_grace" Stripe holds (released after 24h) ----
