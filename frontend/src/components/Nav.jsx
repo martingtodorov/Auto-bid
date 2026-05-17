@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from "react";
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { Menu, X, User, Search, ChevronDown, Wallet } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../lib/auth";
@@ -17,6 +17,11 @@ export default function Nav() {
   const [closing, setClosing] = useState(false);
   const [q, setQ] = useState("");
   const navigate = useNavigate();
+  const location = useLocation();
+  // Hide the desktop search bar on the active auctions page — the page
+  // itself has a richer filter UI, so the redundant nav search just clutters
+  // the header. Mobile search stays available (no on-page equivalent there).
+  const onAuctionsPage = location.pathname === "/auctions";
 
   const closeMobile = useCallback(() => {
     if (!open || closing) return;
@@ -181,7 +186,7 @@ export default function Nav() {
             ))}
           </nav>
 
-          <form onSubmit={doSearch} className="hidden lg:flex items-center flex-1 max-w-[220px] relative">
+          <form onSubmit={doSearch} className={`${onAuctionsPage ? "hidden" : "hidden lg:flex"} items-center flex-1 max-w-[220px] relative`}>
             <Search size={14} className="absolute left-3 text-[hsl(var(--accent))]" />
             <input
               type="text"
