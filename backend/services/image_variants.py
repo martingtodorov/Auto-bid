@@ -270,15 +270,15 @@ def variants_from_data_url(data_url: str) -> Optional[dict]:
 # ---------------------------------------------------------------------------
 # Phone cameras now routinely emit 4000×6000 JPEGs that take 6+ MB. We
 # never display them at native resolution — the biggest variant we serve
-# is 1920px and Cloudflare strips EXIF orientation differently than Pillow.
-# So we cap the *original* on disk at 1920px on the long edge before
+# is 2560px and Cloudflare strips EXIF orientation differently than Pillow.
+# So we cap the *original* on disk at 2560px on the long edge before
 # content-addressing it. This:
 #   1. Halves the storage footprint without quality loss at any zoom level
 #      that a `<img>` tag can reach (the page never blows the image up).
 #   2. Makes the on-demand variant generator faster (smaller decode).
 #   3. Eliminates a class of "Pillow OOM on 60MP image" bugs.
 # ---------------------------------------------------------------------------
-ORIGINAL_MAX_EDGE = int(os.environ.get("UPLOAD_ORIGINAL_MAX_EDGE", "1920"))
+ORIGINAL_MAX_EDGE = int(os.environ.get("UPLOAD_ORIGINAL_MAX_EDGE", "2560"))
 
 
 def cap_original_bytes(src_bytes: bytes, ext: str) -> tuple[bytes, str]:
