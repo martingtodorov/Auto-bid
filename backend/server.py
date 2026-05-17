@@ -1985,13 +1985,22 @@ async def create_auction(request: Request, payload: AuctionCreate, user: dict = 
     # `auctions.image_optimization.<sha>` per image as it progresses,
     # and the frontend `<Picture>` element gracefully falls back to the
     # JPG URLs in `doc["images"]` until variants are ready.
-    try:
-        from services import image_optimization_queue as _ioq
-        await _ioq.enqueue_for_stored_urls(
-            web_urls, auction_id=auction_id, categories=image_categories,
-        )
-    except Exception as e:  # noqa: BLE001
-        logger.warning("[submit] failed to enqueue variant generation: %s", e)
+    #
+    # IMAGE_VARIANTS_EAGER (default "0" since 2026-05-17):
+    #   • "1" — keep the old behaviour, pre-generate all 12 variants in
+    #     the background queue right after submission.
+    #   • "0" — skip eager generation. Nginx's `try_files $uri @generate`
+    #     fallback (see services.image_variants.generate_one_variant)
+    #     materialises each variant on first request. This is cheaper at
+    #     submit time and lets ops blow away `/variants/` at will.
+    if os.environ.get("IMAGE_VARIANTS_EAGER", "0") == "1":
+        try:
+            from services import image_optimization_queue as _ioq
+            await _ioq.enqueue_for_stored_urls(
+                web_urls, auction_id=auction_id, categories=image_categories,
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.warning("[submit] failed to enqueue variant generation: %s", e)
     # In-app notification → admins for moderation queue
     try:
         from routers.inbox import notify_admins as _notify_admins
@@ -6940,6 +6949,74 @@ try:
             _UPLOAD_DIR, _e,
         )
     if os.path.isdir(_UPLOAD_DIR):
+        # ── Lazy variant generation (CDN architecture, 2026-05-17) ──────
+        # Nginx on the CDN subdomain (img.autoandbid.bg) uses
+        # `try_files $uri @generate` for `/variants/`. On cold miss, the
+        # @generate location proxies here. We mint the SPECIFIC variant
+        # the browser asked for, write it to disk, and return the bytes.
+        # The next request for the same URL hits nginx's `alias` directly
+        # — zero backend involvement, zero uvicorn time.
+        #
+        # Path schema (matches `services.image_variants._variant_path`):
+        #     /uploads/variants/<aa>/<bb>/<sha>/<size>.<ext>
+        # where <aa> = sha[:2], <bb> = sha[2:4]. Both `/uploads/` and
+        # `/api/uploads/` prefixes are accepted (legacy ingress).
+        from fastapi import Path as _PathParam
+        from fastapi.responses import Response as _FastResponse
+
+        async def _lazy_variant(aa: str, bb: str, sha: str, name: str):
+            from services.image_variants import generate_one_variant
+            size_name, _dot, ext = name.rpartition(".")
+            if not size_name or not ext:
+                raise HTTPException(status_code=404, detail="Невалиден път")
+            # Sanity-check shard prefixes — nginx only forwards
+            # well-formed paths, but a curl-by-hand could bypass that.
+            if not (len(sha) == 64 and sha[:2] == aa and sha[2:4] == bb
+                    and all(c in "0123456789abcdef" for c in sha)):
+                raise HTTPException(status_code=404, detail="Невалиден sha")
+            data = generate_one_variant(sha, size_name, ext)
+            if data is None:
+                raise HTTPException(status_code=404, detail="Картинката не е намерена")
+            media = {
+                "avif": "image/avif", "webp": "image/webp",
+                "jpg": "image/jpeg", "jpeg": "image/jpeg",
+            }.get(ext.lower(), "application/octet-stream")
+            return _FastResponse(
+                content=data,
+                media_type=media,
+                headers={"Cache-Control": "public, max-age=31536000, immutable"},
+            )
+
+        @app.get("/uploads/variants/{aa}/{bb}/{sha}/{name}", include_in_schema=False)
+        async def lazy_variant_clean(
+            aa: str = _PathParam(..., min_length=2, max_length=2),
+            bb: str = _PathParam(..., min_length=2, max_length=2),
+            sha: str = _PathParam(..., min_length=64, max_length=64),
+            name: str = _PathParam(...),
+        ):
+            return await _lazy_variant(aa, bb, sha, name)
+
+        @app.get("/api/uploads/variants/{aa}/{bb}/{sha}/{name}", include_in_schema=False)
+        async def lazy_variant_legacy(
+            aa: str = _PathParam(..., min_length=2, max_length=2),
+            bb: str = _PathParam(..., min_length=2, max_length=2),
+            sha: str = _PathParam(..., min_length=64, max_length=64),
+            name: str = _PathParam(...),
+        ):
+            return await _lazy_variant(aa, bb, sha, name)
+
+        # Short path used by `img.autoandbid.bg/variants/...` (nginx
+        # location `/variants/` rewrites the URI back to the backend
+        # 1:1 on cold miss, without the `/uploads/` prefix).
+        @app.get("/variants/{aa}/{bb}/{sha}/{name}", include_in_schema=False)
+        async def lazy_variant_short(
+            aa: str = _PathParam(..., min_length=2, max_length=2),
+            bb: str = _PathParam(..., min_length=2, max_length=2),
+            sha: str = _PathParam(..., min_length=64, max_length=64),
+            name: str = _PathParam(...),
+        ):
+            return await _lazy_variant(aa, bb, sha, name)
+
         # Two mounts pointing at the same directory:
         #   • `/api/uploads/...` — legacy path used by the k8s preview
         #     ingress and by older listings already in MongoDB.
@@ -6948,6 +7025,10 @@ try:
         #     host proxies straight through to this mount.
         # Both serve the same content so old listings keep working while
         # new ones get CDN URLs.
+        # NB: the lazy-variant routes above are registered BEFORE these
+        # mounts so they take precedence for missing files (a present
+        # variant file is served by StaticFiles first thanks to FastAPI's
+        # route-then-mount resolution order).
         app.mount("/api/uploads", CachedStaticFiles(directory=_UPLOAD_DIR), name="uploads")
         app.mount("/uploads", CachedStaticFiles(directory=_UPLOAD_DIR), name="uploads_cdn")
 except Exception as _e:  # pragma: no cover — never block boot on this

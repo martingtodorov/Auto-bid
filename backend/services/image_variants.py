@@ -263,3 +263,158 @@ def variants_from_data_url(data_url: str) -> Optional[dict]:
     except Exception as e:  # noqa: BLE001
         logger.warning("variants_from_data_url failed: %s", e)
         return None
+
+
+# ---------------------------------------------------------------------------
+# Original-bytes ceiling (per CDN architecture review, 2026-05-17)
+# ---------------------------------------------------------------------------
+# Phone cameras now routinely emit 4000×6000 JPEGs that take 6+ MB. We
+# never display them at native resolution — the biggest variant we serve
+# is 1920px and Cloudflare strips EXIF orientation differently than Pillow.
+# So we cap the *original* on disk at 1920px on the long edge before
+# content-addressing it. This:
+#   1. Halves the storage footprint without quality loss at any zoom level
+#      that a `<img>` tag can reach (the page never blows the image up).
+#   2. Makes the on-demand variant generator faster (smaller decode).
+#   3. Eliminates a class of "Pillow OOM on 60MP image" bugs.
+# ---------------------------------------------------------------------------
+ORIGINAL_MAX_EDGE = int(os.environ.get("UPLOAD_ORIGINAL_MAX_EDGE", "1920"))
+
+
+def cap_original_bytes(src_bytes: bytes, ext: str) -> tuple[bytes, str]:
+    """Return (possibly-downscaled bytes, normalised ext).
+
+    Pass-through for images already within `ORIGINAL_MAX_EDGE` on the long
+    edge and for formats Pillow can't re-encode losslessly (SVG/GIF). The
+    returned `ext` may differ from input (HEIC → jpg) so the caller can
+    update its filename / Content-Type accordingly.
+
+    Idempotent — re-running on already-capped bytes is a no-op (size check
+    short-circuits).
+    """
+    ext_l = (ext or "").lower().lstrip(".")
+    if ext_l in ("svg", "gif"):
+        return src_bytes, ext_l
+    try:
+        img = Image.open(io.BytesIO(src_bytes))
+        img = ImageOps.exif_transpose(img) or img
+        w, h = img.size
+        if max(w, h) <= ORIGINAL_MAX_EDGE and ext_l not in ("heic", "heif"):
+            # Already within cap and a format we keep verbatim.
+            return src_bytes, ext_l
+        img = _resize_max_edge(img, ORIGINAL_MAX_EDGE)
+        # HEIC originals get re-encoded to JPEG so every public URL is a
+        # format browsers can decode without a Safari-only fallback.
+        target_fmt = "JPEG"
+        target_ext = "jpg"
+        if ext_l in ("png",):
+            target_fmt, target_ext = "PNG", "png"
+        elif ext_l in ("webp",):
+            target_fmt, target_ext = "WEBP", "webp"
+        if target_fmt == "JPEG":
+            return _encode(img, "JPEG", 90), target_ext
+        if target_fmt == "PNG":
+            buf = io.BytesIO()
+            img.save(buf, format="PNG", optimize=True)
+            return buf.getvalue(), target_ext
+        if target_fmt == "WEBP":
+            return _encode(img, "WEBP", 90), target_ext
+    except Exception as e:  # noqa: BLE001
+        # Pillow can't open it (could be a corrupt upload or unsupported
+        # codec). Let the caller persist the original bytes as-is so the
+        # error surfaces clearly downstream.
+        logger.warning("cap_original_bytes: passthrough due to %s", e)
+    return src_bytes, ext_l
+
+
+# ---------------------------------------------------------------------------
+# On-demand single-variant generator (per CDN architecture review, 2026-05-17)
+# ---------------------------------------------------------------------------
+# Previously every upload triggered an eager background job that produced
+# all 12 variants. With nginx now serving `/variants/` directly via
+# `try_files $uri @generate`, the FastAPI fallback only needs to mint the
+# SPECIFIC variant the client just asked for. The remaining 11 are
+# generated lazily on first access.
+# ---------------------------------------------------------------------------
+
+_EXT_TO_FMT = {"avif": "AVIF", "webp": "WEBP", "jpg": "JPEG", "jpeg": "JPEG"}
+_EXT_QUALITY = {
+    "avif": AVIF_QUALITY,
+    "webp": WEBP_QUALITY,
+    "jpg": JPG_QUALITY,
+    "jpeg": JPG_QUALITY,
+}
+_SIZE_MAP = {name: max_edge for name, max_edge in SIZES}
+
+
+def _find_original_by_sha(sha: str) -> Optional[str]:
+    """Locate the on-disk original for a given sha256.
+
+    Layout: `<UPLOAD_DIR>/auctions/<aa>/<sha>.<ext>` where `<aa>` is
+    `sha[:2]`. We try the common extensions in priority order rather than
+    storing a DB lookup, because the `aa` shard already trims the search
+    space to <300 files even at scale.
+    """
+    root = _uploads_root()
+    sub = os.path.join(root, "auctions", sha[:2])
+    if not os.path.isdir(sub):
+        return None
+    for ext in ("jpg", "jpeg", "png", "webp", "avif", "heic", "heif"):
+        cand = os.path.join(sub, f"{sha}.{ext}")
+        if os.path.exists(cand):
+            return cand
+    return None
+
+
+def generate_one_variant(sha: str, size_name: str, ext: str) -> Optional[bytes]:
+    """Generate (and persist) a single variant, returning its bytes.
+
+    Returns `None` if:
+      • the requested size/ext is invalid;
+      • the original is missing on disk (e.g. file deleted, sha typo);
+      • Pillow refuses to decode the original.
+
+    The variant is written atomically (`*.tmp` → `os.replace`) so a
+    concurrent reader never sees a half-written file.
+    """
+    size_name_l = (size_name or "").lower()
+    ext_l = (ext or "").lower()
+    if size_name_l not in _SIZE_MAP or ext_l not in _EXT_TO_FMT:
+        return None
+    fmt = _EXT_TO_FMT[ext_l]
+    quality = _EXT_QUALITY[ext_l]
+    target_path = _variant_path(sha, size_name_l, "jpg" if ext_l == "jpeg" else ext_l)
+    # Cache check — concurrent request may have already produced it.
+    if os.path.exists(target_path):
+        try:
+            with open(target_path, "rb") as f:
+                return f.read()
+        except OSError:
+            pass
+    origin_path = _find_original_by_sha(sha)
+    if not origin_path:
+        return None
+    try:
+        with open(origin_path, "rb") as f:
+            src_bytes = f.read()
+        img = _open_normalised(src_bytes)
+        resized = _resize_max_edge(img, _SIZE_MAP[size_name_l])
+        data = _encode(resized, fmt, quality)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("generate_one_variant(%s/%s.%s) failed: %s",
+                       sha[:8], size_name_l, ext_l, e)
+        return None
+    # Persist atomically so nginx's next request hits the cached file.
+    try:
+        os.makedirs(os.path.dirname(target_path), exist_ok=True)
+        tmp = target_path + ".tmp"
+        with open(tmp, "wb") as f:
+            f.write(data)
+        os.replace(tmp, target_path)
+    except OSError as e:
+        # Read-only FS / permission error: still return bytes so the live
+        # request succeeds. Next deploy that fixes perms will get a
+        # cached file on the next request.
+        logger.warning("generate_one_variant: write failed for %s: %s",
+                       target_path, e)
+    return data

@@ -132,6 +132,16 @@ class DiskStorage:
         if not parsed:
             return data_url
         ext, body = parsed
+        # Cap originals at ORIGINAL_MAX_EDGE (default 1920) on the long edge
+        # BEFORE content-addressing them. A 6000×4000 phone shot ends up
+        # ~250 KB JPEG instead of ~6 MB, and every downstream variant
+        # generation gets cheaper. The sha256 is computed on the capped
+        # bytes so re-uploading the same image still dedupes.
+        try:
+            from services.image_variants import cap_original_bytes
+            body, ext = cap_original_bytes(body, ext)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("cap_original_bytes skipped: %s", e)
         digest = hashlib.sha256(body).hexdigest()
         sub = digest[:2]
         rel = f"auctions/{sub}/{digest}.{ext}"
