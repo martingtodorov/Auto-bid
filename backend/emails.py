@@ -73,25 +73,12 @@ def _shell(title: str, body_html: str) -> str:
     hyperlink styling. Individual templates can include their own
     heading inside `body_html` if needed.
     """
-    return f"""
-<!doctype html>
-<html><body style="margin:0;background:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Manrope,Roboto,sans-serif;color:#111827;">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#ffffff;">
-  <tr><td>
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#ffffff;">
-      <tr><td style="padding:28px 32px 12px 32px;text-align:left;">
-        <span style="font-weight:800;font-size:22px;letter-spacing:-0.02em;color:#1B4D3E;text-decoration:none;">Auto&amp;Bid</span>
-      </td></tr>
-      <tr><td style="padding:8px 32px 32px 32px;">
-        {body_html}
-      </td></tr>
-      <tr><td style="padding:20px 32px;background:#fafafa;color:#6b7280;font-size:12px;">
-        autoandbid.com · Редакционна платформа за автомобилни търгове · София
-      </td></tr>
-    </table>
-  </td></tr>
-</table></body></html>
-"""
+    return f"""<!doctype html>
+<html><body style="margin:0;padding:0;background:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Manrope,Roboto,sans-serif;color:#111827;">
+<div style="font-weight:800;font-size:22px;letter-spacing:-0.02em;color:#1B4D3E;padding:12px 0 4px 0;">Auto&amp;Bid</div>
+{body_html}
+<div style="background:#fafafa;color:#6b7280;font-size:12px;padding:12px 0;margin-top:16px;">autoandbid.com · Редакционна платформа за автомобилни търгове · София</div>
+</body></html>"""
 
 
 async def email_outbid(to: str, name: str, auction_title: str, auction_id: str, new_bid: float, lang: str = "bg"):
