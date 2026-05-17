@@ -63,22 +63,13 @@ async def send_email(to: str, subject: str, html: str) -> bool:
 
 
 def _shell(title: str, body_html: str) -> str:
-    """Wrap an inner HTML body in the brand chrome (header + footer).
-
-    The `title` parameter is kept for backwards-compatibility with the
-    template renderer (`render_localized` returns subject/header/body)
-    but is INTENTIONALLY no longer rendered as an `<h1>` inside the
-    email — per user request the brand label "Auto&Bid" is the only
-    title shown, in the brand green (`#1B4D3E`) without any underline /
-    hyperlink styling. Individual templates can include their own
-    heading inside `body_html` if needed.
+    """Pass-through wrapper. Per user request (2026-05-16) no chrome is
+    added — no logo header, no footer, no font-family override, no
+    background colors. The body HTML is returned as-is inside a minimal
+    `<html><body>` envelope so email clients render their own default
+    typography (matching plain Gmail compose).
     """
-    return f"""<!doctype html>
-<html><body style="margin:0;padding:0;background:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Manrope,Roboto,sans-serif;color:#111827;">
-<div style="font-weight:800;font-size:22px;letter-spacing:-0.02em;color:#1B4D3E;padding:12px 0 4px 0;">Auto&amp;Bid</div>
-{body_html}
-<div style="background:#fafafa;color:#6b7280;font-size:12px;padding:12px 0;margin-top:16px;">autoandbid.com · Редакционна платформа за автомобилни търгове · София</div>
-</body></html>"""
+    return f"<!doctype html><html><body>{body_html}</body></html>"
 
 
 async def email_outbid(to: str, name: str, auction_title: str, auction_id: str, new_bid: float, lang: str = "bg"):
