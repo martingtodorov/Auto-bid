@@ -63,19 +63,46 @@ async def send_email(to: str, subject: str, html: str) -> bool:
 
 
 def _shell(title: str, body_html: str) -> str:
-    """Pass-through wrapper with a minimal CSS reset.
+    """Branded transactional email envelope (auto&bid design system).
 
-    Per user request (2026-05-16) no chrome is added — no logo header,
-    no footer, no font-family override. The single style block zeroes
-    out the default browser margin on `<p>` so paragraph-to-paragraph
-    spacing looks like Gmail compose (which wraps lines in `<div>`
-    instead of `<p>`). Without this reset, every `<p>` rendered ~16px
-    top + 16px bottom margin = visible empty line between paragraphs.
+    Per user reference (2026-05-17 screenshots): no top logo bar, content
+    starts directly with the template's own eyebrow + H1. We provide a
+    centered card on a subtle grey background with rounded corners + a
+    minimal centered disclaimer at the bottom. Everything else (headings,
+    cards, CTA buttons) lives inside the template body.
     """
     return (
-        "<!doctype html><html><head>"
-        "<style>p{margin:0;padding:0}p+p{margin-top:4px}</style>"
-        "</head><body>" + body_html + "</body></html>"
+        "<!doctype html>"
+        '<html><head><meta charset="utf-8">'
+        "<style>"
+        "body{margin:0;padding:0;background:#f6f7f8;"
+        "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Manrope,Inter,Roboto,sans-serif;"
+        "color:#111827;-webkit-font-smoothing:antialiased;}"
+        "p{margin:0 0 14px 0;line-height:1.55;font-size:15px;}"
+        "p:last-child{margin-bottom:0;}"
+        ".wrap{max-width:560px;margin:32px auto;background:#ffffff;"
+        "border-radius:18px;padding:40px 36px;}"
+        ".eyebrow{font-size:11px;letter-spacing:0.14em;text-transform:uppercase;"
+        "color:#6b7280;margin:0 0 10px 0;font-weight:600;}"
+        ".h1{font-size:30px;line-height:1.2;font-weight:700;letter-spacing:-0.02em;"
+        "margin:0 0 24px 0;color:#0b0f1a;}"
+        ".card{border:1px solid #e5e7eb;border-radius:14px;padding:18px 20px;"
+        "margin:22px 0;}"
+        ".card .eyebrow{margin:0 0 6px 0;}"
+        ".card-title{font-size:16px;font-weight:700;color:#0b0f1a;margin:0;}"
+        ".cta{display:inline-block;background:#1B4D3E;color:#ffffff!important;"
+        "padding:13px 26px;border-radius:999px;text-decoration:none;font-weight:600;"
+        "font-size:15px;}"
+        ".disclaimer{max-width:560px;margin:14px auto 32px auto;text-align:center;"
+        "color:#9ca3af;font-size:12px;padding:0 16px;}"
+        "code.mono{font-family:ui-monospace,'IBM Plex Mono',monospace;"
+        "letter-spacing:4px;font-size:22px;font-weight:600;}"
+        "</style></head>"
+        '<body><div class="wrap">'
+        + body_html +
+        "</div>"
+        '<div class="disclaimer">Това е автоматично съобщение, свързано с акаунта ви в autoandbid.com.</div>'
+        "</body></html>"
     )
 
 
