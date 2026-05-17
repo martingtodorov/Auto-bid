@@ -1619,6 +1619,28 @@ async def upload_sell_image(
 
     sha = hashlib.sha256(bytes(chunks)).hexdigest()
 
+    # Cap originals at ORIGINAL_MAX_EDGE (default 2560 px) on the long edge
+    # BEFORE content-addressing them. A 4000×6000 phone shot becomes ~600
+    # KB JPEG instead of ~6 MB; every downstream variant generation also
+    # gets cheaper. The sha256 is recomputed on the capped bytes so the
+    # on-disk filename matches the bytes actually persisted.
+    #
+    # cap_original_bytes() is idempotent (already-small images pass through
+    # untouched), so re-running on a future redeploy is a no-op.
+    try:
+        from services.image_variants import cap_original_bytes
+        capped_bytes, capped_ext = cap_original_bytes(bytes(chunks), ext)
+        if capped_bytes is not chunks and len(capped_bytes) != len(chunks):
+            # Image was actually downscaled — refresh sha + ext.
+            sha = hashlib.sha256(capped_bytes).hexdigest()
+            ext = capped_ext
+            chunks = bytearray(capped_bytes)
+    except Exception as e:  # noqa: BLE001
+        # Cap is best-effort — if Pillow chokes on the format we still want
+        # the upload to succeed with the raw bytes.
+        logger.warning("cap_original_bytes skipped for upload sha=%s: %s",
+                       sha[:10], e)
+
     # Persist the ORIGINAL to disk via the disk storage backend's
     # content-addressed layout. We bypass `store_image()` (which expects
     # a data URL) and write directly so we avoid an unnecessary base64
