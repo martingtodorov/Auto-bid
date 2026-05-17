@@ -66,10 +66,10 @@ export function AuthProvider({ children }) {
     return data.user;
   };
 
-  const register = async (email, password, name, termsAccepted = false) => {
+  const register = async (fields) => {
     const { data } = await api.post("/auth/register", {
-      email, password, name,
-      terms_accepted: !!termsAccepted,
+      ...fields,
+      terms_accepted: !!fields.terms_accepted,
       terms_version: "v1",
     });
     try { localStorage.removeItem("autobid_token"); } catch (_e) { /* ignore */ }

@@ -550,6 +550,15 @@ async def _backfill_profile_slugs() -> None:
         )
     except Exception as e:
         logger.warning("profile_slug index creation failed: %s", e)
+    try:
+        await db.users.create_index(
+            "username_lc",
+            unique=True,
+            sparse=True,
+            name="username_lc_unique",
+        )
+    except Exception as e:
+        logger.warning("username_lc index creation failed: %s", e)
     cursor = db.users.find(
         {"profile_slug": {"$in": [None, ""]}},
         {"_id": 0, "id": 1, "name": 1},

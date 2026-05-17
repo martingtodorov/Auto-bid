@@ -10,6 +10,7 @@ import { setPageMeta, resetPageMeta } from "../lib/seo";
 import { useSiteSettings } from "../lib/settings";
 import { translateEnum } from "../lib/carTranslations";
 import { auctionUrl } from "../lib/auctionUrl";
+import { useAuth } from "../lib/auth";
 
 const HERO_IMAGE = "https://images.unsplash.com/photo-1698995339730-86b3dd454001?crop=entropy&cs=srgb&fm=jpg&q=85&w=2000";
 
@@ -24,6 +25,7 @@ export default function LandingPage() {
   const [sold, setSold] = useState(cached?.sold || []);
   const [heroPicks, setHeroPicks] = useState(cached?.hero || []);
   const settings = useSiteSettings();
+  const { user } = useAuth();
 
   // Update SEO from site settings (per-language, fallback to legacy field)
   const lang = (i18n.resolvedLanguage || "bg").slice(0, 2);
@@ -239,7 +241,9 @@ export default function LandingPage() {
         </section>
       )}
 
-      {/* CTA — intentionally always dark to provide contrast with the rest of the page. */}
+      {/* CTA — intentionally always dark to provide contrast with the rest of the page.
+          Hidden for logged-in users (they're already part of the community). */}
+      {!user && (
       <section className="bg-black text-white">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-20 lg:py-28 grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
           <div className="lg:col-span-7">
@@ -259,6 +263,7 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+      )}
     </main>
   );
 }

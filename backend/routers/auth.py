@@ -296,6 +296,34 @@ def register_routes():
         existing = await db.users.find_one({"email": payload.email.lower()})
         if existing:
             raise HTTPException(status_code=409, detail="Имейлът вече е регистриран")
+        # Validate & normalize new required fields (username, phone, names)
+        import re as _re
+        first_name = (payload.first_name or "").strip()
+        last_name = (payload.last_name or "").strip()
+        if not first_name or not last_name:
+            raise HTTPException(status_code=400, detail="Моля, попълнете име и фамилия.")
+        username = (payload.username or "").strip()
+        if not _re.match(r"^[a-zA-Z0-9_.-]{3,30}$", username):
+            raise HTTPException(
+                status_code=400,
+                detail="Потребителското име може да съдържа само латински букви, цифри, ., _ и -, дължина 3–30.",
+            )
+        username_lc = username.lower()
+        # Reserve reserved profile slug words to prevent route collisions
+        if username_lc in {"admin", "api", "auth", "login", "logout", "me", "register", "settings"}:
+            raise HTTPException(status_code=400, detail="Това потребителско име не е разрешено.")
+        username_exists = await db.users.find_one({"username_lc": username_lc})
+        if username_exists:
+            raise HTTPException(status_code=409, detail="Това потребителско име вече е заето.")
+        phone = (payload.phone or "").strip().replace(" ", "")
+        if not phone.startswith("+"):
+            raise HTTPException(
+                status_code=400,
+                detail="Телефонът трябва да е в международен формат (+359...)",
+            )
+        if not _re.match(r"^\+[0-9]{6,18}$", phone):
+            raise HTTPException(status_code=400, detail="Невалиден телефонен номер.")
+        display_name = f"{first_name} {last_name}".strip()
         user_id = str(_uuid.uuid4())
         # Capture device + network fingerprint at the moment of T&C acceptance
         ip_addr = (request.client.host if request.client else "") or ""
@@ -315,12 +343,17 @@ def register_routes():
         # slugifier is used for the one-time backfill at boot). We import
         # lazily here to avoid a circular import at module load.
         from server import _slugify_profile_name, _ensure_unique_profile_slug
-        slug_base = _slugify_profile_name(payload.name.strip()) or f"user-{user_id[:6]}"
+        slug_base = _slugify_profile_name(display_name) or f"user-{user_id[:6]}"
         profile_slug = await _ensure_unique_profile_slug(slug_base)
         doc = {
             "id": user_id,
             "email": payload.email.lower(),
-            "name": payload.name.strip(),
+            "name": display_name,
+            "first_name": first_name,
+            "last_name": last_name,
+            "username": username,
+            "username_lc": username_lc,
+            "phone": phone,
             "profile_slug": profile_slug,
             "password_hash": _hash_password(payload.password),
             "role": "user",

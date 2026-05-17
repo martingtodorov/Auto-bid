@@ -8,9 +8,12 @@ export default function RegisterPage() {
   const { t } = useTranslation();
   const { register } = useAuth();
   const navigate = useNavigate();
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [username, setUsername] = useState("");
+  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
@@ -24,7 +27,15 @@ export default function RegisterPage() {
     }
     setLoading(true);
     try {
-      await register(email, password, name, termsAccepted);
+      await register({
+        email,
+        password,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        username: username.trim(),
+        phone: phone.trim(),
+        terms_accepted: termsAccepted,
+      });
       navigate("/");
     } catch (e) { setErr(formatError(e)); }
     finally { setLoading(false); }
@@ -40,13 +51,69 @@ export default function RegisterPage() {
         </p>
 
         <form onSubmit={submit} className="mt-10 space-y-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="overline text-[hsl(var(--ink-muted))] block mb-2">
+                {t("forms.first_name") || "Име"}
+              </label>
+              <input
+                required
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                className="w-full border border-[hsl(var(--line))] h-12 px-3"
+                data-testid="register-first-name"
+                autoComplete="given-name"
+              />
+            </div>
+            <div>
+              <label className="overline text-[hsl(var(--ink-muted))] block mb-2">
+                {t("forms.last_name") || "Фамилия"}
+              </label>
+              <input
+                required
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                className="w-full border border-[hsl(var(--line))] h-12 px-3"
+                data-testid="register-last-name"
+                autoComplete="family-name"
+              />
+            </div>
+          </div>
           <div>
-            <label className="overline text-[hsl(var(--ink-muted))] block mb-2">{t("forms.name")}</label>
-            <input required value={name} onChange={(e) => setName(e.target.value)} className="w-full border border-[hsl(var(--line))] h-12 px-3" data-testid="register-name" />
+            <label className="overline text-[hsl(var(--ink-muted))] block mb-2">
+              {t("forms.username") || "Потребителско име"}
+            </label>
+            <input
+              required
+              minLength={3}
+              maxLength={30}
+              pattern="[A-Za-z0-9_.\-]{3,30}"
+              title={t("forms.username_rules") || "3–30 знака: латински букви, цифри, . _ -"}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full border border-[hsl(var(--line))] h-12 px-3"
+              data-testid="register-username"
+              autoComplete="username"
+            />
+          </div>
+          <div>
+            <label className="overline text-[hsl(var(--ink-muted))] block mb-2">
+              {t("forms.phone") || "Телефон"}
+            </label>
+            <input
+              type="tel"
+              required
+              placeholder="+359..."
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="w-full border border-[hsl(var(--line))] h-12 px-3"
+              data-testid="register-phone"
+              autoComplete="tel"
+            />
           </div>
           <div>
             <label className="overline text-[hsl(var(--ink-muted))] block mb-2">{t("forms.email")}</label>
-            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full border border-[hsl(var(--line))] h-12 px-3" data-testid="register-email" />
+            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full border border-[hsl(var(--line))] h-12 px-3" data-testid="register-email" autoComplete="email" />
           </div>
           <div>
             <label className="overline text-[hsl(var(--ink-muted))] block mb-2">

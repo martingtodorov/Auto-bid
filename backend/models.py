@@ -10,7 +10,11 @@ from pydantic import BaseModel, Field, EmailStr
 class UserRegister(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
-    name: str = Field(min_length=1, max_length=80)
+    name: Optional[str] = Field(default=None, max_length=80)
+    first_name: str = Field(min_length=1, max_length=40)
+    last_name: str = Field(min_length=1, max_length=40)
+    username: str = Field(min_length=3, max_length=30)
+    phone: str = Field(min_length=4, max_length=20)
     terms_accepted: bool = Field(default=False)
     terms_version: Optional[str] = Field(default="v1", max_length=20)
 
