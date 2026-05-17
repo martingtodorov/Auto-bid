@@ -151,8 +151,7 @@ async def email_outbid(to: str, name: str, auction_title: str, auction_id: str, 
 async def email_won(to: str, name: str, auction_title: str, auction_id: str, price: float, lang: str = "bg",
                     seller_name: str = "", seller_email: str = "", seller_phone: str = ""):
     """Buyer wins — uses the rich `auction_won_buyer` template that includes
-    seller contact details + the insurance/notary helper note. Falls back to
-    the legacy `won` template if the new one isn't available for the locale.
+    seller contact details + the insurance/notary helper note.
     """
     vars_ = {
         "name": name, "auction_title": auction_title, "auction_id": auction_id,
@@ -161,10 +160,7 @@ async def email_won(to: str, name: str, auction_title: str, auction_id: str, pri
         "seller_email": seller_email or "—",
         "seller_phone": seller_phone or "—",
     }
-    try:
-        subject, header, body = render_localized("auction_won_buyer", lang, vars_)
-    except KeyError:
-        subject, header, body = render_localized("won", lang, vars_)
+    subject, header, body = render_localized("auction_won_buyer", lang, vars_)
     await send_email(to, subject, _shell(header, body, to=to, lang=lang))
 
 

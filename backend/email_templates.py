@@ -183,21 +183,6 @@ SYSTEM_TEMPLATES: dict[str, dict] = {
             f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_DARK}">Върни се в търга</a></p>'
         ),
     },
-    "won": {
-        "system": True, "lang": "bg",
-        "description": "Поздравителен имейл при спечелен търг.",
-        "placeholders": ["name", "auction_title", "auction_id", "price", "app_url"],
-        "subject": "🏁 Спечелихте · {{auction_title}}",
-        "header": "Вашето наддаване беше печелившото",
-        "body_html": (
-            "<p>Поздравления, {{name}}!</p>"
-            "<p>Спечелихте търга за <strong>{{auction_title}}</strong>.</p>"
-            '<p style="font-size:20px;margin:20px 0;">Крайна цена: <strong>€{{price}}</strong></p>'
-            "<p>Нашият екип ще се свърже с вас за финализирането в рамките на 24 часа. "
-            "Вашата pre-authorization остава задържана до приключване на сделката.</p>"
-            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_PRIMARY}">Виж търга</a></p>'
-        ),
-    },
     "approved": {
         "system": True, "lang": "bg",
         "description": "Обявата е одобрена от модератор и е публикувана.",
@@ -359,21 +344,6 @@ SYSTEM_TEMPLATES: dict[str, dict] = {
             f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_DARK}">Back to auction</a></p>'
         ),
     },
-    "won_en": {
-        "system": True, "lang": "en",
-        "description": "Congratulations email when the user wins an auction.",
-        "placeholders": ["name", "auction_title", "auction_id", "price", "app_url"],
-        "subject": "🏁 You won · {{auction_title}}",
-        "header": "Your bid was the winning one",
-        "body_html": (
-            "<p>Congratulations, {{name}}!</p>"
-            "<p>You won the auction for <strong>{{auction_title}}</strong>.</p>"
-            '<p style="font-size:20px;margin:20px 0;">Final price: <strong>€{{price}}</strong></p>'
-            "<p>Our team will contact you within 24 hours to finalise. Your pre-authorization "
-            "remains held until the deal is completed.</p>"
-            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_PRIMARY}">View auction</a></p>'
-        ),
-    },
     "approved_en": {
         "system": True, "lang": "en",
         "description": "Listing approved by moderator and published.",
@@ -532,21 +502,6 @@ SYSTEM_TEMPLATES: dict[str, dict] = {
             '<p style="font-size:20px;margin:20px 0;">Noua ofertă curentă: <strong>€{{new_bid}}</strong></p>'
             "<p>Pre-autorizarea ta a fost eliberată automat.</p>"
             f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_DARK}">Înapoi la licitație</a></p>'
-        ),
-    },
-    "won_ro": {
-        "system": True, "lang": "ro",
-        "description": "Email de felicitări la câștigarea unei licitații.",
-        "placeholders": ["name", "auction_title", "auction_id", "price", "app_url"],
-        "subject": "🏁 Ai câștigat · {{auction_title}}",
-        "header": "Oferta ta a fost câștigătoare",
-        "body_html": (
-            "<p>Felicitări, {{name}}!</p>"
-            "<p>Ai câștigat licitația pentru <strong>{{auction_title}}</strong>.</p>"
-            '<p style="font-size:20px;margin:20px 0;">Preț final: <strong>€{{price}}</strong></p>'
-            "<p>Echipa noastră te va contacta în 24 de ore pentru finalizare. Pre-autorizarea "
-            "rămâne reținută până la finalizarea tranzacției.</p>"
-            f'<p><a href="{{{{app_url}}}}/auctions/{{{{auction_id}}}}" style="{_BTN_PRIMARY}">Vezi licitația</a></p>'
         ),
     },
     "approved_ro": {
@@ -958,9 +913,11 @@ async def seed_defaults_on_startup(db) -> int:
     once written.
 
     Operationally:
-      • First-ever deploy on a fresh DB → all 36 system templates seeded.
+      • First-ever deploy on a fresh DB → all system templates seeded.
       • Subsequent deploys → only NEW slugs (e.g. a freshly-added one in
         the registry) are seeded; everything else is left alone.
+      • Deprecated slugs (listed in `_REMOVED_SLUGS`) are pruned from the
+        DB so the admin UI no longer surfaces them.
       • To force-restore a specific template to its in-code default,
         the admin clicks "Reset" in the UI, which calls
         `POST /admin/email-templates/{slug}/reset`.
@@ -971,11 +928,17 @@ async def seed_defaults_on_startup(db) -> int:
     from datetime import datetime, timezone
     s = await db.site_settings.find_one({"id": "global"}, {"_id": 0, "email_templates": 1}) or {}
     existing = s.get("email_templates") or {}
+    # 1. Prune deprecated slugs (replaced by newer templates).
+    pruned = await _prune_removed_slugs(db, existing)
+    if pruned:
+        # Re-read after the prune so subsequent merges don't resurrect them.
+        s = await db.site_settings.find_one({"id": "global"}, {"_id": 0, "email_templates": 1}) or {}
+        existing = s.get("email_templates") or {}
+    # 2. Seed any new system slugs (additive only).
     additions: dict[str, dict] = {}
     skipped_existing = 0
     for slug, tpl in SYSTEM_TEMPLATES.items():
         if slug in existing:
-            # Admin-edited or previously-seeded — leave untouched.
             skipped_existing += 1
             continue
         additions[slug] = {
@@ -1007,6 +970,38 @@ async def seed_defaults_on_startup(db) -> int:
         len(additions), skipped_existing,
     )
     return len(additions)
+
+
+# Slugs we have explicitly retired. They are unset from
+# `site_settings.email_templates` on every boot so the admin UI no longer
+# lists them. Code paths that previously rendered them have been migrated
+# to their replacements (see comments).
+_REMOVED_SLUGS: tuple[str, ...] = (
+    # 2026-05-17 — replaced by auction_won_buyer_<lang> which carries seller
+    # contacts + insurance/notary helper note.
+    "won", "won_en", "won_ro",
+)
+
+
+async def _prune_removed_slugs(db, existing: dict) -> list[str]:
+    """Unset deprecated slugs from `site_settings.email_templates`.
+
+    Returns the list of slugs actually removed. Safe on a fresh DB
+    (Mongo `$unset` on a missing key is a no-op and we filter first).
+    """
+    from datetime import datetime, timezone
+    to_remove = [s for s in _REMOVED_SLUGS if s in existing]
+    if not to_remove:
+        return []
+    unset_ops = {f"email_templates.{s}": "" for s in to_remove}
+    await db.site_settings.update_one(
+        {"id": "global"},
+        {"$unset": unset_ops,
+         "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    logger.info("email_templates: pruned %d deprecated slugs: %s",
+                len(to_remove), ", ".join(to_remove))
+    return to_remove
 
 
 def system_template_metadata() -> dict[str, dict]:
