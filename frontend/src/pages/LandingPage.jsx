@@ -195,7 +195,7 @@ export default function LandingPage() {
             className="sm:hidden btn btn-secondary w-full mt-6 inline-flex items-center justify-center gap-2"
             data-testid="landing-view-all-auctions-mobile"
           >
-            {t("cta.view_all_auctions")} <ArrowRight size={14} />
+            {t("auction.view_all_auctions")} <ArrowRight size={14} />
           </Link>
         </div>
       </section>
