@@ -265,6 +265,28 @@ export default function AuctionCard({ auction, compact = false, priority = false
               {t("auction.vat_short", "ДДС")}
             </span>
           )}
+          {/* Reserve pill — sits inside the image overlay next to the
+              time-left pill, NOT in the card body. We use the same
+              two-tone styling as the body badges (`.with-reserve-pill`
+              for black/green and `.no-reserve-gradient` for the sell
+              gradient) so the look is consistent across both placements. */}
+          {!isSold && (
+            auction.has_reserve ? (
+              <span
+                className="with-reserve-pill inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap"
+                data-testid={`with-reserve-${auction.id}`}
+              >
+                ● {t("auction.with_reserve")}
+              </span>
+            ) : (
+              <span
+                className="no-reserve-gradient inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap"
+                data-testid={`no-reserve-${auction.id}`}
+              >
+                ● {t("auction.no_reserve_badge")}
+              </span>
+            )
+          )}
         </div>
       </div>
 
@@ -312,39 +334,19 @@ export default function AuctionCard({ auction, compact = false, priority = false
               ? formatLocal(Math.round(Number(auction.current_bid_eur || 0) * (1 + Number(auction.vat_rate_pct) / 100)), lang)
               : formatLocal(auction.current_bid_eur, lang)}
           </span>
-          {/* Right-aligned stack: verified-dealer badge above the reserve pill.
-              Both are squeezed into a column container so they share the
-              right edge of the price row regardless of how long the EUR/BGN
-              text becomes. `ml-auto` does the right-floating. */}
-          {(!isSold || auction.seller_is_verified_dealer) && (
-            <div className="ml-auto shrink-0 flex flex-col items-end gap-1">
-              {auction.seller_is_verified_dealer && (
-                <span
-                  className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[hsl(var(--accent))] bg-[hsl(var(--accent-soft))] border border-[hsl(var(--accent))]/30 px-3 py-1.5 rounded-full whitespace-nowrap"
-                  data-testid={`verified-dealer-${auction.id}`}
-                  title={t("auction.dealer_badge")}
-                >
-                  <Check size={13} strokeWidth={3} /> {t("auction.dealer_badge")}
-                </span>
-              )}
-              {!isSold && (
-                auction.has_reserve ? (
-                  <span
-                    className="with-reserve-pill inline-flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded-full whitespace-nowrap"
-                    data-testid={`with-reserve-${auction.id}`}
-                  >
-                    ● {t("auction.with_reserve")}
-                  </span>
-                ) : (
-                  <span
-                    className="no-reserve-gradient inline-flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded-full whitespace-nowrap"
-                    data-testid={`no-reserve-${auction.id}`}
-                  >
-                    ● {t("auction.no_reserve_badge")}
-                  </span>
-                )
-              )}
-            </div>
+          {/* Right-aligned dealer badge (when applicable). Reserve pill
+              now lives in the image overlay next to the time-left pill,
+              so the body row only carries the dealer chip — keeps the
+              price row breathing and lets the dealer "claim of trust"
+              sit next to the bid figure where it matters most. */}
+          {auction.seller_is_verified_dealer && (
+            <span
+              className="ml-auto shrink-0 inline-flex items-center gap-1.5 text-[13px] font-semibold text-[hsl(var(--accent))] bg-[hsl(var(--accent-soft))] border border-[hsl(var(--accent))]/30 px-3 py-1.5 rounded-full whitespace-nowrap"
+              data-testid={`verified-dealer-${auction.id}`}
+              title={t("auction.dealer_badge")}
+            >
+              <Check size={13} strokeWidth={3} /> {t("auction.dealer_badge")}
+            </span>
           )}
         </div>
 
