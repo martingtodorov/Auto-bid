@@ -315,7 +315,7 @@ export default function AuctionCard({ auction, compact = false, priority = false
           {!isSold && (
             auction.has_reserve ? (
               <span
-                className="ml-auto shrink-0 inline-flex items-center gap-1.5 text-[13px] font-semibold text-white bg-[#0a0a0a] px-3 py-1.5 rounded-full border border-[#0a0a0a] whitespace-nowrap"
+                className="ml-auto shrink-0 with-reserve-pill inline-flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded-full whitespace-nowrap"
                 data-testid={`with-reserve-${auction.id}`}
               >
                 ● {t("auction.with_reserve")}
