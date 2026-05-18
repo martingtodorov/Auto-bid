@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, Zap, Star, ArrowRight } from "lucide-react";
+import { Zap, Star, ArrowRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { formatEUR, formatLocal, formatKM, timeLeft, formatTimeLeft } from "../lib/apiClient";
 import { translateEnum } from "../lib/carTranslations";
@@ -265,95 +265,78 @@ export default function AuctionCard({ auction, compact = false, priority = false
               {t("auction.vat_short", "ДДС")}
             </span>
           )}
-          {auction.seller_is_verified_dealer && !["sold", "ended"].includes(auction.status) && (
-            <span className="pill pill-verified flex items-center gap-1" data-testid={`verified-dealer-${auction.id}`}>
-              <Check size={11} strokeWidth={3} /> {t("auction.dealer_badge")}
-            </span>
-          )}
         </div>
       </div>
 
       <div className="pt-4 pb-5 px-5">
-        <h3 className="font-serif text-xl leading-tight tracking-tight group-hover:text-[hsl(var(--accent))] transition-colors">
+        {/* Line 1 — vehicle title */}
+        <h3 className="font-serif text-xl leading-tight tracking-tight group-hover:text-[hsl(var(--accent))] transition-colors truncate">
           {auction.title}
         </h3>
 
-        {/* 3-column detail grid (no `gap` — each column carries its own
-            right padding so we can tune horizontal spacing independently:
-            wider gap between price and specs, tighter gap before location).
-              col 1 — current/sold price block (+ buy-now pill)
-              col 2 — year over mileage
-              col 3 — location + reserve pill stacked
-            All three columns share the same top baseline (`items-start`).
-            Top spacing matches the breathing room above the title so the
-            heading sits visually centred between the image and the meta. */}
-        <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-x-3 sm:gap-x-4">
-          {/* Col 1 — price */}
-          <div className="min-w-0">
-            <div className="overline text-[hsl(var(--ink-muted))]">
-              {isSold ? t("auction.sold_for") : t("auction.current_bid_label")}
-            </div>
-            <div className="font-serif text-base mt-1 flex items-baseline gap-1.5 flex-wrap whitespace-nowrap" data-testid={`auction-price-${auction.id}`}>
-              {auction.vat_status === "vat_inclusive" && Number(auction.vat_rate_pct) > 0
-                ? formatEUR(Math.round(Number(auction.current_bid_eur || 0) * (1 + Number(auction.vat_rate_pct) / 100)))
-                : formatEUR(auction.current_bid_eur)}
-              {auction.vat_status === "vat_inclusive" && (
-                <span className="text-[10px] uppercase tracking-wider text-[hsl(var(--ink-muted))] font-sans font-semibold">
-                  {t("auction.incl_vat", "вкл. ДДС")}
-                </span>
-              )}
-            </div>
-            <div className="text-xs text-[hsl(var(--ink-muted))] font-mono whitespace-nowrap overflow-hidden text-ellipsis">
-              {auction.vat_status === "vat_inclusive" && Number(auction.vat_rate_pct) > 0
-                ? formatLocal(Math.round(Number(auction.current_bid_eur || 0) * (1 + Number(auction.vat_rate_pct) / 100)), lang)
-                : formatLocal(auction.current_bid_eur, lang)}
-            </div>
-            {!isSold && auction.buy_now_eur && Number(auction.buy_now_eur) > Number(auction.current_bid_eur || 0) && (
-              <div
-                className="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[hsl(var(--accent-soft))] border border-[hsl(var(--accent))]/30 text-[11px] font-semibold text-[hsl(var(--accent-ink))]"
-                data-testid={`buy-now-${auction.id}`}
-                title={t("auction.buy_now_title", "Купи сега")}
-              >
-                <Zap size={11} />
-                <span>{t("auction.buy_now_short", "Купи сега")}: {formatEUR(
-                  auction.vat_status === "vat_inclusive" && Number(auction.vat_rate_pct) > 0
-                    ? Math.round(Number(auction.buy_now_eur) * (1 + Number(auction.vat_rate_pct) / 100))
-                    : auction.buy_now_eur
-                )}</span>
-              </div>
-            )}
+        {/* Line 2 — single-line subtitle: year · mileage · fuel · city · country code */}
+        {!compact && (
+          <div className="mt-1.5 text-[13px] text-[hsl(var(--ink-muted))] truncate">
+            {auction.year}
+            <span className="mx-1.5">·</span>
+            {formatKM(auction.mileage_km, lang)}
+            <span className="mx-1.5">·</span>
+            {translateEnum(auction.fuel, "fuel", lang)}
+            <span className="mx-1.5">·</span>
+            {translateEnum(auction.city, "city", lang)}
+            {auction.country ? ` · ${countryCode(auction.country)}` : ""}
           </div>
+        )}
 
-          {/* Col 2 — year + mileage */}
-          {!compact && (
-            <div className="text-[12px] sm:text-[13px] text-[hsl(var(--ink-muted))] space-y-1.5 sm:space-y-2 whitespace-nowrap">
-              <div>{auction.year}</div>
-              <div>{formatKM(auction.mileage_km, lang)}</div>
-            </div>
-          )}
-
-          {/* Col 3 — location + reserve pill */}
-          {!compact && (
-            <div className="text-[12px] sm:text-[13px] text-[hsl(var(--ink-muted))] space-y-1.5 sm:space-y-2 text-right">
-              <div className="max-w-[140px] ml-auto truncate">
-                {translateEnum(auction.city, "city", lang)}{auction.country ? ` · ${countryCode(auction.country)}` : ""}
-              </div>
-              {!isSold && (
-                <div className="flex justify-end">
-                  {auction.has_reserve ? (
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[hsl(var(--ink))] bg-[hsl(var(--surface))] px-2 py-0.5 rounded-full border border-[hsl(var(--line))] whitespace-nowrap" data-testid={`with-reserve-${auction.id}`}>
-                      ● {t("auction.with_reserve")}
-                    </span>
-                  ) : (
-                    <span className="no-reserve-gradient inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap" data-testid={`no-reserve-${auction.id}`}>
-                      ● {t("auction.no_reserve_badge")}
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
+        {/* Line 3 — "НАДДАВАНЕ" eyebrow + reserve pill row */}
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <div className="overline text-[hsl(var(--ink-muted))]">
+            {isSold ? t("auction.sold_for") : t("auction.current_bid_label")}
+          </div>
+          {!isSold && auction.has_reserve && (
+            <span className="shrink-0 inline-flex items-center gap-1.5 text-[13px] font-semibold text-[hsl(var(--ink))] bg-[hsl(var(--surface))] px-3 py-1.5 rounded-full border border-[hsl(var(--line))] whitespace-nowrap" data-testid={`with-reserve-${auction.id}`}>
+              ● {t("auction.with_reserve")}
+            </span>
           )}
         </div>
+
+        {/* Line 4 — EUR price + BGN equivalent on the SAME line. The BGN
+            value is muted/smaller and trails the dominant EUR figure. */}
+        <div className="mt-1 flex items-baseline gap-2 flex-wrap whitespace-nowrap">
+          <span className="font-serif text-xl" data-testid={`auction-price-${auction.id}`}>
+            {auction.vat_status === "vat_inclusive" && Number(auction.vat_rate_pct) > 0
+              ? formatEUR(Math.round(Number(auction.current_bid_eur || 0) * (1 + Number(auction.vat_rate_pct) / 100)))
+              : formatEUR(auction.current_bid_eur)}
+          </span>
+          {auction.vat_status === "vat_inclusive" && (
+            <span className="text-[10px] uppercase tracking-wider text-[hsl(var(--ink-muted))] font-sans font-semibold">
+              {t("auction.incl_vat", "вкл. ДДС")}
+            </span>
+          )}
+          <span className="text-xs text-[hsl(var(--ink-muted))] font-mono">
+            {auction.vat_status === "vat_inclusive" && Number(auction.vat_rate_pct) > 0
+              ? formatLocal(Math.round(Number(auction.current_bid_eur || 0) * (1 + Number(auction.vat_rate_pct) / 100)), lang)
+              : formatLocal(auction.current_bid_eur, lang)}
+          </span>
+        </div>
+
+        {/* Optional buy-now hint — kept because it's a real CTA, not a
+            redundant status label. Hidden when the listing is sold or
+            buy_now ≤ current bid (already triggered or never set). */}
+        {!isSold && auction.buy_now_eur && Number(auction.buy_now_eur) > Number(auction.current_bid_eur || 0) && (
+          <div
+            className="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[hsl(var(--accent-soft))] border border-[hsl(var(--accent))]/30 text-[11px] font-semibold text-[hsl(var(--accent-ink))]"
+            data-testid={`buy-now-${auction.id}`}
+            title={t("auction.buy_now_title", "Купи сега")}
+          >
+            <Zap size={11} />
+            <span>{t("auction.buy_now_short", "Купи сега")}: {formatEUR(
+              auction.vat_status === "vat_inclusive" && Number(auction.vat_rate_pct) > 0
+                ? Math.round(Number(auction.buy_now_eur) * (1 + Number(auction.vat_rate_pct) / 100))
+                : auction.buy_now_eur
+            )}</span>
+          </div>
+        )}
       </div>
     </Link>
   );
