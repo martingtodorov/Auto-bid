@@ -321,8 +321,8 @@ export default function AuctionCard({ auction, compact = false, priority = false
             number stays clean. Reserve / dealer pills are also overlay-
             mounted now, so this row carries exactly two pieces of data:
             the dominant figure and the optional buy-now shortcut. */}
-        <div className="mt-0.5 flex items-baseline gap-2 flex-wrap whitespace-nowrap">
-          <span className="font-serif text-xl" data-testid={`auction-price-${auction.id}`}>
+        <div className="mt-0.5 flex items-end gap-2 flex-wrap whitespace-nowrap">
+          <span className="font-serif text-xl leading-none" data-testid={`auction-price-${auction.id}`}>
             {auction.vat_status === "vat_inclusive" && Number(auction.vat_rate_pct) > 0
               ? formatEUR(Math.round(Number(auction.current_bid_eur || 0) * (1 + Number(auction.vat_rate_pct) / 100)))
               : formatEUR(auction.current_bid_eur)}
