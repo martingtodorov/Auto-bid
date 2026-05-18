@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { formatEUR, formatLocal, formatKM, timeLeft, formatTimeLeft } from "../lib/apiClient";
 import { translateEnum } from "../lib/carTranslations";
 import { auctionUrl } from "../lib/auctionUrl";
+import { countryCode } from "../lib/countryCode";
 import Picture from "./Picture";
 
 /**
@@ -292,7 +293,7 @@ export default function AuctionCard({ auction, compact = false, priority = false
             <div className="overline text-[hsl(var(--ink-muted))]">
               {isSold ? t("auction.sold_for") : t("auction.current_bid_label")}
             </div>
-            <div className="font-serif text-xl sm:text-2xl mt-1 flex items-baseline gap-1.5 flex-wrap whitespace-nowrap" data-testid={`auction-price-${auction.id}`}>
+            <div className="font-serif text-xl mt-1 flex items-baseline gap-1.5 flex-wrap whitespace-nowrap" data-testid={`auction-price-${auction.id}`}>
               {auction.vat_status === "vat_inclusive" && Number(auction.vat_rate_pct) > 0
                 ? formatEUR(Math.round(Number(auction.current_bid_eur || 0) * (1 + Number(auction.vat_rate_pct) / 100)))
                 : formatEUR(auction.current_bid_eur)}
@@ -342,7 +343,7 @@ export default function AuctionCard({ auction, compact = false, priority = false
             <div className="text-[12px] sm:text-[13px] text-[hsl(var(--ink-muted))] space-y-1.5 sm:space-y-2 text-right">
               <div className="flex items-center gap-1.5 justify-end max-w-[140px] ml-auto">
                 <MapPin size={12} className="shrink-0" />
-                <span className="truncate">{translateEnum(auction.city, "city", lang)}{auction.country ? `, ${auction.country}` : ""}</span>
+                <span className="truncate">{translateEnum(auction.city, "city", lang)}{auction.country ? ` · ${countryCode(auction.country)}` : ""}</span>
               </div>
               {!isSold && (
                 <div className="flex justify-end">
