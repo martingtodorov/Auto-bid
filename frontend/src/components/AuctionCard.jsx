@@ -320,11 +320,11 @@ export default function AuctionCard({ auction, compact = false, priority = false
             <div className="ml-auto shrink-0 flex flex-col items-end gap-1">
               {auction.seller_is_verified_dealer && (
                 <span
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-[hsl(var(--accent))] bg-[hsl(var(--accent-soft))] border border-[hsl(var(--accent))]/30 px-2 py-0.5 rounded-full whitespace-nowrap"
+                  className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[hsl(var(--accent))] bg-[hsl(var(--accent-soft))] border border-[hsl(var(--accent))]/30 px-3 py-1.5 rounded-full whitespace-nowrap"
                   data-testid={`verified-dealer-${auction.id}`}
                   title={t("auction.dealer_badge")}
                 >
-                  <Check size={11} strokeWidth={3} /> {t("auction.dealer_badge")}
+                  <Check size={13} strokeWidth={3} /> {t("auction.dealer_badge")}
                 </span>
               )}
               {!isSold && (
