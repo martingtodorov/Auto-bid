@@ -286,13 +286,13 @@ export default function AuctionCard({ auction, compact = false, priority = false
             All three columns share the same top baseline (`items-start`).
             Top spacing matches the breathing room above the title so the
             heading sits visually centred between the image and the meta. */}
-        <div className="mt-4 grid grid-cols-[1fr_auto_auto] items-start">
-          {/* Col 1 — price (extra right padding = bigger gap to col 2) */}
-          <div className="min-w-0 pr-8">
+        <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto_auto] items-start gap-x-3 sm:gap-x-4">
+          {/* Col 1 — price */}
+          <div className="min-w-0">
             <div className="overline text-[hsl(var(--ink-muted))]">
               {isSold ? t("auction.sold_for") : t("auction.current_bid_label")}
             </div>
-            <div className="font-serif text-2xl mt-1 flex items-baseline gap-1.5 flex-wrap" data-testid={`auction-price-${auction.id}`}>
+            <div className="font-serif text-xl sm:text-2xl mt-1 flex items-baseline gap-1.5 flex-wrap whitespace-nowrap" data-testid={`auction-price-${auction.id}`}>
               {auction.vat_status === "vat_inclusive" && Number(auction.vat_rate_pct) > 0
                 ? formatEUR(Math.round(Number(auction.current_bid_eur || 0) * (1 + Number(auction.vat_rate_pct) / 100)))
                 : formatEUR(auction.current_bid_eur)}
@@ -302,7 +302,7 @@ export default function AuctionCard({ auction, compact = false, priority = false
                 </span>
               )}
             </div>
-            <div className="text-xs text-[hsl(var(--ink-muted))] font-mono">
+            <div className="text-xs text-[hsl(var(--ink-muted))] font-mono whitespace-nowrap overflow-hidden text-ellipsis">
               {auction.vat_status === "vat_inclusive" && Number(auction.vat_rate_pct) > 0
                 ? formatLocal(Math.round(Number(auction.current_bid_eur || 0) * (1 + Number(auction.vat_rate_pct) / 100)), lang)
                 : formatLocal(auction.current_bid_eur, lang)}
@@ -323,15 +323,15 @@ export default function AuctionCard({ auction, compact = false, priority = false
             )}
           </div>
 
-          {/* Col 2 — year + mileage (small right padding = tight gap to col 3) */}
+          {/* Col 2 — year + mileage */}
           {!compact && (
-            <div className="min-w-0 pr-3 text-[13px] text-[hsl(var(--ink-muted))] space-y-2 whitespace-nowrap">
+            <div className="text-[12px] sm:text-[13px] text-[hsl(var(--ink-muted))] space-y-1.5 sm:space-y-2 whitespace-nowrap">
               <div className="flex items-center gap-1.5">
-                <Calendar size={13} className="shrink-0" />
+                <Calendar size={12} className="shrink-0" />
                 <span>{auction.year}</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <Gauge size={13} className="shrink-0" />
+                <Gauge size={12} className="shrink-0" />
                 <span>{formatKM(auction.mileage_km)}</span>
               </div>
             </div>
@@ -339,19 +339,19 @@ export default function AuctionCard({ auction, compact = false, priority = false
 
           {/* Col 3 — location + reserve pill */}
           {!compact && (
-            <div className="min-w-0 text-[13px] text-[hsl(var(--ink-muted))] space-y-2 text-right">
-              <div className="flex items-center gap-1.5 justify-end max-w-[160px] ml-auto">
-                <MapPin size={13} className="shrink-0" />
+            <div className="text-[12px] sm:text-[13px] text-[hsl(var(--ink-muted))] space-y-1.5 sm:space-y-2 text-right">
+              <div className="flex items-center gap-1.5 justify-end max-w-[140px] ml-auto">
+                <MapPin size={12} className="shrink-0" />
                 <span className="truncate">{translateEnum(auction.city, "city", lang)}{auction.country ? `, ${auction.country}` : ""}</span>
               </div>
               {!isSold && (
                 <div className="flex justify-end">
                   {auction.has_reserve ? (
-                    <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[hsl(var(--ink))] bg-[hsl(var(--surface))] px-2.5 py-1 rounded-full border border-[hsl(var(--line))]" data-testid={`with-reserve-${auction.id}`}>
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[hsl(var(--ink))] bg-[hsl(var(--surface))] px-2 py-0.5 rounded-full border border-[hsl(var(--line))] whitespace-nowrap" data-testid={`with-reserve-${auction.id}`}>
                       ● {t("auction.with_reserve")}
                     </span>
                   ) : (
-                    <span className="no-reserve-gradient inline-flex items-center gap-1.5 text-[12px] font-semibold px-2.5 py-1 rounded-full" data-testid={`no-reserve-${auction.id}`}>
+                    <span className="no-reserve-gradient inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap" data-testid={`no-reserve-${auction.id}`}>
                       ● {t("auction.no_reserve_badge")}
                     </span>
                   )}
