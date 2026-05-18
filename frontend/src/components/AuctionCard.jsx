@@ -272,7 +272,7 @@ export default function AuctionCard({ auction, compact = false, priority = false
         </div>
       </div>
 
-      <div className="p-5">
+      <div className="pt-4 pb-5 px-5">
         <h3 className="font-serif text-xl leading-tight tracking-tight group-hover:text-[hsl(var(--accent))] transition-colors">
           {auction.title}
         </h3>
@@ -283,9 +283,10 @@ export default function AuctionCard({ auction, compact = false, priority = false
               col 1 — current/sold price block (+ buy-now pill)
               col 2 — year over mileage
               col 3 — location + reserve pill stacked
-            All three columns share the same top baseline (`items-start`)
-            and sit on a thin top rule for separation. */}
-        <div className="mt-3 grid grid-cols-[1fr_auto_auto] items-start">
+            All three columns share the same top baseline (`items-start`).
+            Top spacing matches the breathing room above the title so the
+            heading sits visually centred between the image and the meta. */}
+        <div className="mt-4 grid grid-cols-[1fr_auto_auto] items-start">
           {/* Col 1 — price (extra right padding = bigger gap to col 2) */}
           <div className="min-w-0 pr-8">
             <div className="overline text-[hsl(var(--ink-muted))]">
