@@ -293,7 +293,7 @@ export default function AuctionCard({ auction, compact = false, priority = false
             <div className="overline text-[hsl(var(--ink-muted))]">
               {isSold ? t("auction.sold_for") : t("auction.current_bid_label")}
             </div>
-            <div className="font-serif text-xl mt-1 flex items-baseline gap-1.5 flex-wrap whitespace-nowrap" data-testid={`auction-price-${auction.id}`}>
+            <div className="font-serif text-base mt-1 flex items-baseline gap-1.5 flex-wrap whitespace-nowrap" data-testid={`auction-price-${auction.id}`}>
               {auction.vat_status === "vat_inclusive" && Number(auction.vat_rate_pct) > 0
                 ? formatEUR(Math.round(Number(auction.current_bid_eur || 0) * (1 + Number(auction.vat_rate_pct) / 100)))
                 : formatEUR(auction.current_bid_eur)}
