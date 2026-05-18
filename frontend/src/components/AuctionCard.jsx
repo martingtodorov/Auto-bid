@@ -312,10 +312,22 @@ export default function AuctionCard({ auction, compact = false, priority = false
               ? formatLocal(Math.round(Number(auction.current_bid_eur || 0) * (1 + Number(auction.vat_rate_pct) / 100)), lang)
               : formatLocal(auction.current_bid_eur, lang)}
           </span>
-          {!isSold && auction.has_reserve && (
-            <span className="ml-auto shrink-0 inline-flex items-center gap-1.5 text-[13px] font-semibold text-[hsl(var(--ink))] bg-[hsl(var(--surface))] px-3 py-1.5 rounded-full border border-[hsl(var(--line))] whitespace-nowrap" data-testid={`with-reserve-${auction.id}`}>
-              ● {t("auction.with_reserve")}
-            </span>
+          {!isSold && (
+            auction.has_reserve ? (
+              <span
+                className="ml-auto shrink-0 inline-flex items-center gap-1.5 text-[13px] font-semibold text-white bg-[#0a0a0a] px-3 py-1.5 rounded-full border border-[#0a0a0a] whitespace-nowrap"
+                data-testid={`with-reserve-${auction.id}`}
+              >
+                ● {t("auction.with_reserve")}
+              </span>
+            ) : (
+              <span
+                className="ml-auto shrink-0 no-reserve-gradient inline-flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded-full whitespace-nowrap"
+                data-testid={`no-reserve-${auction.id}`}
+              >
+                ● {t("auction.no_reserve_badge")}
+              </span>
+            )
           )}
         </div>
 
