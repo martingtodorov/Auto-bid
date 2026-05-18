@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { MapPin, Gauge, Calendar, Check, Zap, Star, ArrowRight } from "lucide-react";
+import { Check, Zap, Star, ArrowRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { formatEUR, formatLocal, formatKM, timeLeft, formatTimeLeft } from "../lib/apiClient";
 import { translateEnum } from "../lib/carTranslations";
@@ -327,23 +327,16 @@ export default function AuctionCard({ auction, compact = false, priority = false
           {/* Col 2 — year + mileage */}
           {!compact && (
             <div className="text-[12px] sm:text-[13px] text-[hsl(var(--ink-muted))] space-y-1.5 sm:space-y-2 whitespace-nowrap">
-              <div className="flex items-center gap-1.5">
-                <Calendar size={12} className="shrink-0" />
-                <span>{auction.year}</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Gauge size={12} className="shrink-0" />
-                <span>{formatKM(auction.mileage_km, lang)}</span>
-              </div>
+              <div>{auction.year}</div>
+              <div>{formatKM(auction.mileage_km, lang)}</div>
             </div>
           )}
 
           {/* Col 3 — location + reserve pill */}
           {!compact && (
             <div className="text-[12px] sm:text-[13px] text-[hsl(var(--ink-muted))] space-y-1.5 sm:space-y-2 text-right">
-              <div className="flex items-center gap-1.5 justify-end max-w-[140px] ml-auto">
-                <MapPin size={12} className="shrink-0" />
-                <span className="truncate">{translateEnum(auction.city, "city", lang)}{auction.country ? ` · ${countryCode(auction.country)}` : ""}</span>
+              <div className="max-w-[140px] ml-auto truncate">
+                {translateEnum(auction.city, "city", lang)}{auction.country ? ` · ${countryCode(auction.country)}` : ""}
               </div>
               {!isSold && (
                 <div className="flex justify-end">
