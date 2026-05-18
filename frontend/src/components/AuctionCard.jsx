@@ -288,21 +288,15 @@ export default function AuctionCard({ auction, compact = false, priority = false
           </div>
         )}
 
-        {/* Line 3 — "НАДДАВАНЕ" eyebrow + reserve pill row */}
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <div className="overline text-[hsl(var(--ink-muted))]">
-            {isSold ? t("auction.sold_for") : t("auction.current_bid_label")}
-          </div>
-          {!isSold && auction.has_reserve && (
-            <span className="shrink-0 inline-flex items-center gap-1.5 text-[13px] font-semibold text-[hsl(var(--ink))] bg-[hsl(var(--surface))] px-3 py-1.5 rounded-full border border-[hsl(var(--line))] whitespace-nowrap" data-testid={`with-reserve-${auction.id}`}>
-              ● {t("auction.with_reserve")}
-            </span>
-          )}
+        {/* Line 3 — "НАДДАВАНЕ" eyebrow */}
+        <div className="mt-3 overline text-[hsl(var(--ink-muted))]">
+          {isSold ? t("auction.sold_for") : t("auction.current_bid_label")}
         </div>
 
-        {/* Line 4 — EUR price + BGN equivalent on the SAME line. The BGN
-            value is muted/smaller and trails the dominant EUR figure. */}
-        <div className="mt-1 flex items-baseline gap-2 flex-wrap whitespace-nowrap">
+        {/* Line 4 — EUR price + BGN equivalent + reserve pill, ALL on the
+            same row. Eyebrow above sits tight (mt-0.5 below). The pill
+            floats right via `ml-auto`. */}
+        <div className="mt-0.5 flex items-baseline gap-2 flex-wrap whitespace-nowrap">
           <span className="font-serif text-xl" data-testid={`auction-price-${auction.id}`}>
             {auction.vat_status === "vat_inclusive" && Number(auction.vat_rate_pct) > 0
               ? formatEUR(Math.round(Number(auction.current_bid_eur || 0) * (1 + Number(auction.vat_rate_pct) / 100)))
@@ -318,6 +312,11 @@ export default function AuctionCard({ auction, compact = false, priority = false
               ? formatLocal(Math.round(Number(auction.current_bid_eur || 0) * (1 + Number(auction.vat_rate_pct) / 100)), lang)
               : formatLocal(auction.current_bid_eur, lang)}
           </span>
+          {!isSold && auction.has_reserve && (
+            <span className="ml-auto shrink-0 inline-flex items-center gap-1.5 text-[13px] font-semibold text-[hsl(var(--ink))] bg-[hsl(var(--surface))] px-3 py-1.5 rounded-full border border-[hsl(var(--line))] whitespace-nowrap" data-testid={`with-reserve-${auction.id}`}>
+              ● {t("auction.with_reserve")}
+            </span>
+          )}
         </div>
 
         {/* Optional buy-now hint — kept because it's a real CTA, not a
