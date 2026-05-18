@@ -273,21 +273,35 @@ export default function AuctionCard({ auction, compact = false, priority = false
       </div>
 
       <div className="p-5">
-        <h3 className="font-serif text-xl leading-tight tracking-tight group-hover:text-[hsl(var(--accent))] transition-colors">
-          {auction.title}
-        </h3>
+        {/* Title row — reserve pill floats to the right so the 3-column
+            detail grid below stays balanced (no 4th column for the badge). */}
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="font-serif text-xl leading-tight tracking-tight group-hover:text-[hsl(var(--accent))] transition-colors min-w-0">
+            {auction.title}
+          </h3>
+          {!isSold && (
+            <div className="shrink-0">
+              {auction.has_reserve ? (
+                <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[hsl(var(--ink))] bg-[hsl(var(--surface))] px-2.5 py-1 rounded-full border border-[hsl(var(--line))]" data-testid={`with-reserve-${auction.id}`}>
+                  ● {t("auction.with_reserve")}
+                </span>
+              ) : (
+                <span className="no-reserve-gradient inline-flex items-center gap-1.5 text-[12px] font-semibold px-2.5 py-1 rounded-full" data-testid={`no-reserve-${auction.id}`}>
+                  ● {t("auction.no_reserve_badge")}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
 
-        {!compact && (
-          <div className="mt-3 grid grid-cols-2 gap-y-1.5 gap-x-4 text-[13px] text-[hsl(var(--ink-muted))]">
-            <span className="flex items-center gap-1.5 min-w-0"><Calendar size={13} className="shrink-0" />{auction.year}</span>
-            <span className="flex items-center gap-1.5 min-w-0"><Gauge size={13} className="shrink-0" />{formatKM(auction.mileage_km)}</span>
-            <span className="flex items-center gap-1.5 min-w-0"><Fuel size={13} className="shrink-0" />{translateEnum(auction.fuel, "fuel", lang)}</span>
-            <span className="flex items-center gap-1.5 min-w-0"><MapPin size={13} className="shrink-0" /><span className="truncate">{translateEnum(auction.city, "city", lang)}{auction.country ? `, ${auction.country}` : ""}</span></span>
-          </div>
-        )}
-
-        <div className="mt-4 rule-t pt-4 flex items-start justify-between gap-3">
-          {/* Price block — left aligned (current bid / sold price + buy-now pill) */}
+        {/* 3-column detail grid:
+              col 1 — current/sold price block (+ buy-now pill)
+              col 2 — year over fuel type
+              col 3 — mileage over location
+            All three columns share the same baseline (`items-start`) and
+            sit on top of a thin top rule for visual separation. */}
+        <div className="mt-4 rule-t pt-4 grid grid-cols-3 gap-3 items-start">
+          {/* Col 1 — price */}
           <div className="min-w-0">
             <div className="overline text-[hsl(var(--ink-muted))]">
               {isSold ? t("auction.sold_for") : t("auction.current_bid_label")}
@@ -323,18 +337,31 @@ export default function AuctionCard({ auction, compact = false, priority = false
             )}
           </div>
 
-          {/* Reserve badge — right aligned, vertically centred against the price */}
-          {!isSold && (
-            <div className="shrink-0 self-center">
-              {auction.has_reserve ? (
-                <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[hsl(var(--ink))] bg-[hsl(var(--surface))] px-3 py-1.5 rounded-full border border-[hsl(var(--line))]" data-testid={`with-reserve-${auction.id}`}>
-                  ● {t("auction.with_reserve")}
-                </span>
-              ) : (
-                <span className="no-reserve-gradient inline-flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded-full" data-testid={`no-reserve-${auction.id}`}>
-                  ● {t("auction.no_reserve_badge")}
-                </span>
-              )}
+          {/* Col 2 — year + fuel */}
+          {!compact && (
+            <div className="min-w-0 text-[13px] text-[hsl(var(--ink-muted))] space-y-2">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Calendar size={13} className="shrink-0" />
+                <span className="truncate">{auction.year}</span>
+              </div>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Fuel size={13} className="shrink-0" />
+                <span className="truncate">{translateEnum(auction.fuel, "fuel", lang)}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Col 3 — mileage + location */}
+          {!compact && (
+            <div className="min-w-0 text-[13px] text-[hsl(var(--ink-muted))] space-y-2">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Gauge size={13} className="shrink-0" />
+                <span className="truncate">{formatKM(auction.mileage_km)}</span>
+              </div>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <MapPin size={13} className="shrink-0" />
+                <span className="truncate">{translateEnum(auction.city, "city", lang)}{auction.country ? `, ${auction.country}` : ""}</span>
+              </div>
             </div>
           )}
         </div>
