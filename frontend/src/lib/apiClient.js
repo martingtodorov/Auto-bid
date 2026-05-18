@@ -75,9 +75,27 @@ export function formatLocal(value, lng) {
   return formatBGN(value);
 }
 
-export function formatKM(value) {
+/**
+ * Format an odometer reading as a localized number with a unit suffix.
+ *
+ * The `lang` parameter is optional — when omitted (e.g. legacy callers
+ * that haven't been migrated), we fall back to Bulgarian formatting +
+ * Cyrillic "км". Pass the active i18n language to get the right unit:
+ *   - bg → "км"
+ *   - en → "km"
+ *   - ro → "km"
+ *
+ * The thousands separator follows the user's locale (BG uses a non-breaking
+ * space, EN uses a comma, RO uses a dot) which is what `Intl.NumberFormat`
+ * produces natively. Returns an em-dash for null/undefined values.
+ */
+export function formatKM(value, lang) {
   if (value == null) return "—";
-  return new Intl.NumberFormat("bg-BG").format(value) + " км";
+  const code = (lang || "bg").toLowerCase().slice(0, 2);
+  // Intl locale tags — note `ro-RO` uses dots as thousands separators.
+  const locale = code === "en" ? "en-GB" : code === "ro" ? "ro-RO" : "bg-BG";
+  const unit = code === "bg" ? "км" : "km";
+  return new Intl.NumberFormat(locale).format(value) + " " + unit;
 }
 
 /**

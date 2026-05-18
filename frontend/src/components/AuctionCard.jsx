@@ -333,7 +333,7 @@ export default function AuctionCard({ auction, compact = false, priority = false
               </div>
               <div className="flex items-center gap-1.5">
                 <Gauge size={12} className="shrink-0" />
-                <span>{formatKM(auction.mileage_km)}</span>
+                <span>{formatKM(auction.mileage_km, lang)}</span>
               </div>
             </div>
           )}

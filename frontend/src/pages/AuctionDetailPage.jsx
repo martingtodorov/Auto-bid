@@ -574,7 +574,7 @@ export default function AuctionDetailPage() {
   const lng = i18n.language;
   const specs = [
     { i: Calendar, l: t("spec.year", "Година"), v: a.year },
-    { i: Gauge, l: t("spec.mileage", "Пробег"), v: formatKM(a.mileage_km) },
+    { i: Gauge, l: t("spec.mileage", "Пробег"), v: formatKM(a.mileage_km, lng) },
     { i: Fuel, l: t("auction.fuel_label"), v: translateEnum(a.fuel, "fuel", lng) },
     { i: Settings, l: t("auction.transmission_label"), v: translateEnum(a.transmission, "transmission", lng) },
     { i: Cog, l: t("spec.engine", "Двигател"), v: `${a.engine_cc} cm³` },
@@ -749,7 +749,7 @@ export default function AuctionDetailPage() {
             <div className="overline text-[hsl(var(--accent))]">{a.make} · {translateEnum(a.body_type, "body_type", lng)}</div>
             <h1 ref={titleRef} className="hidden lg:block font-serif text-3xl lg:text-5xl mt-3 tracking-tight leading-tight">{a.title}</h1>
             <div className="mt-3 text-sm text-[hsl(var(--ink-muted))] flex items-center gap-4 flex-wrap">
-              <span>{a.year} · {formatKM(a.mileage_km)} · {translateEnum(a.fuel, "fuel", lng)} · {translateEnum(a.city, "city", lng)}{a.country ? `, ${a.country}` : ""}</span>
+              <span>{a.year} · {formatKM(a.mileage_km, lng)} · {translateEnum(a.fuel, "fuel", lng)} · {translateEnum(a.city, "city", lng)}{a.country ? `, ${a.country}` : ""}</span>
             </div>
 
             {/*
