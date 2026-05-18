@@ -285,7 +285,7 @@ export default function AuctionCard({ auction, compact = false, priority = false
               col 3 — location + reserve pill stacked
             All three columns share the same top baseline (`items-start`)
             and sit on a thin top rule for separation. */}
-        <div className="mt-4 rule-t pt-4 grid grid-cols-[1fr_auto_auto] items-start">
+        <div className="mt-3 grid grid-cols-[1fr_auto_auto] items-start">
           {/* Col 1 — price (extra right padding = bigger gap to col 2) */}
           <div className="min-w-0 pr-8">
             <div className="overline text-[hsl(var(--ink-muted))]">
