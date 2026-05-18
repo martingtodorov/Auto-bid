@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { MapPin, Gauge, Fuel, Calendar, Check, Zap, Star, ArrowRight } from "lucide-react";
+import { MapPin, Gauge, Calendar, Check, Zap, Star, ArrowRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { formatEUR, formatLocal, formatKM, timeLeft, formatTimeLeft } from "../lib/apiClient";
 import { translateEnum } from "../lib/carTranslations";
@@ -273,36 +273,21 @@ export default function AuctionCard({ auction, compact = false, priority = false
       </div>
 
       <div className="p-5">
-        {/* Title row — reserve pill floats to the right so the 3-column
-            detail grid below stays balanced (no 4th column for the badge). */}
-        <div className="flex items-start justify-between gap-3">
-          <h3 className="font-serif text-xl leading-tight tracking-tight group-hover:text-[hsl(var(--accent))] transition-colors min-w-0">
-            {auction.title}
-          </h3>
-          {!isSold && (
-            <div className="shrink-0">
-              {auction.has_reserve ? (
-                <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[hsl(var(--ink))] bg-[hsl(var(--surface))] px-2.5 py-1 rounded-full border border-[hsl(var(--line))]" data-testid={`with-reserve-${auction.id}`}>
-                  ● {t("auction.with_reserve")}
-                </span>
-              ) : (
-                <span className="no-reserve-gradient inline-flex items-center gap-1.5 text-[12px] font-semibold px-2.5 py-1 rounded-full" data-testid={`no-reserve-${auction.id}`}>
-                  ● {t("auction.no_reserve_badge")}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
+        <h3 className="font-serif text-xl leading-tight tracking-tight group-hover:text-[hsl(var(--accent))] transition-colors">
+          {auction.title}
+        </h3>
 
-        {/* 3-column detail grid:
+        {/* 3-column detail grid (no `gap` — each column carries its own
+            right padding so we can tune horizontal spacing independently:
+            wider gap between price and specs, tighter gap before location).
               col 1 — current/sold price block (+ buy-now pill)
-              col 2 — year over fuel type
-              col 3 — mileage over location
-            All three columns share the same baseline (`items-start`) and
-            sit on top of a thin top rule for visual separation. */}
-        <div className="mt-4 rule-t pt-4 grid grid-cols-3 gap-3 items-start">
-          {/* Col 1 — price */}
-          <div className="min-w-0">
+              col 2 — year over mileage
+              col 3 — location + reserve pill stacked
+            All three columns share the same top baseline (`items-start`)
+            and sit on a thin top rule for separation. */}
+        <div className="mt-4 rule-t pt-4 grid grid-cols-[1fr_auto_auto] items-start">
+          {/* Col 1 — price (extra right padding = bigger gap to col 2) */}
+          <div className="min-w-0 pr-8">
             <div className="overline text-[hsl(var(--ink-muted))]">
               {isSold ? t("auction.sold_for") : t("auction.current_bid_label")}
             </div>
@@ -337,31 +322,40 @@ export default function AuctionCard({ auction, compact = false, priority = false
             )}
           </div>
 
-          {/* Col 2 — year + fuel */}
+          {/* Col 2 — year + mileage (small right padding = tight gap to col 3) */}
           {!compact && (
-            <div className="min-w-0 text-[13px] text-[hsl(var(--ink-muted))] space-y-2">
-              <div className="flex items-center gap-1.5 min-w-0">
+            <div className="min-w-0 pr-3 text-[13px] text-[hsl(var(--ink-muted))] space-y-2 whitespace-nowrap">
+              <div className="flex items-center gap-1.5">
                 <Calendar size={13} className="shrink-0" />
-                <span className="truncate">{auction.year}</span>
+                <span>{auction.year}</span>
               </div>
-              <div className="flex items-center gap-1.5 min-w-0">
-                <Fuel size={13} className="shrink-0" />
-                <span className="truncate">{translateEnum(auction.fuel, "fuel", lang)}</span>
+              <div className="flex items-center gap-1.5">
+                <Gauge size={13} className="shrink-0" />
+                <span>{formatKM(auction.mileage_km)}</span>
               </div>
             </div>
           )}
 
-          {/* Col 3 — mileage + location */}
+          {/* Col 3 — location + reserve pill */}
           {!compact && (
-            <div className="min-w-0 text-[13px] text-[hsl(var(--ink-muted))] space-y-2">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <Gauge size={13} className="shrink-0" />
-                <span className="truncate">{formatKM(auction.mileage_km)}</span>
-              </div>
-              <div className="flex items-center gap-1.5 min-w-0">
+            <div className="min-w-0 text-[13px] text-[hsl(var(--ink-muted))] space-y-2 text-right">
+              <div className="flex items-center gap-1.5 justify-end max-w-[160px] ml-auto">
                 <MapPin size={13} className="shrink-0" />
                 <span className="truncate">{translateEnum(auction.city, "city", lang)}{auction.country ? `, ${auction.country}` : ""}</span>
               </div>
+              {!isSold && (
+                <div className="flex justify-end">
+                  {auction.has_reserve ? (
+                    <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[hsl(var(--ink))] bg-[hsl(var(--surface))] px-2.5 py-1 rounded-full border border-[hsl(var(--line))]" data-testid={`with-reserve-${auction.id}`}>
+                      ● {t("auction.with_reserve")}
+                    </span>
+                  ) : (
+                    <span className="no-reserve-gradient inline-flex items-center gap-1.5 text-[12px] font-semibold px-2.5 py-1 rounded-full" data-testid={`no-reserve-${auction.id}`}>
+                      ● {t("auction.no_reserve_badge")}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

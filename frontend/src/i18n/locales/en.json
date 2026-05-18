@@ -168,7 +168,7 @@
     "views": "views",
     "not_found": "Auction not found",
     "sold_for": "Sold for",
-    "current_bid_label": "Current bid",
+    "current_bid_label": "Bid",
     "your_bid_eur": "Your bid (EUR)",
     "reserve_not_met": "Reserve price not met",
     "reserve_met_long": "Reserve price met",
