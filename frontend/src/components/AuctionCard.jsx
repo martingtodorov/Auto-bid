@@ -273,15 +273,22 @@ export default function AuctionCard({ auction, compact = false, priority = false
       </div>
 
       <div className="p-5">
-        <div className="flex items-baseline justify-between gap-3">
-          <h3 className="font-serif text-xl leading-tight tracking-tight group-hover:text-[hsl(var(--accent))] transition-colors">
-            {auction.title}
-          </h3>
-        </div>
+        <h3 className="font-serif text-xl leading-tight tracking-tight group-hover:text-[hsl(var(--accent))] transition-colors">
+          {auction.title}
+        </h3>
 
-        <div className="mt-4 rule-t pt-4 flex items-start justify-between gap-4">
-          {/* Left — price block + buy-now pill + reserve badge */}
-          <div className="min-w-0 flex-1">
+        {!compact && (
+          <div className="mt-3 grid grid-cols-2 gap-y-1.5 gap-x-4 text-[13px] text-[hsl(var(--ink-muted))]">
+            <span className="flex items-center gap-1.5 min-w-0"><Calendar size={13} className="shrink-0" />{auction.year}</span>
+            <span className="flex items-center gap-1.5 min-w-0"><Gauge size={13} className="shrink-0" />{formatKM(auction.mileage_km)}</span>
+            <span className="flex items-center gap-1.5 min-w-0"><Fuel size={13} className="shrink-0" />{translateEnum(auction.fuel, "fuel", lang)}</span>
+            <span className="flex items-center gap-1.5 min-w-0"><MapPin size={13} className="shrink-0" /><span className="truncate">{translateEnum(auction.city, "city", lang)}{auction.country ? `, ${auction.country}` : ""}</span></span>
+          </div>
+        )}
+
+        <div className="mt-4 rule-t pt-4 flex items-start justify-between gap-3">
+          {/* Price block — left aligned (current bid / sold price + buy-now pill) */}
+          <div className="min-w-0">
             <div className="overline text-[hsl(var(--ink-muted))]">
               {isSold ? t("auction.sold_for") : t("auction.current_bid_label")}
             </div>
@@ -314,38 +321,20 @@ export default function AuctionCard({ auction, compact = false, priority = false
                 )}</span>
               </div>
             )}
-            {!isSold && (
-              <div className="mt-2.5">
-                {auction.has_reserve ? (
-                  <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[hsl(var(--ink))] bg-[hsl(var(--surface))] px-3 py-1.5 rounded-full border border-[hsl(var(--line))]" data-testid={`with-reserve-${auction.id}`}>
-                    ● {t("auction.with_reserve")}
-                  </span>
-                ) : (
-                  <span className="no-reserve-gradient inline-flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded-full" data-testid={`no-reserve-${auction.id}`}>
-                    ● {t("auction.no_reserve_badge")}
-                  </span>
-                )}
-              </div>
-            )}
           </div>
 
-          {/* Right — vertical stack of car specs (year, mileage, fuel, location).
-              Right-aligned text mirrors the price block on the left for a balanced
-              "stat-card" look. Hidden in compact mode (used on sold sections etc.). */}
-          {!compact && (
-            <div className="shrink-0 text-right text-[12px] text-[hsl(var(--ink-muted))] space-y-1.5">
-              <div className="inline-flex items-center gap-1.5 justify-end whitespace-nowrap">
-                {auction.year}<Calendar size={12} />
-              </div>
-              <div className="inline-flex items-center gap-1.5 justify-end whitespace-nowrap">
-                {formatKM(auction.mileage_km)}<Gauge size={12} />
-              </div>
-              <div className="inline-flex items-center gap-1.5 justify-end whitespace-nowrap">
-                {translateEnum(auction.fuel, "fuel", lang)}<Fuel size={12} />
-              </div>
-              <div className="inline-flex items-center gap-1.5 justify-end whitespace-nowrap max-w-[140px] overflow-hidden text-ellipsis">
-                <span className="truncate">{translateEnum(auction.city, "city", lang)}{auction.country ? `, ${auction.country}` : ""}</span><MapPin size={12} />
-              </div>
+          {/* Reserve badge — right aligned, vertically centred against the price */}
+          {!isSold && (
+            <div className="shrink-0 self-center">
+              {auction.has_reserve ? (
+                <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[hsl(var(--ink))] bg-[hsl(var(--surface))] px-3 py-1.5 rounded-full border border-[hsl(var(--line))]" data-testid={`with-reserve-${auction.id}`}>
+                  ● {t("auction.with_reserve")}
+                </span>
+              ) : (
+                <span className="no-reserve-gradient inline-flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded-full" data-testid={`no-reserve-${auction.id}`}>
+                  ● {t("auction.no_reserve_badge")}
+                </span>
+              )}
             </div>
           )}
         </div>
