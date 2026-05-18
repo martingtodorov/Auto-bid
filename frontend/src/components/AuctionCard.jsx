@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Zap, Star, ArrowRight } from "lucide-react";
+import { Check, Zap, Star, ArrowRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { formatEUR, formatLocal, formatKM, timeLeft, formatTimeLeft } from "../lib/apiClient";
 import { translateEnum } from "../lib/carTranslations";
@@ -312,22 +312,39 @@ export default function AuctionCard({ auction, compact = false, priority = false
               ? formatLocal(Math.round(Number(auction.current_bid_eur || 0) * (1 + Number(auction.vat_rate_pct) / 100)), lang)
               : formatLocal(auction.current_bid_eur, lang)}
           </span>
-          {!isSold && (
-            auction.has_reserve ? (
-              <span
-                className="ml-auto shrink-0 with-reserve-pill inline-flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded-full whitespace-nowrap"
-                data-testid={`with-reserve-${auction.id}`}
-              >
-                ● {t("auction.with_reserve")}
-              </span>
-            ) : (
-              <span
-                className="ml-auto shrink-0 no-reserve-gradient inline-flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded-full whitespace-nowrap"
-                data-testid={`no-reserve-${auction.id}`}
-              >
-                ● {t("auction.no_reserve_badge")}
-              </span>
-            )
+          {/* Right-aligned stack: verified-dealer badge above the reserve pill.
+              Both are squeezed into a column container so they share the
+              right edge of the price row regardless of how long the EUR/BGN
+              text becomes. `ml-auto` does the right-floating. */}
+          {(!isSold || auction.seller_is_verified_dealer) && (
+            <div className="ml-auto shrink-0 flex flex-col items-end gap-1">
+              {auction.seller_is_verified_dealer && (
+                <span
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-[hsl(var(--accent))] bg-[hsl(var(--accent-soft))] border border-[hsl(var(--accent))]/30 px-2 py-0.5 rounded-full whitespace-nowrap"
+                  data-testid={`verified-dealer-${auction.id}`}
+                  title={t("auction.dealer_badge")}
+                >
+                  <Check size={11} strokeWidth={3} /> {t("auction.dealer_badge")}
+                </span>
+              )}
+              {!isSold && (
+                auction.has_reserve ? (
+                  <span
+                    className="with-reserve-pill inline-flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded-full whitespace-nowrap"
+                    data-testid={`with-reserve-${auction.id}`}
+                  >
+                    ● {t("auction.with_reserve")}
+                  </span>
+                ) : (
+                  <span
+                    className="no-reserve-gradient inline-flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded-full whitespace-nowrap"
+                    data-testid={`no-reserve-${auction.id}`}
+                  >
+                    ● {t("auction.no_reserve_badge")}
+                  </span>
+                )
+              )}
+            </div>
           )}
         </div>
 
