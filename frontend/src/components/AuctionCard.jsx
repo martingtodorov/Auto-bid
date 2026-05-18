@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { MapPin, Gauge, Fuel, Calendar, Users, Check, Zap, Star, ArrowRight } from "lucide-react";
+import { MapPin, Gauge, Fuel, Calendar, Check, Zap, Star, ArrowRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { formatEUR, formatLocal, formatKM, timeLeft, formatTimeLeft } from "../lib/apiClient";
 import { translateEnum } from "../lib/carTranslations";
@@ -324,10 +324,8 @@ export default function AuctionCard({ auction, compact = false, priority = false
             )}
           </div>
           <div className="text-right">
-            <div className="overline text-[hsl(var(--ink-muted))]">{t("auction.bids_history_title")}</div>
-            <div className="flex items-center gap-1.5 mt-1 text-sm font-mono justify-end"><Users size={13} />{auction.bid_count || 0}</div>
             {!isSold && (
-              <div className="mt-2.5">
+              <div>
                 {auction.has_reserve ? (
                   <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[hsl(var(--ink))] bg-[hsl(var(--surface))] px-3 py-1.5 rounded-full border border-[hsl(var(--line))]" data-testid={`with-reserve-${auction.id}`}>
                     ● {t("auction.with_reserve")}
