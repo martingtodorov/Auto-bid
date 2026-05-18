@@ -197,6 +197,7 @@
     "vat_inclusive_badge": "VAT incl. {{rate}}%",
     "vat_exempt_badge": "VAT exempt",
     "vat_short": "VAT",
+    "with_vat": "With VAT",
     "view_full_auction": "View full auction",
     "without_vat": "ex. VAT",
     "incl_vat": "incl. VAT",

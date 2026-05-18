@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X, ShieldCheck, CreditCard, Wallet } from "lucide-react";
-import { api, formatEUR } from "../lib/apiClient";
+import { api, formatEUR, formatLocal } from "../lib/apiClient";
 import { formatError } from "../lib/auth";
 import { useSiteSettings, computeBuyerFee } from "../lib/settings";
 
@@ -20,7 +20,7 @@ import { useSiteSettings, computeBuyerFee } from "../lib/settings";
  *   onIssued(authId) — optional, fired when offsession path succeeds
  */
 export default function TopUpCreditModal({ suggestedAmount = 10000, onClose, onIssued }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const settings = useSiteSettings();
   const [amount, setAmount] = useState(Math.max(1000, Number(suggestedAmount) || 10000));
   const [err, setErr] = useState("");
@@ -112,20 +112,28 @@ export default function TopUpCreditModal({ suggestedAmount = 10000, onClose, onI
           </div>
 
           <div className="rounded-card border border-[hsl(var(--accent))]/30 bg-[hsl(var(--accent-soft))] p-4 space-y-1.5">
-            <div className="flex items-center gap-2 text-sm">
+            <div className="flex items-center gap-2 text-sm flex-wrap">
               <ShieldCheck size={14} className="text-[hsl(var(--accent))] shrink-0" />
               <span className="font-semibold">
                 {t("topup.charge", "Stripe ще блокира {{fee}} ({{pct}}% от лимита)",
                   { fee: formatEUR(fee), pct })}
+              </span>
+              <span className="text-xs text-[hsl(var(--ink-muted))] font-mono">
+                {formatLocal(fee, i18n.language)}
               </span>
             </div>
             <p className="text-xs text-[hsl(var(--ink-muted))] pl-6">
               {t("topup.charge_hint",
                 "Само платформена комисионна се авторизира. Самата стойност на търга се урежда директно с продавача след спечелване.")}
             </p>
-            <p className="text-[11px] text-[hsl(var(--ink-muted))] pl-6">
-              {t("topup.bounds", "Минимум {{min}} · максимум {{max}}",
-                { min: formatEUR(feeMin), max: formatEUR(feeMax) })}
+            <p className="text-[11px] text-[hsl(var(--ink-muted))] pl-6 flex items-baseline gap-2 flex-wrap">
+              <span>
+                {t("topup.bounds", "Минимум {{min}} · максимум {{max}}",
+                  { min: formatEUR(feeMin), max: formatEUR(feeMax) })}
+              </span>
+              <span className="font-mono">
+                ({formatLocal(feeMin, i18n.language)} · {formatLocal(feeMax, i18n.language)})
+              </span>
             </p>
           </div>
 

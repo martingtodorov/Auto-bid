@@ -197,6 +197,7 @@
     "vat_inclusive_badge": "С ДДС {{rate}}%",
     "vat_exempt_badge": "Освободена от ДДС",
     "vat_short": "ДДС",
+    "with_vat": "С ДДС",
     "view_full_auction": "Виж пълния търг",
     "without_vat": "без ДДС",
     "incl_vat": "вкл. ДДС",

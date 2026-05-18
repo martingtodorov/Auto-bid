@@ -1255,7 +1255,12 @@ export default function AuctionDetailPage() {
                     <div className="mt-4 p-3 rounded-card bg-[hsl(var(--accent-soft))] border border-[hsl(var(--accent))]/20 flex items-start gap-2">
                       <Shield size={14} className="text-[hsl(var(--accent))] shrink-0 mt-0.5" />
                       <div className="text-xs leading-relaxed">
-                        <div className="font-semibold text-[hsl(var(--accent-ink))]">{t("auction.buyer_fee_label")} {formatEUR(preauthPreview)}</div>
+                        <div className="font-semibold text-[hsl(var(--accent-ink))] flex items-baseline gap-2 flex-wrap">
+                          <span>{t("auction.buyer_fee_label")} {formatEUR(preauthPreview)}</span>
+                          <span className="text-xs text-[hsl(var(--ink-muted))] font-mono font-normal">
+                            {formatLocal(preauthPreview, i18n.language)}
+                          </span>
+                        </div>
                         <div className="text-[hsl(var(--ink-muted))] mt-0.5">{t("auction.buyer_fee_detail", { pct: settings.buyer_fee_pct, min: settings.buyer_fee_min_eur, max: settings.buyer_fee_max_eur })}</div>
                       </div>
                     </div>

@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, Zap, Star, ArrowRight } from "lucide-react";
+import { Zap, Star, ArrowRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { formatEUR, formatLocal, formatKM, timeLeft, formatTimeLeft } from "../lib/apiClient";
+import { formatEUR, formatKM, timeLeft, formatTimeLeft } from "../lib/apiClient";
 import { translateEnum } from "../lib/carTranslations";
 import { auctionUrl } from "../lib/auctionUrl";
 import { countryCode } from "../lib/countryCode";
@@ -262,7 +262,7 @@ export default function AuctionCard({ auction, compact = false, priority = false
               data-testid={`vat-badge-${auction.id}`}
               title={`VAT ${auction.vat_rate_pct || 20}%`}
             >
-              {t("auction.vat_short", "ДДС")}
+              {t("auction.with_vat", "С ДДС")}
             </span>
           )}
           {/* Reserve pill — sits inside the image overlay next to the
@@ -315,58 +315,33 @@ export default function AuctionCard({ auction, compact = false, priority = false
           {isSold ? t("auction.sold_for") : t("auction.current_bid_label")}
         </div>
 
-        {/* Line 4 — EUR price + BGN equivalent + reserve pill, ALL on the
-            same row. Eyebrow above sits tight (mt-0.5 below). The pill
-            floats right via `ml-auto`. */}
+        {/* Line 4 — EUR price (left) + Buy-now CTA (right, inline).
+            The "вкл. ДДС" inline label has been retired in favour of the
+            "С ДДС" pill that lives in the image overlay so the price
+            number stays clean. Reserve / dealer pills are also overlay-
+            mounted now, so this row carries exactly two pieces of data:
+            the dominant figure and the optional buy-now shortcut. */}
         <div className="mt-0.5 flex items-baseline gap-2 flex-wrap whitespace-nowrap">
           <span className="font-serif text-xl" data-testid={`auction-price-${auction.id}`}>
             {auction.vat_status === "vat_inclusive" && Number(auction.vat_rate_pct) > 0
               ? formatEUR(Math.round(Number(auction.current_bid_eur || 0) * (1 + Number(auction.vat_rate_pct) / 100)))
               : formatEUR(auction.current_bid_eur)}
           </span>
-          {auction.vat_status === "vat_inclusive" && (
-            <span className="text-[10px] uppercase tracking-wider text-[hsl(var(--ink-muted))] font-sans font-semibold">
-              {t("auction.incl_vat", "вкл. ДДС")}
-            </span>
-          )}
-          <span className="text-xs text-[hsl(var(--ink-muted))] font-mono">
-            {auction.vat_status === "vat_inclusive" && Number(auction.vat_rate_pct) > 0
-              ? formatLocal(Math.round(Number(auction.current_bid_eur || 0) * (1 + Number(auction.vat_rate_pct) / 100)), lang)
-              : formatLocal(auction.current_bid_eur, lang)}
-          </span>
-          {/* Right-aligned dealer badge (when applicable). Reserve pill
-              now lives in the image overlay next to the time-left pill,
-              so the body row only carries the dealer chip — keeps the
-              price row breathing and lets the dealer "claim of trust"
-              sit next to the bid figure where it matters most. */}
-          {auction.seller_is_verified_dealer && (
-            <span
-              className="ml-auto shrink-0 inline-flex items-center gap-1.5 text-[13px] font-semibold text-[hsl(var(--accent))] bg-[hsl(var(--accent-soft))] border border-[hsl(var(--accent))]/30 px-3 py-1.5 rounded-full whitespace-nowrap"
-              data-testid={`verified-dealer-${auction.id}`}
-              title={t("auction.dealer_badge")}
+          {!isSold && auction.buy_now_eur && Number(auction.buy_now_eur) > Number(auction.current_bid_eur || 0) && (
+            <div
+              className="ml-auto shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[hsl(var(--accent-soft))] border border-[hsl(var(--accent))]/30 text-[12px] font-semibold text-[hsl(var(--accent-ink))]"
+              data-testid={`buy-now-${auction.id}`}
+              title={t("auction.buy_now_title", "Купи сега")}
             >
-              <Check size={13} strokeWidth={3} /> {t("auction.dealer_badge")}
-            </span>
+              <Zap size={12} />
+              <span>{t("auction.buy_now_short", "Купи сега")}: {formatEUR(
+                auction.vat_status === "vat_inclusive" && Number(auction.vat_rate_pct) > 0
+                  ? Math.round(Number(auction.buy_now_eur) * (1 + Number(auction.vat_rate_pct) / 100))
+                  : auction.buy_now_eur
+              )}</span>
+            </div>
           )}
         </div>
-
-        {/* Optional buy-now hint — kept because it's a real CTA, not a
-            redundant status label. Hidden when the listing is sold or
-            buy_now ≤ current bid (already triggered or never set). */}
-        {!isSold && auction.buy_now_eur && Number(auction.buy_now_eur) > Number(auction.current_bid_eur || 0) && (
-          <div
-            className="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[hsl(var(--accent-soft))] border border-[hsl(var(--accent))]/30 text-[11px] font-semibold text-[hsl(var(--accent-ink))]"
-            data-testid={`buy-now-${auction.id}`}
-            title={t("auction.buy_now_title", "Купи сега")}
-          >
-            <Zap size={11} />
-            <span>{t("auction.buy_now_short", "Купи сега")}: {formatEUR(
-              auction.vat_status === "vat_inclusive" && Number(auction.vat_rate_pct) > 0
-                ? Math.round(Number(auction.buy_now_eur) * (1 + Number(auction.vat_rate_pct) / 100))
-                : auction.buy_now_eur
-            )}</span>
-          </div>
-        )}
       </div>
     </Link>
   );

@@ -197,6 +197,7 @@
     "vat_inclusive_badge": "Cu TVA {{rate}}%",
     "vat_exempt_badge": "Scutit de TVA",
     "vat_short": "TVA",
+    "with_vat": "Cu TVA",
     "view_full_auction": "Vezi licitația completă",
     "without_vat": "fără TVA",
     "incl_vat": "incl. TVA",
