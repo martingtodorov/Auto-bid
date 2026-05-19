@@ -100,7 +100,7 @@ def _shell(title: str, body_html: str, to: str = "", lang: str = "bg") -> str:
         '<html><head><meta charset="utf-8">'
         "<style>"
         "body{margin:0;padding:0;background:#f6f7f8;"
-        "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Manrope,Inter,Roboto,sans-serif;"
+        "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,sans-serif;"
         "color:#111827;-webkit-font-smoothing:antialiased;}"
         "p{margin:0 0 14px 0;line-height:1.55;font-size:15px;}"
         "p:last-child{margin-bottom:0;}"
