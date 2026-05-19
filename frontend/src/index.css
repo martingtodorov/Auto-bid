@@ -286,7 +286,12 @@ body {
 
 /* Display headings — same system stack, tighter letter-spacing for hero-style use */
 .font-serif { font-family: system-ui, sans-serif; font-weight: 600; letter-spacing: -0.022em; }
-.font-mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+.font-mono { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; }
+
+/* IBM Plex Mono is reserved for the VIN display only — its strong
+   monospaced silhouette makes the 17-character code instantly readable
+   at a glance, and matches how VINs are shown on inspection paperwork. */
+.font-vin { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
 
 /* Reserved for the Auto&Bid wordmark — Manrope Bold gives the logo a
    slightly tighter, more product-feeling silhouette than the system

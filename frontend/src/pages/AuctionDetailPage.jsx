@@ -988,7 +988,7 @@ export default function AuctionDetailPage() {
                       <Shield size={12} /> {t("auction.vin_number")}
                     </div>
                     <div className="flex items-center gap-3 mt-1 flex-wrap">
-                      <div className="font-mono text-lg tracking-wider" data-testid="vin-value">{a.vin}</div>
+                      <div className="font-vin text-lg tracking-wider" data-testid="vin-value">{a.vin}</div>
                       {/* CarVertical affiliate check — placeholder URL
                           until the affiliate code is provided. Swap the
                           `AFFILIATE_CODE` segment once we have it; the
