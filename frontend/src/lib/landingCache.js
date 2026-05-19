@@ -44,7 +44,7 @@ export function landingCacheIsFresh(entry) {
  */
 export async function fetchLandingData() {
   const [l, f, s, h] = await Promise.all([
-    api.get("/auctions", { params: { sort: "ending_soon", status: "live", limit: 6, view: "list" } }),
+    api.get("/auctions", { params: { sort: "ending_soon", status: "live", limit: 9, view: "list" } }),
     api.get("/auctions/featured", { params: { view: "list" } }),
     api.get("/auctions/sold", { params: { view: "list" } }),
     api.get("/auctions/hero"),
