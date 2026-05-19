@@ -89,14 +89,11 @@
 
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <!-- Preload the two critical font weights used above the fold
-             (Inter 400 body + 700 display). Lighthouse was flagging
-             "Avoid chaining critical requests" and "font swap shift" —
-             preloading shortcuts the CSS→font dependency chain and
-             halves the visible swap window. Font file URLs are pinned
-             by Google Fonts' revisioned filenames; update them if we
-             ever change the `family` query. -->
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" />
+        <!-- Only IBM Plex Mono is loaded from Google Fonts. The primary UI
+             font uses the system stack (`system-ui` → SF Pro / Segoe UI /
+             Roboto / Cantarell) so we avoid the network roundtrip + FOUT
+             swap entirely. -->
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" />
         <script>window.addEventListener("error",function(e){if(e.error instanceof DOMException&&e.error.name==="DataCloneError"&&e.message&&e.message.includes("PerformanceServerTiming")){e.stopImmediatePropagation();e.preventDefault()}},true);</script>
     </head>
     <body>

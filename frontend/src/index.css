@@ -1,4 +1,4 @@
-/* Inter + IBM Plex Mono are loaded via <link> in public/index.html
+/* IBM Plex Mono is the only webfont. Primary UI uses system-ui (SF Pro / Segoe UI / Roboto). */
    so they render before this stylesheet finishes parsing (faster paint). */
 
 @tailwind base;
@@ -277,15 +277,15 @@ html, body, #root { background: hsl(var(--bg)); color: hsl(var(--ink)); }
 
 body {
     margin: 0;
-    font-family: 'Inter', system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     font-feature-settings: "ss01", "cv11";
     letter-spacing: -0.005em;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
 
-/* Kept class names, but Inter now — tighter headlines */
-.font-serif { font-family: 'Inter', system-ui, sans-serif; font-weight: 600; letter-spacing: -0.022em; }
+/* Display headings — same system stack, tighter letter-spacing for hero-style use */
+.font-serif { font-family: system-ui, sans-serif; font-weight: 600; letter-spacing: -0.022em; }
 .font-mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
 
 code { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
@@ -302,7 +302,7 @@ code { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
 }
 
 .hero-headline {
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: system-ui, sans-serif;
     font-weight: 700;
     letter-spacing: -0.035em;
     line-height: 1.02;
