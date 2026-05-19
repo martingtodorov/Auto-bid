@@ -1,5 +1,5 @@
-/* IBM Plex Mono is the only webfont. Primary UI uses system-ui (SF Pro / Segoe UI / Roboto). */
-   so they render before this stylesheet finishes parsing (faster paint). */
+/* IBM Plex Mono is the only webfont. Primary UI uses system-ui (SF Pro /
+   Segoe UI / Roboto). The Auto&Bid logo uses Manrope Bold. */
 
 @tailwind base;
 @tailwind components;
@@ -287,6 +287,11 @@ body {
 /* Display headings — same system stack, tighter letter-spacing for hero-style use */
 .font-serif { font-family: system-ui, sans-serif; font-weight: 600; letter-spacing: -0.022em; }
 .font-mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+
+/* Reserved for the Auto&Bid wordmark — Manrope Bold gives the logo a
+   slightly tighter, more product-feeling silhouette than the system
+   font's defaults. Only used inside the Nav brand component. */
+.font-logo { font-family: 'Manrope', system-ui, sans-serif; font-weight: 700; letter-spacing: -0.02em; }
 
 code { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
 

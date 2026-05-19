@@ -131,7 +131,7 @@ export default function Nav() {
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10">
         <div className="flex items-center justify-between h-16 gap-6">
           <Link to="/" className="-m-3 p-3 flex items-center gap-2 shrink-0 mr-2 md:mr-6" data-testid="brand-logo">
-            <span className="font-serif text-[26px] sm:text-2xl tracking-tight leading-none">Auto<span className="text-[hsl(var(--accent))]">&amp;</span>Bid<span className="text-[hsl(var(--accent))]">{brandTld}</span></span>
+            <span className="font-logo text-[26px] sm:text-2xl tracking-tight leading-none">Auto<span className="text-[hsl(var(--accent))]">&amp;</span>Bid<span className="text-[hsl(var(--accent))]">{brandTld}</span></span>
           </Link>
 
           <nav className="hidden md:flex items-center gap-5 lg:gap-7 shrink-0">

@@ -89,11 +89,10 @@
 
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <!-- Only IBM Plex Mono is loaded from Google Fonts. The primary UI
-             font uses the system stack (`system-ui` → SF Pro / Segoe UI /
-             Roboto / Cantarell) so we avoid the network roundtrip + FOUT
-             swap entirely. -->
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" />
+        <!-- IBM Plex Mono for tabular numerics (`.font-mono`) and Manrope
+             Bold for the Auto&Bid wordmark (`.font-logo`). Everything else
+             uses the OS's `system-ui` stack, no network roundtrip required. -->
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@700;800&display=swap" />
         <script>window.addEventListener("error",function(e){if(e.error instanceof DOMException&&e.error.name==="DataCloneError"&&e.message&&e.message.includes("PerformanceServerTiming")){e.stopImmediatePropagation();e.preventDefault()}},true);</script>
     </head>
     <body>
