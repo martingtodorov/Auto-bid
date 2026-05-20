@@ -260,6 +260,24 @@ html[data-theme="dark"] .btn-buy-now:hover {
     box-shadow: none !important;
 }
 
+/* `.btn-sell-gradient` keeps the light-mode look in dark mode — same
+   deep-green fill + white text. We hard-code the light-theme accent HSL
+   here (158 55% 26%) because in dark mode the `--accent` variable
+   resolves to a much brighter mint, which the design direction
+   explicitly rejects for this CTA. */
+html[data-theme="dark"] .btn-sell-gradient {
+    background: hsl(158 55% 26%) !important;
+    color: #fff !important;
+    border-color: hsl(158 55% 26%) !important;
+    box-shadow: 0 6px 20px -6px hsl(158 55% 26% / 0.55) !important;
+}
+html[data-theme="dark"] .btn-sell-gradient:hover {
+    background: hsl(158 55% 18%) !important;
+    color: #fff !important;
+    border-color: hsl(158 55% 18%) !important;
+    box-shadow: 0 12px 32px -8px hsl(158 55% 26% / 0.65) !important;
+}
+
 /* Kill all accent-coloured "glow" halos in dark mode — on pure black
  * they read as fuzzy green smudges around buttons and inputs. */
 html[data-theme="dark"] .btn,
