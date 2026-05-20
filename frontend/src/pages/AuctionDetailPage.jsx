@@ -1221,7 +1221,7 @@ export default function AuctionDetailPage() {
                 </div>
 
                 {isLive && (
-                  <div className="mt-6 rule-t pt-5">
+                  <div className="mt-4">
                     <label className="overline text-[hsl(var(--ink-muted))] block mb-2">
                       {vatRate > 0
                         ? t("auction.your_bid_eur_gross", "Вашето наддаване (EUR, вкл. ДДС {{rate}}%)", { rate: vatRate })
