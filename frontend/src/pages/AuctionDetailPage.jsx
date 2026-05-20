@@ -1247,11 +1247,6 @@ export default function AuctionDetailPage() {
                         <span className="font-mono text-sm text-[hsl(var(--ink))]">{formatEUR(Math.round(Number(bidAmount) / (1 + vatRate / 100)))}</span>
                       </div>
                     )}
-                    <p className="text-xs text-[hsl(var(--ink-muted))] mt-2">{t("auction.min_next_bid", {
-                      min: (vatRate > 0 ? Math.ceil(Number(nextBid.min_next_eur || 0) * (1 + vatRate / 100)) : Number(nextBid.min_next_eur || 0)).toLocaleString(intlLocale(i18n.language)),
-                      step: (vatRate > 0 ? Math.round(Number(nextBid.step_eur || 0) * (1 + vatRate / 100)) : Number(nextBid.step_eur || 0)).toLocaleString(intlLocale(i18n.language)),
-                    })}</p>
-
                     <div className="mt-4 p-3 rounded-card bg-[hsl(var(--accent-soft))] border border-[hsl(var(--accent))]/20 flex items-start gap-2">
                       <Shield size={14} className="text-[hsl(var(--accent))] shrink-0 mt-0.5" />
                       <div className="text-xs leading-relaxed">
