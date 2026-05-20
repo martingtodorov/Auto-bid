@@ -343,7 +343,7 @@ code { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
 
 .hero-headline {
     font-family: system-ui, sans-serif;
-    font-weight: 700;
+    font-weight: 600;
     letter-spacing: -0.035em;
     line-height: 1.02;
 }
@@ -354,7 +354,7 @@ code { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
        the page-wide direction is "no gradients anywhere", so the headline
        accent is now a flat colour that matches the green button system. */
     color: hsl(var(--accent));
-    font-weight: 800;
+    font-weight: 600;
     letter-spacing: -0.03em;
 }
 
