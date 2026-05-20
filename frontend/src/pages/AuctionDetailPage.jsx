@@ -1395,10 +1395,9 @@ export default function AuctionDetailPage() {
                     <button
                       onClick={onBuyNow}
                       disabled={!user || buyingNow}
-                      className="mt-3 w-full btn btn-primary !bg-[hsl(var(--accent))] !text-white !border-transparent hover:!bg-[hsl(var(--accent))]/85 disabled:opacity-50 flex items-center justify-center gap-2"
+                      className="mt-3 w-full btn btn-buy-now disabled:opacity-50 flex items-center justify-center"
                       data-testid="buy-now-btn"
                     >
-                      <Zap size={14} />
                       {buyingNow ? t("auction.buy_now_processing", "Обработваме…") : !user ? t("auction.login_to_buy", "Влез, за да купиш") : t("auction.buy_now_action", "Купи сега за {{price}}", { price: formatEUR(vatRate > 0 ? grossOf(a.buy_now_eur) : a.buy_now_eur) })}
                     </button>
                   </div>

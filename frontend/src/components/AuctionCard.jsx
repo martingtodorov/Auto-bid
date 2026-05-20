@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Zap, Star, ArrowRight } from "lucide-react";
+import { Star, ArrowRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { formatEUR, formatKM, timeLeft, formatTimeLeft } from "../lib/apiClient";
 import { translateEnum } from "../lib/carTranslations";
@@ -318,18 +318,17 @@ export default function AuctionCard({ auction, compact = false, priority = false
               : formatEUR(auction.current_bid_eur)}
           </span>
           {!isSold && auction.buy_now_eur && Number(auction.buy_now_eur) > Number(auction.current_bid_eur || 0) && (
-            <div
-              className="ml-auto shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[hsl(var(--accent-soft))] border border-[hsl(var(--accent))]/30 text-[12px] font-semibold text-[hsl(var(--accent-ink))]"
+            <span
+              className="ml-auto shrink-0 inline-flex items-center text-[12px] font-semibold text-[hsl(var(--accent-ink))]"
               data-testid={`buy-now-${auction.id}`}
               title={t("auction.buy_now_title", "Купи сега")}
             >
-              <Zap size={12} />
-              <span>{t("auction.buy_now_short", "Купи сега")}: {formatEUR(
+              {t("auction.buy_now_short", "Купи сега")}: {formatEUR(
                 auction.vat_status === "vat_inclusive" && Number(auction.vat_rate_pct) > 0
                   ? Math.round(Number(auction.buy_now_eur) * (1 + Number(auction.vat_rate_pct) / 100))
                   : auction.buy_now_eur
-              )}</span>
-            </div>
+              )}
+            </span>
           )}
         </div>
       </div>

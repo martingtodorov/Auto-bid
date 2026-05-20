@@ -251,8 +251,12 @@ html[data-theme="dark"] .btn,
 html[data-theme="dark"] .btn:hover,
 html[data-theme="dark"] .btn-accent,
 html[data-theme="dark"] .btn-accent:hover,
+html[data-theme="dark"] .btn-green,
+html[data-theme="dark"] .btn-green:hover,
 html[data-theme="dark"] .btn-sell-gradient,
 html[data-theme="dark"] .btn-sell-gradient:hover,
+html[data-theme="dark"] .btn-buy-now,
+html[data-theme="dark"] .btn-buy-now:hover,
 html[data-theme="dark"] input:focus,
 html[data-theme="dark"] textarea:focus,
 html[data-theme="dark"] select:focus,
@@ -319,13 +323,13 @@ code { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
 }
 .hero-headline em {
     font-style: normal;
-    background: linear-gradient(135deg, hsl(var(--accent)) 0%, hsl(var(--accent-ink)) 50%, hsl(156 72% 22%) 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    /* Solid accent green — no gradient. We previously used a 3-stop linear
+       gradient + drop-shadow halo here, but per design audit (2026-05-18)
+       the page-wide direction is "no gradients anywhere", so the headline
+       accent is now a flat colour that matches the green button system. */
+    color: hsl(var(--accent));
     font-weight: 800;
     letter-spacing: -0.03em;
-    filter: drop-shadow(0 4px 16px hsl(var(--accent) / 0.35));
 }
 
 /* Buttons */
@@ -367,42 +371,49 @@ code { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
     border-color: hsl(var(--ink));
 }
 
+/* `.btn-accent` is intentionally re-declared further down as part of the
+   shared green-button family so the bid button, sell-your-car button and
+   buy-now button all render identically. Keep this stub for reference. */
+
+/* ── Green action buttons (Sell your car / Place bid / Buy now / etc.) ──
+   Single solid-colour system shared across the site so all "go" actions
+   look identical. Hover state lifts the button by 1px, brightens the
+   green slightly and applies the shared brand shadow. No gradients —
+   per design audit (2026-05-18) the page-wide direction is flat fills.
+   `.btn-sell-gradient` and `.btn-buy-now` are intentional aliases so we
+   don't have to touch every consumer; both resolve to `.btn-green`. */
+.btn-green,
+.btn-sell-gradient,
+.btn-buy-now,
 .btn-accent {
     background: hsl(var(--accent));
     color: white;
     border-color: hsl(var(--accent));
+    box-shadow: 0 6px 20px -6px hsl(var(--accent) / 0.45);
 }
+.btn-green:hover,
+.btn-sell-gradient:hover,
+.btn-buy-now:hover,
 .btn-accent:hover {
     background: hsl(var(--accent-ink));
     border-color: hsl(var(--accent-ink));
-    box-shadow: 0 10px 30px -10px hsl(var(--accent) / 0.55);
-}
-
-.btn-sell-gradient {
-    background: linear-gradient(135deg, hsl(158 60% 22%) 0%, hsl(158 65% 16%) 50%, hsl(156 72% 14%) 100%);
     color: white;
-    border-color: transparent;
-    box-shadow: 0 6px 20px -6px hsl(var(--accent) / 0.5);
-}
-.btn-sell-gradient:hover {
-    background: linear-gradient(135deg, hsl(158 65% 26%) 0%, hsl(158 60% 20%) 100%);
-    box-shadow: 0 12px 32px -8px hsl(var(--accent) / 0.7);
+    box-shadow: 0 12px 32px -8px hsl(var(--accent) / 0.65);
     transform: translateY(-1px);
 }
 
-/* No-reserve badge — same green gradient as the "Sell your car" button.
+/* No-reserve badge — solid green, matches the brand button colour exactly.
    Used across AuctionCard, AuctionDetailPage and MyListingsPage. */
 .no-reserve-gradient {
-    background: linear-gradient(135deg, hsl(158 60% 22%) 0%, hsl(158 65% 16%) 50%, hsl(156 72% 14%) 100%) !important;
+    background: hsl(var(--accent)) !important;
     color: white !important;
-    border-color: transparent !important;
-    box-shadow: 0 4px 12px -4px hsl(var(--accent) / 0.45);
-}
-/* Dark theme: the same gradient lives against pure-black surfaces, so we
-   brighten it slightly and drop the glow halo. */
-html[data-theme="dark"] .no-reserve-gradient {
-    background: linear-gradient(135deg, hsl(158 60% 32%) 0%, hsl(158 60% 24%) 100%) !important;
+    border-color: hsl(var(--accent)) !important;
     box-shadow: none !important;
+}
+html[data-theme="dark"] .no-reserve-gradient {
+    background: hsl(var(--accent)) !important;
+    color: #000 !important;
+    border-color: hsl(var(--accent)) !important;
 }
 
 /* With-reserve badge — mirrors `.btn-primary` exactly so its colour scheme
@@ -532,14 +543,14 @@ html[data-theme="dark"] .pill-ending {
     background: hsl(var(--surface));
 }
 .pill-verified {
-    border-color: hsl(var(--accent) / 0.4);
+    border-color: hsl(var(--accent));
     color: white;
-    background: linear-gradient(135deg, hsl(var(--accent)) 0%, hsl(var(--accent-ink)) 100%);
+    background: hsl(var(--accent));
     font-weight: 600;
 }
 html[data-theme="dark"] .pill-verified {
     color: #000;
-    background: linear-gradient(135deg, hsl(var(--accent)) 0%, hsl(var(--accent-ink)) 100%);
+    background: hsl(var(--accent));
 }
 
 /* "ДДС / VAT" badge — sits next to the time-left pill on cards/detail
