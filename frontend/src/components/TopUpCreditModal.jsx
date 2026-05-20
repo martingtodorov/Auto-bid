@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { X, ShieldCheck, CreditCard, Wallet } from "lucide-react";
+import { X, ShieldCheck, Wallet } from "lucide-react";
 import { api, formatEUR, formatLocal } from "../lib/apiClient";
 import { formatError } from "../lib/auth";
 import { useSiteSettings, computeBuyerFee } from "../lib/settings";
@@ -157,10 +157,9 @@ export default function TopUpCreditModal({ suggestedAmount = 10000, onClose, onI
               type="button"
               onClick={submit}
               disabled={busy}
-              className="btn btn-accent flex-1 inline-flex items-center justify-center gap-1.5"
+              className="btn btn-accent flex-1 inline-flex items-center justify-center"
               data-testid="topup-submit"
             >
-              <CreditCard size={14} />
               {busy
                 ? t("topup.processing", "Обработва…")
                 : t("topup.cta", "Зареди през Stripe")}
