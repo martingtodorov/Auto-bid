@@ -1187,9 +1187,9 @@ export default function AuctionDetailPage() {
                   <span className="overline text-[hsl(var(--ink-muted))] ml-auto">{a.bid_count || 0} {t("auction.bids_word")}</span>
                 </div>
 
-                <div className="mt-6">
+                <div className="mt-3">
                   <div className="overline text-[hsl(var(--ink-muted))]">{a.status === "sold" ? t("auction.sold_for") : t("auction.current_bid_label")}</div>
-                  <div className="font-serif text-5xl mt-2 flex items-baseline gap-2 flex-wrap" data-testid="current-bid">
+                  <div className="font-serif text-5xl mt-1 flex items-baseline gap-2 flex-wrap" data-testid="current-bid">
                     {formatEUR(vatRate > 0 ? currentBidGross : a.current_bid_eur)}
                     {vatRate > 0 && (
                       <span className="text-[11px] uppercase tracking-wider text-[hsl(var(--ink-muted))] font-sans font-semibold">
