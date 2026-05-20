@@ -2887,6 +2887,13 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
     credit_id_val = None
 
     # ACID-correct placement (locks bid_state, validates, inserts, updates)
+    # Capture client metadata for the forensic audit trail. We honour the
+    # standard reverse-proxy chain (`X-Forwarded-For`) and fall back to
+    # `request.client.host` for direct hits. UA is truncated at 512 chars
+    # inside the service layer to fit the column.
+    _xff = request.headers.get("x-forwarded-for", "")
+    client_ip = (_xff.split(",")[0].strip() if _xff else (request.client.host if request.client else None))
+    client_ua = request.headers.get("user-agent", "")[:512] or None
     try:
         result = await bidding_svc.place_bid(
             auction_id=auction_id,
@@ -2903,6 +2910,8 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
             fallback_ends_at=datetime.fromisoformat(a["ends_at"]),
             bid_step_fn=_bid_step,
             extension_minutes=2,
+            ip_address=client_ip,
+            user_agent=client_ua,
         )
     except ValueError as ve:
         # min_bid:<value>
@@ -3772,10 +3781,25 @@ async def stripe_webhook(request: Request):
 
     # Minimal HMAC verification (Stripe-compatible v1 signature)
     # header format: t=TIMESTAMP,v1=SIGNATURE,v0=...
+    # Per Stripe security guide, we reject events older than the tolerance
+    # window (default 5 min) to make replay attacks against captured webhook
+    # bodies materially harder — even if an attacker re-broadcasts a valid
+    # signed envelope, the server clock check rejects it.
+    WEBHOOK_TOLERANCE_SEC = 300
     try:
-        import hmac, hashlib
+        import hmac, hashlib, time as _time
         parts = dict(p.split("=", 1) for p in sig_header.split(",") if "=" in p)
         t = parts.get("t", ""); v1 = parts.get("v1", "")
+        # Timestamp tolerance check — protects against replay of old envelopes.
+        try:
+            ts_int = int(t)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Invalid signature timestamp")
+        now_s = int(_time.time())
+        skew = abs(now_s - ts_int)
+        if skew > WEBHOOK_TOLERANCE_SEC:
+            logger.warning("[stripe_webhook] timestamp outside tolerance (skew=%ds)", skew)
+            raise HTTPException(status_code=400, detail="Webhook timestamp outside tolerance")
         signed_payload = f"{t}.{body.decode('utf-8')}".encode("utf-8")
         expected = hmac.new(cfg["webhook_secret"].encode("utf-8"), signed_payload, hashlib.sha256).hexdigest()
         if not hmac.compare_digest(expected, v1):
@@ -3786,17 +3810,29 @@ async def stripe_webhook(request: Request):
         logger.error("[stripe_webhook] sig verify failed: %s", e)
         raise HTTPException(status_code=400, detail="Invalid signature format")
 
-    # Persist event for audit / replay
+    # Persist event for audit / replay — guarded by a unique index on `id`
+    # so duplicate events (Stripe retries, replay attempts within tolerance)
+    # collapse to a single row instead of producing N side-effects.
     try:
         import json as _json
+        from pymongo.errors import DuplicateKeyError
         payload = _json.loads(body.decode("utf-8"))
-        await db.stripe_events.insert_one({
-            "id": payload.get("id"),
-            "type": payload.get("type"),
-            "mode": cfg.get("mode"),
-            "received_at": datetime.now(timezone.utc).isoformat(),
-            "data": payload.get("data", {}),
-        })
+        event_id = payload.get("id")
+        try:
+            await db.stripe_events.insert_one({
+                "id": event_id,
+                "type": payload.get("type"),
+                "mode": cfg.get("mode"),
+                "received_at": datetime.now(timezone.utc).isoformat(),
+                "data": payload.get("data", {}),
+            })
+        except DuplicateKeyError:
+            # Idempotency win — same Stripe event delivered twice. Acknowledge
+            # 200 so Stripe stops retrying, but skip side-effect processing.
+            logger.info("[stripe_webhook] duplicate event %s ignored", event_id)
+            return {"ok": True, "duplicate": True}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("[stripe_webhook] persist failed: %s", e)
     return {"ok": True, "received": True}

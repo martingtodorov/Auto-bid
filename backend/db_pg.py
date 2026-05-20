@@ -65,9 +65,31 @@ async def init_pg_schema() -> None:
     """Create all bidding tables if they don't exist (idempotent)."""
     # Import here so the models are registered on Base.metadata before create_all
     from models_pg import Bid, BidState  # noqa: F401
+    from sqlalchemy import text as _sql_text
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # ── Lightweight in-place migrations ──────────────────────────────
+        # `create_all` only adds MISSING tables — it never alters existing
+        # ones. For new nullable columns we can safely add them via raw
+        # `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`. PostgreSQL 9.6+
+        # supports the IF NOT EXISTS guard, so this is idempotent across
+        # both fresh DBs and existing deployments without an Alembic chain.
+        #
+        # Every migration here MUST:
+        #   • Be idempotent (`IF NOT EXISTS`).
+        #   • Use only nullable columns OR provide a server-side default.
+        #   • Not require backfill — we treat NULL as "unknown" rather than
+        #     re-stamping historical rows with fake values.
+        _MIGRATIONS = (
+            "ALTER TABLE bids ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45)",
+            "ALTER TABLE bids ADD COLUMN IF NOT EXISTS user_agent VARCHAR(512)",
+        )
+        for stmt in _MIGRATIONS:
+            try:
+                await conn.execute(_sql_text(stmt))
+            except Exception as e:  # noqa: BLE001
+                logger.warning("PG migration skipped (%s): %s", stmt[:60], e)
     logger.info("PostgreSQL bidding schema ready")
 
 

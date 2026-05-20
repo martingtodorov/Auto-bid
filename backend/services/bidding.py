@@ -174,6 +174,10 @@ async def place_bid(
     fallback_ends_at: datetime,
     bid_step_fn,
     extension_minutes: int = 2,
+    # Forensic audit fields (best-effort — None if request context wasn't
+    # captured at the call site). Stored verbatim and never edited.
+    ip_address: Optional[str] = None,
+    user_agent: Optional[str] = None,
 ) -> dict:
     """ACID-safe bid placement.
 
@@ -233,6 +237,8 @@ async def place_bid(
             card_last4=card_last4,
             credit_id=credit_id,
             triggered_extension=triggered_extension,
+            ip_address=ip_address,
+            user_agent=user_agent[:512] if user_agent else None,
         )
         s.add(bid_row)
         await s.flush()

@@ -47,6 +47,14 @@ class Bid(Base):
     triggered_extension: Mapped[bool] = mapped_column(Boolean, default=False)
     is_winning: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # ── Forensic audit (added 2026-05-18 per security review) ────────────
+    # Stored at bid-time, never editable from the app. Used by support /
+    # fraud investigations when a bidder claims they "didn't place" a bid,
+    # or when collusive bidding patterns need to be cross-referenced
+    # against shared NAT egress IPs. Nullable for backfill compatibility.
+    ip_address: Mapped[Optional[str]] = mapped_column(String(45))  # IPv6 max
+    user_agent: Mapped[Optional[str]] = mapped_column(String(512))
+
     __table_args__ = (
         Index("ix_bids_auction_amount", "auction_id", "amount_eur"),
         Index("ix_bids_auction_user", "auction_id", "user_id"),
