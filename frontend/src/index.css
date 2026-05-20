@@ -508,7 +508,6 @@ textarea.input { resize: vertical; min-height: 80px; }
  */
 @media (hover: hover) and (pointer: fine) {
     .card-editorial:hover {
-        transform: translateY(-4px);
         border-color: hsl(var(--ink) / 0.2);
         box-shadow: 0 20px 40px -20px hsl(var(--ink) / 0.15);
     }
