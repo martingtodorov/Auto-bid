@@ -248,7 +248,7 @@ export default function AuctionCard({ auction, compact = false, priority = false
           )}
           {auction.featured && !isSold && (
             <span
-              className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[hsl(var(--accent))] text-white shadow-sm"
+              className="inline-flex items-center justify-center h-[26px] w-[26px] rounded-full bg-[hsl(var(--accent))] text-white border border-[hsl(var(--accent))] shadow-sm"
               data-testid={`featured-badge-${auction.id}`}
               title={t("auction.featured_badge")}
               aria-label={t("auction.featured_badge")}
