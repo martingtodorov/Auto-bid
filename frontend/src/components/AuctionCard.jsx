@@ -265,27 +265,17 @@ export default function AuctionCard({ auction, compact = false, priority = false
               {t("auction.with_vat", "С ДДС")}
             </span>
           )}
-          {/* Reserve pill — sits inside the image overlay next to the
-              time-left pill, NOT in the card body. We use the same
-              two-tone styling as the body badges (`.with-reserve-pill`
-              for black/green and `.no-reserve-gradient` for the sell
-              gradient) so the look is consistent across both placements. */}
-          {!isSold && (
-            auction.has_reserve ? (
-              <span
-                className="with-reserve-pill inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap"
-                data-testid={`with-reserve-${auction.id}`}
-              >
-                ● {t("auction.with_reserve")}
-              </span>
-            ) : (
-              <span
-                className="no-reserve-gradient inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap"
-                data-testid={`no-reserve-${auction.id}`}
-              >
-                ● {t("auction.no_reserve_badge")}
-              </span>
-            )
+          {/* Reserve pill — ONLY shown on no-reserve auctions (those are
+              the buyer-friendly listings worth flagging). Reserve-enabled
+              auctions get no pill at all, since "has reserve" is the
+              implicit default and doesn't need a badge. */}
+          {!isSold && !auction.has_reserve && (
+            <span
+              className="no-reserve-gradient inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap"
+              data-testid={`no-reserve-${auction.id}`}
+            >
+              ● {t("auction.no_reserve_badge")}
+            </span>
           )}
         </div>
       </div>
