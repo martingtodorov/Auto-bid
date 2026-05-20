@@ -232,13 +232,18 @@ html[data-theme="dark"] .btn-secondary:hover {
 
 /* Primary buttons in dark mode — switch to bright accent so they pop
  * against pure black surfaces. ALL green action buttons (.btn-primary,
- * .btn-accent, .btn-green, .btn-sell-gradient, .btn-buy-now) collapse to
- * the same green-on-black look here so the visual language is consistent
- * across Sign up / Place bid / Buy now / Submit for review / Sell-your-car. */
+ * .btn-accent, .btn-green, .btn-buy-now) collapse to the same
+ * green-on-black look here so the visual language is consistent across
+ * Sign up / Place bid / Buy now / Submit for review.
+ *
+ * `.btn-sell-gradient` is intentionally NOT in this list — per design
+ * direction (2026-05-20) the Sell-your-car / "View all auctions" mobile
+ * CTA must look identical to light mode (white text, branded shadow) so
+ * it visually differentiates from the dominant browse CTA without any
+ * dark-mode tint shift. */
 html[data-theme="dark"] .btn-primary,
 html[data-theme="dark"] .btn-accent,
 html[data-theme="dark"] .btn-green,
-html[data-theme="dark"] .btn-sell-gradient,
 html[data-theme="dark"] .btn-buy-now {
     background: hsl(var(--accent)) !important;
     color: #000 !important;
@@ -248,27 +253,11 @@ html[data-theme="dark"] .btn-buy-now {
 html[data-theme="dark"] .btn-primary:hover,
 html[data-theme="dark"] .btn-accent:hover,
 html[data-theme="dark"] .btn-green:hover,
-html[data-theme="dark"] .btn-sell-gradient:hover,
 html[data-theme="dark"] .btn-buy-now:hover {
     background: hsl(var(--accent) / 0.85) !important;
     color: #000 !important;
     border-color: hsl(var(--accent) / 0.85) !important;
     box-shadow: none !important;
-}
-
-/* Dark mode brightness differentiation: when two green CTAs sit side-by-
-   side in the hero ("Виж търговете" + "Продай своя автомобил"), they
-   visually merge into one strip. `.btn-sell-gradient` keeps the same
-   colour family but drops one luminance step so the eye reads it as a
-   secondary green, not a duplicate of the primary. The browse CTA stays
-   on the brighter accent — it's the dominant call to action. */
-html[data-theme="dark"] .btn-sell-gradient {
-    background: hsl(var(--accent) / 0.55) !important;
-    border-color: hsl(var(--accent) / 0.55) !important;
-}
-html[data-theme="dark"] .btn-sell-gradient:hover {
-    background: hsl(var(--accent) / 0.75) !important;
-    border-color: hsl(var(--accent) / 0.75) !important;
 }
 
 /* Kill all accent-coloured "glow" halos in dark mode — on pure black
@@ -279,8 +268,6 @@ html[data-theme="dark"] .btn-accent,
 html[data-theme="dark"] .btn-accent:hover,
 html[data-theme="dark"] .btn-green,
 html[data-theme="dark"] .btn-green:hover,
-html[data-theme="dark"] .btn-sell-gradient,
-html[data-theme="dark"] .btn-sell-gradient:hover,
 html[data-theme="dark"] .btn-buy-now,
 html[data-theme="dark"] .btn-buy-now:hover,
 html[data-theme="dark"] input:focus,
