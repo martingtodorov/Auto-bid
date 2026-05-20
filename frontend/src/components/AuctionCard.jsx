@@ -319,7 +319,7 @@ export default function AuctionCard({ auction, compact = false, priority = false
           </span>
           {!isSold && auction.buy_now_eur && Number(auction.buy_now_eur) > Number(auction.current_bid_eur || 0) && (
             <span
-              className="ml-auto shrink-0 inline-flex items-center text-[12px] font-semibold text-[hsl(var(--accent-ink))]"
+              className="ml-auto shrink-0 inline-flex items-center text-[14px] font-semibold text-[hsl(var(--accent-ink))]"
               data-testid={`buy-now-${auction.id}`}
               title={t("auction.buy_now_title", "Купи сега")}
             >
