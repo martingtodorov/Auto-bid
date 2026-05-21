@@ -99,10 +99,10 @@
     "placeholder": "Search a car…"
   },
   "hero": {
-    "discover": "Discover",
-    "exceptional": "exceptional",
-    "cars": "cars.",
-    "subtitle": "A curated online auction platform. Every specimen — hand-picked, thoroughly documented and presented with expertise and trust.",
+    "discover": "Curated cars.",
+    "exceptional": "Transparent bidding.",
+    "cars": "",
+    "subtitle": "Browse curated cars with detailed documentation, quality photos and clear auction terms.",
     "browse": "Browse auctions",
     "sell_cta": "Sell your car",
     "featured_listing": "Featured listings",

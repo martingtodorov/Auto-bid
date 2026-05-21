@@ -126,7 +126,7 @@ export default function LandingPage() {
             <div className="lg:col-span-5 fade-up">
               {cmsHeadline ? (
                 <h1
-                  className="hero-headline text-5xl sm:text-6xl lg:text-[60px] lg:leading-[1.05] mt-0"
+                  className="hero-headline text-4xl sm:text-5xl lg:text-[52px] lg:leading-[1.05] mt-0"
                   data-testid="hero-headline-cms"
                   dangerouslySetInnerHTML={{
                     __html: DOMPurify.sanitize(cmsHeadline.replace(/\n/g, "<br />"), {
@@ -136,8 +136,8 @@ export default function LandingPage() {
                   }}
                 />
               ) : (
-                <h1 className="hero-headline text-5xl sm:text-6xl lg:text-[60px] lg:leading-[1.05] mt-0 text-balance" data-testid="hero-headline-i18n">
-                  {t("hero.discover")} <em>{t("hero.exceptional")}</em> {t("hero.cars")}
+                <h1 className="hero-headline text-4xl sm:text-5xl lg:text-[52px] lg:leading-[1.05] mt-0 text-balance" data-testid="hero-headline-i18n">
+                  {t("hero.discover")} <br className="hidden sm:block" /><em>{t("hero.exceptional")}</em>
                 </h1>
               )}
               <p className="mt-5 text-base lg:text-lg text-[hsl(var(--ink-muted))] leading-relaxed max-w-xl" data-testid="hero-subtitle">
