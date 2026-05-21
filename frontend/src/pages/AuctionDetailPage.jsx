@@ -664,19 +664,6 @@ export default function AuctionDetailPage() {
                     </span>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={toggleWatch}
-                  aria-label={watching ? t("auction.watchlist_remove") : t("auction.watchlist_add")}
-                  className={`shrink-0 h-10 w-10 rounded-full border flex items-center justify-center transition ${
-                    watching
-                      ? "border-[hsl(var(--accent))] text-[hsl(var(--accent))]"
-                      : "border-[hsl(var(--line))] text-[hsl(var(--ink-muted))]"
-                  }`}
-                  data-testid="sticky-watch-button"
-                >
-                  <Heart size={18} className={watching ? "fill-current" : ""} />
-                </button>
                 {isLive ? (
                   <button
                     type="button"
