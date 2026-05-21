@@ -176,8 +176,12 @@ export default function AuctionDetailPage() {
       // Prefill the bid input with the gross-equivalent of `minNext` when the
       // auction is sold INCL. VAT — the user is shown a gross value in the
       // input and we convert back to net only on submit (see `startBid`).
+      // Prefer the backend-computed gross min (which uses gross-bracket
+      // steps — clean €5125 from €5000, not a wonky €5061 from net+VAT).
       const rate = ra.data.vat_status === "vat_inclusive" ? Number(ra.data.vat_rate_pct || 0) : 0;
-      const minDisplay = rate > 0 ? Math.ceil(minNext * (1 + rate / 100)) : minNext;
+      const minDisplay = rate > 0
+        ? (rn.data?.min_next_eur_gross || Math.ceil(minNext * (1 + rate / 100)))
+        : minNext;
       setBidAmount(String(Math.floor(minDisplay)));
     } catch (e) {
       if (e?.response?.status === 404) setNotFound(true);
@@ -1230,8 +1234,8 @@ export default function AuctionDetailPage() {
                     <div className="flex gap-2">
                       <input
                         type="number"
-                        min={vatRate > 0 ? Math.ceil(Number(nextBid.min_next_eur || 0) * (1 + vatRate / 100)) : nextBid.min_next_eur}
-                        step={vatRate > 0 ? Math.max(1, Math.round(Number(nextBid.step_eur || 0) * (1 + vatRate / 100))) : nextBid.step_eur}
+                        min={vatRate > 0 ? (nextBid.min_next_eur_gross || Math.ceil(Number(nextBid.min_next_eur || 0) * (1 + vatRate / 100))) : nextBid.min_next_eur}
+                        step={vatRate > 0 ? Math.max(1, Number(nextBid.step_eur_gross || Math.round(Number(nextBid.step_eur || 0) * (1 + vatRate / 100)))) : nextBid.step_eur}
                         value={bidAmount}
                         onChange={(e) => setBidAmount(e.target.value)}
                         className="flex-1 border border-[hsl(var(--line))] h-12 px-3 text-base"

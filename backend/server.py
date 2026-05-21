@@ -316,6 +316,43 @@ def _gross_amount(net_eur: float, auction: dict) -> float:
         return float(net_eur or 0)
 
 
+def _next_step_info(auction: dict, current_net: float) -> dict:
+    """Compute min-next-bid and step in BOTH net and gross.
+
+    For VAT-inclusive auctions, the bracket lookup runs on the GROSS
+    (VAT-included) price so that buyers see clean BaT-style increments
+    like €5000 → €5125 instead of awkward gross numbers like
+    €5061 caused by applying VAT to a net-bracket step (€50 * 1.20).
+    The net amount stored in our DB then becomes whatever value
+    matches that clean gross — usually a small fractional cent that
+    rounds cleanly on display.
+    """
+    vat_inclusive = auction.get("vat_status") == "vat_inclusive"
+    rate = float(auction.get("vat_rate_pct") or 0) if vat_inclusive else 0.0
+    cur = float(current_net or 0)
+    if vat_inclusive and rate > 0:
+        mult = 1.0 + rate / 100.0
+        cur_gross = round(cur * mult, 2)
+        step_gross = _bid_step(cur_gross)
+        min_next_gross = round(cur_gross + step_gross, 2)
+        min_next_net = round(min_next_gross / mult, 2)
+        step_net = round(min_next_net - cur, 2)
+        return {
+            "step_net": step_net,
+            "min_next_net": min_next_net,
+            "step_gross": step_gross,
+            "min_next_gross": min_next_gross,
+        }
+    step_net = _bid_step(cur)
+    min_next_net = round(cur + step_net, 2)
+    return {
+        "step_net": step_net,
+        "min_next_net": min_next_net,
+        "step_gross": step_net,
+        "min_next_gross": min_next_net,
+    }
+
+
 def _buyer_fee_on_auction(amount_eur: float, auction: dict) -> float:
     """Buyer's premium charged on the gross (incl. VAT) price."""
     return _buyer_fee(_gross_amount(amount_eur, auction))
@@ -2892,6 +2929,23 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
     # `request.client.host` for direct hits. UA is truncated at 512 chars
     # inside the service layer to fit the column.
     _xff = request.headers.get("x-forwarded-for", "")
+    # VAT-aware step: when the auction is VAT-inclusive, the bracket
+    # lookup runs on the gross price so the buyer-visible min next bid
+    # stays a clean BaT increment. Capture the auction's VAT fields in
+    # a closure so the locked re-validation inside bidding_svc sees the
+    # same rule the client did.
+    _vat_inclusive = a.get("vat_status") == "vat_inclusive"
+    _vat_rate = float(a.get("vat_rate_pct") or 0) if _vat_inclusive else 0.0
+    def _vat_aware_step(current_net: float) -> float:
+        if _vat_inclusive and _vat_rate > 0:
+            mult = 1.0 + _vat_rate / 100.0
+            cur_gross = round(float(current_net) * mult, 2)
+            step_gross = _bid_step(cur_gross)
+            min_next_gross = round(cur_gross + step_gross, 2)
+            min_next_net = round(min_next_gross / mult, 2)
+            return round(min_next_net - float(current_net), 2)
+        return _bid_step(current_net)
+
     client_ip = (_xff.split(",")[0].strip() if _xff else (request.client.host if request.client else None))
     client_ua = request.headers.get("user-agent", "")[:512] or None
     try:
@@ -2908,7 +2962,7 @@ async def place_bid(request: Request, auction_id: str, payload: BidCreate, user:
             credit_id=credit_id_val,
             fallback_starting_bid_eur=float(a.get("current_bid_eur", 0)),
             fallback_ends_at=datetime.fromisoformat(a["ends_at"]),
-            bid_step_fn=_bid_step,
+            bid_step_fn=_vat_aware_step,
             extension_minutes=2,
             ip_address=client_ip,
             user_agent=client_ua,
@@ -3509,16 +3563,17 @@ async def next_bid_info(auction_id: str):
     if not a:
         raise HTTPException(status_code=404, detail="Търгът не е намерен")
     current = float(a.get("current_bid_eur", 0))
-    step = _bid_step(current)
-    min_next = current + step
+    info = _next_step_info(a, current)
+    min_next = info["min_next_net"]
     return {
         "current_bid_eur": current,
-        "step_eur": step,
+        "step_eur": info["step_net"],
         "min_next_eur": min_next,
         "buyer_fee_eur": _buyer_fee_on_auction(min_next, a),
         "vat_status": a.get("vat_status"),
         "vat_rate_pct": a.get("vat_rate_pct"),
-        "min_next_eur_gross": _gross_amount(min_next, a),
+        "min_next_eur_gross": info["min_next_gross"],
+        "step_eur_gross": info["step_gross"],
     }
 
 
