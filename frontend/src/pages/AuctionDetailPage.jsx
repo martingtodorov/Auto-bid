@@ -752,8 +752,21 @@ export default function AuctionDetailPage() {
           <div className="lg:col-span-8">
             <div className="overline text-[hsl(var(--accent))]">{a.make} · {translateEnum(a.body_type, "body_type", lng)}</div>
             <h1 ref={titleRef} className="hidden lg:block font-serif text-3xl lg:text-5xl mt-3 tracking-tight leading-tight">{a.title}</h1>
-            <div className="mt-3 text-sm text-[hsl(var(--ink-muted))] flex items-center gap-4 flex-wrap">
-              <span>{a.year} · {formatKM(a.mileage_km, lng)} · {translateEnum(a.fuel, "fuel", lng)} · {translateEnum(a.city, "city", lng)}{a.country ? `, ${a.country}` : ""}</span>
+            <div className="mt-3 text-sm text-[hsl(var(--ink-muted))] flex items-center justify-between gap-4">
+              <span className="flex-1 min-w-0">{a.year} · {formatKM(a.mileage_km, lng)} · {translateEnum(a.fuel, "fuel", lng)} · {translateEnum(a.city, "city", lng)}{a.country ? `, ${a.country}` : ""}</span>
+              <button
+                type="button"
+                onClick={toggleWatch}
+                aria-label={watching ? t("auction.watchlist_remove") : t("auction.watchlist_add")}
+                className={`lg:hidden shrink-0 h-9 w-9 rounded-full border flex items-center justify-center transition ${
+                  watching
+                    ? "border-[hsl(var(--accent))] text-[hsl(var(--accent))]"
+                    : "border-[hsl(var(--line))] text-[hsl(var(--ink-muted))]"
+                }`}
+                data-testid="meta-watch-button"
+              >
+                <Heart size={16} className={watching ? "fill-current" : ""} />
+              </button>
             </div>
 
             {/*
