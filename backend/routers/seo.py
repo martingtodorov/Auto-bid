@@ -464,16 +464,22 @@ async def sitemap_images_xml(request: Request):
 
 
 @router.get("/og/auction/{auction_id}.png")
+@router.get("/og/auction/{auction_id}.jpg")
 async def og_auction_image(auction_id: str, request: Request):
-    """Per-auction OG share PNG (1200×630).
+    """Per-auction OG share image (1200×630 JPEG).
 
     Returns the freshly-rendered social card directly. The image is
-    content-addressed cached in `<UPLOAD_DIR>/og/{id}_{hash}.png` so
+    content-addressed cached in `<UPLOAD_DIR>/og/{id}_{hash}.jpg` so
     subsequent crawls of the same auction hit a static file (Nginx
     serves it directly via the `/uploads/og/...` location). Crawlers
     that hit this endpoint instead of the static URL still get an
     immediate fresh render — we re-call `build_and_persist` to ensure
     the disk cache is warm for the next request.
+
+    The legacy `.png` URL still resolves (some FB/Twitter caches
+    persist URLs for months); we just return JPEG bytes under the
+    correct image/jpeg content-type — every social platform handles
+    "wrong extension, right content-type" fine.
     """
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     if not a:
@@ -490,10 +496,10 @@ async def og_auction_image(auction_id: str, request: Request):
             pass
         return Response(
             content=png,
-            media_type="image/png",
+            media_type="image/jpeg",
             headers={
                 "Cache-Control": "public, max-age=86400, immutable",
-                "Content-Disposition": f'inline; filename="{auction_id}.png"',
+                "Content-Disposition": f'inline; filename="{auction_id}.jpg"',
             },
         )
     except Exception as e:
