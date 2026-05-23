@@ -1958,8 +1958,7 @@ function CommentItem({ c, t, i18nLang, isAdmin, onDelete }) {
 }
 
 function ShareButton({ auction }) {
-  const { t, i18n } = useTranslation();
-  const brand = brandNameForLang(i18n.resolvedLanguage || i18n.language);
+  const { t } = useTranslation();
   const [copied, setCopied] = React.useState(false);
   // Use the canonical SEO-friendly slug URL — `/auctions/<slug>-<short-id>`.
   // Social crawlers hitting this path are routed by the backend
@@ -1969,7 +1968,15 @@ function ShareButton({ auction }) {
   const shareUrl = `${window.location.origin}${auctionUrl(auction)}`;
 
   const share = async () => {
-    const data = { title: auction?.title || brand, url: shareUrl };
+    // Pass ONLY the URL to navigator.share. The Web Share API forwards
+    // its `title`/`text` fields verbatim to the receiving app (WhatsApp,
+    // iMessage, Telegram) — when present, those apps display them
+    // INSTEAD of fetching the URL's Open Graph metadata. By omitting
+    // them entirely, every receiving app falls back to scraping the
+    // URL and shows our branded OG card + og:title + og:description,
+    // exactly the preview a non-Share-API share (e.g. copy-paste in
+    // WhatsApp) would produce.
+    const data = { url: shareUrl };
     if (navigator.share) {
       try {
         await navigator.share(data);
