@@ -765,6 +765,23 @@ async def share_auction(
     else:
         updated_time = datetime.now(timezone.utc).isoformat()
 
+    # Build og:url + canonical from the REQUEST host, not the hard-coded
+    # production canonical. Reason: when Facebook scrapes a preview /
+    # staging URL, our previous code returned production-host og:url —
+    # so FB would follow the implied redirect to the production host
+    # and re-scrape there, where (if the deployment hasn't landed yet)
+    # it picked up the OLD homepage canonical from the static SPA HTML.
+    # By mirroring the actual fetched host, FB sees one consistent URL
+    # and never follows itself off our SSR endpoint.
+    proto = request.headers.get("x-forwarded-proto", "https")
+    host = request.headers.get("host") or request.url.hostname or ""
+    if host:
+        req_origin = f"{proto}://{host}"
+        # Reconstruct an absolute URL pointing at the SPA detail page on
+        # whatever host actually served this scrape.
+        target_path = f"/auctions/{_auction_slug_url(a).lstrip('/').split('/', 1)[-1]}" if a else "/"
+        target = f"{req_origin}{target_path}"
+
     html = f"""<!DOCTYPE html>
 <html lang="{html_lang}">
 <head>
@@ -795,11 +812,11 @@ async def share_auction(
 <link rel="canonical" href="{_esc(target)}">
 {hreflang_html}
 {json_ld}
-<meta http-equiv="refresh" content="0; url={_esc(target)}">
 </head>
 <body>
-<script>window.location.replace({repr(target)});</script>
-<p>Redirecting to <a href="{_esc(target)}">{_esc(target)}</a>…</p>
+<h1>{_esc(title)}</h1>
+<p>{_esc(description)}</p>
+<p><a href="{_esc(target)}">{_esc(target)}</a></p>
 </body>
 </html>"""
     # Cache-control: tell social-platform scrapers to revalidate on
@@ -965,6 +982,15 @@ async def _build_listing_ssr(
     # every minute (FB rescrapes at most every 30 minutes anyway).
     listing_updated = datetime.now(timezone.utc).replace(second=0, microsecond=0).isoformat()
 
+    # Mirror the request host (same reasoning as the per-auction SSR —
+    # see comment there). When Facebook scrapes a preview / staging
+    # host, og:url + canonical must point at the SAME host so FB's
+    # canonical-follower never lands on a stale production deployment.
+    proto = request.headers.get("x-forwarded-proto", "https")
+    host = request.headers.get("host") or request.url.hostname or ""
+    if host:
+        target = f"{proto}://{host}{page_path}"
+
     html = f"""<!DOCTYPE html>
 <html lang="{resolved_lang}">
 <head>
@@ -994,13 +1020,11 @@ async def _build_listing_ssr(
 <link rel="canonical" href="{_esc(target)}">
 {hreflang_html}
 {json_ld_html}
-<meta http-equiv="refresh" content="0; url={_esc(target)}">
 </head>
 <body>
 <h1>{_esc(title)}</h1>
 <p>{_esc(description)}</p>
 <p><a href="{_esc(target)}">{_esc(target)}</a></p>
-<script>window.location.replace({json.dumps(target)});</script>
 </body>
 </html>"""
     return Response(
