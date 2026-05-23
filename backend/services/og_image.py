@@ -277,7 +277,7 @@ def _compose_image(
     bottom_y = _H - _PAD - 4
     if bid_label:
         muted_font = _font("Manrope-SemiBold.ttf", 28)
-        bid_font = _font("Manrope-Bold.ttf", 96)
+        bid_font = _font("Manrope-Bold.ttf", 76)
         sub_font = _font("Manrope-SemiBold.ttf", 22)
         # "CURRENT BID" small-caps label — draw word-by-word so the space
         # is visually correct (Manrope SemiBold collapses ASCII space too
