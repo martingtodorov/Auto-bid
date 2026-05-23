@@ -1,0 +1,135 @@
+---
+# Nginx-only deploy: pulls latest repo, copies `nginx/autoandbid.conf`
+# to /etc/nginx/sites-available, validates with `nginx -t`, gracefully
+# reloads nginx. NO frontend build, NO backend touch, NO restarts of
+# anything outside the nginx daemon — safe to run from an SSH session
+# because reload (not restart) preserves active connections.
+#
+# Why split this out of `deploy_frontend.yml`?
+# `deploy_frontend.yml` runs the full Node build + asset sync, which
+# takes 2–4 minutes. When you only need to roll out an nginx config
+# change (new bot-rewrite, new location block, TLS tweak), waiting
+# through a frontend rebuild is wasteful and pollutes the deploy log.
+# This playbook is the surgical tool.
+#
+# Usage:
+#   cd deploy/hetzner/ansible
+#   ansible-playbook -i inventory.ini playbooks/deploy_nginx.yml
+#
+# Dry-run before applying:
+#   ansible-playbook -i inventory.ini playbooks/deploy_nginx.yml --check --diff
+- hosts: frontend
+  become: yes
+  vars_prompt:
+    - name: ref
+      prompt: "Git ref to pull (e.g. main, v1.2.3) — leave empty for default"
+      default: ""
+      private: no
+  pre_tasks:
+    - name: Resolve deploy ref
+      ansible.builtin.set_fact:
+        deploy_ref: "{{ ref if ref else repo_branch }}"
+  tasks:
+    - name: Update repo
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ app_dir }}/repo"
+        version: "{{ deploy_ref }}"
+        force: yes
+        update: yes
+      become_user: deploy
+
+    # ─── nginx config refresh ────────────────────────────────────────────────
+    # Copy the repo's nginx/autoandbid.conf over the deployed file.
+    # `force: yes` guarantees the deployed config can never drift behind
+    # the repo, matching the behaviour of deploy_frontend.yml.
+    - name: Refresh nginx site config from repo
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../nginx/autoandbid.conf"
+        dest: /etc/nginx/sites-available/autoandbid
+        owner: root
+        group: root
+        mode: "0644"
+        force: yes
+        backup: yes
+      register: nginx_copy
+
+    # Belt-and-suspenders: confirm the file actually has the bot-rewrite
+    # lines that motivated this playbook. If a previous merge accidentally
+    # dropped them, we abort BEFORE reloading so the live nginx keeps
+    # serving the last known-good config.
+    - name: Audit deployed nginx config has social-bot rewrites
+      ansible.builtin.shell: |
+        set -eo pipefail
+        if ! grep -qE 'is_social_bot' /etc/nginx/sites-available/autoandbid; then
+          echo "FATAL: nginx config has no \$is_social_bot map — bot SSR will break"
+          tail -n 80 /etc/nginx/sites-available/autoandbid
+          exit 1
+        fi
+        if ! grep -qE 'location = /' /etc/nginx/sites-available/autoandbid; then
+          echo "FATAL: nginx config has no 'location = /' block — homepage bot rewrite missing"
+          exit 1
+        fi
+        echo "ok: bot-rewrite directives present"
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Ensure sites-enabled symlink exists
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/autoandbid
+        dest: /etc/nginx/sites-enabled/autoandbid
+        state: link
+        force: yes
+
+    - name: Remove default nginx site if present
+      ansible.builtin.file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+
+    - name: Validate nginx config
+      ansible.builtin.command: nginx -t
+      changed_when: false
+
+    - name: Reload nginx (graceful — preserves SSH + active HTTP connections)
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded
+
+    # ─── Post-reload sanity check ────────────────────────────────────────────
+    # Hit the local nginx as facebookexternalhit and verify it returns an
+    # SSR response (not the SPA HTML). Failure here means the rewrite
+    # rules in the new config don't fire as expected.
+    - name: Smoke test bot rewrite on /
+      ansible.builtin.shell: |
+        set -eo pipefail
+        body=$(curl -sk \
+          -H 'Host: autoandbid.bg' \
+          -H 'User-Agent: facebookexternalhit/1.1' \
+          "https://127.0.0.1/")
+        if ! echo "$body" | grep -q '<meta property="og:title"'; then
+          echo "FAIL: / bot UA did not get SSR meta"
+          echo "$body" | head -c 500
+          exit 1
+        fi
+        echo "ok: / serves SSR for facebookexternalhit"
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Smoke test bot rewrite on /auctions
+      ansible.builtin.shell: |
+        set -eo pipefail
+        body=$(curl -sk \
+          -H 'Host: autoandbid.bg' \
+          -H 'User-Agent: facebookexternalhit/1.1' \
+          "https://127.0.0.1/auctions")
+        if ! echo "$body" | grep -q '<meta property="og:title"'; then
+          echo "FAIL: /auctions bot UA did not get SSR meta"
+          echo "$body" | head -c 500
+          exit 1
+        fi
+        echo "ok: /auctions serves SSR for facebookexternalhit"
+      args:
+        executable: /bin/bash
+      changed_when: false
