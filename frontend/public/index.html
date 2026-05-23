@@ -62,16 +62,42 @@
             if (el) el.setAttribute("content", val);
           };
 
-          setLink("canonical", entry.origin + "/");
-          setMeta('meta[property="og:url"]', entry.origin + "/");
+          setLink("canonical", entry.origin + location.pathname + location.search);
+          setMeta('meta[property="og:url"]', entry.origin + location.pathname + location.search);
           setMeta('meta[property="og:locale"]', entry.locale);
-          // Point both og:image + twitter:image at the dynamic homepage
-          // card (`/api/og/home.jpg`). Only flip when we're on the literal
-          // home route — listing/detail pages set their own image via
-          // setPageMeta and we must not override those.
-          if (location.pathname === "/" || location.pathname === "") {
+
+          // ── Route-aware OG image + title ────────────────────────────────
+          // For non-bot crawlers (iOS share sheet preview, email link
+          // unfurl, Discord webhooks, etc.) we cannot rely on Nginx's
+          // UA-gated SSR — they hit the static SPA HTML directly. Patch
+          // the OG signals synchronously based on the URL so the share
+          // preview still resolves to the correct asset.
+          var path = location.pathname.replace(/\/+$/, "") || "/";
+          if (path === "" || path === "/") {
             setMeta('meta[property="og:image"]', entry.origin + "/api/og/home.jpg");
             setMeta('meta[name="twitter:image"]', entry.origin + "/api/og/home.jpg");
+          } else {
+            var m = path.match(/^\/auctions\/([^/]+)$/);
+            if (m) {
+              // `/auctions/<slug>` — point OG image at the per-auction
+              // generator (it resolves the slug suffix server-side).
+              var slug = m[1];
+              setMeta('meta[property="og:image"]', entry.origin + "/api/og/auction/" + slug + ".jpg");
+              setMeta('meta[name="twitter:image"]', entry.origin + "/api/og/auction/" + slug + ".jpg");
+              // Title: best-effort derive from the slug — strip the
+              // hex suffix and title-case the remaining words. React
+              // will replace this with the precise localised title as
+              // soon as it boots (so this only matters for crawlers
+              // that don't execute JS — they get a sensible fallback
+              // instead of the generic homepage title).
+              var bare = slug.replace(/-([a-f0-9]{6,12})$/i, "").replace(/-/g, " ").trim();
+              if (bare) {
+                var titled = bare.replace(/\b\w/g, function (c) { return c.toUpperCase(); }) + " — Auto&Bid";
+                document.title = titled;
+                setMeta('meta[property="og:title"]', titled);
+                setMeta('meta[name="twitter:title"]', titled);
+              }
+            }
           }
 
           // Re-emit the JSON-LD Organization / WebSite block with the

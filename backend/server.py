@@ -7264,7 +7264,9 @@ _SOCIAL_BOTS_RE = re.compile(
     r"(facebookexternalhit|facebot|twitterbot|slackbot|"
     r"whatsapp|telegrambot|linkedinbot|discordbot|"
     r"pinterestbot|skypeuripreview|redditbot|vkshare|"
-    r"applebot|googlebot-image)",
+    r"applebot|googlebot-image|googlebot|bingbot|"
+    r"yandex|baiduspider|mastodon|iframely|embedly|"
+    r"linkpreview|metaspider|preview|unfurl|fetch)",
     re.IGNORECASE,
 )
 _PUBLIC_AUCTION_PATH_RE = re.compile(r"^/auctions/([A-Za-z0-9_-]+)(?:/.*)?$")

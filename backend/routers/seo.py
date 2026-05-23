@@ -511,12 +511,29 @@ async def og_auction_image(auction_id: str, request: Request):
     immediate fresh render — we re-call `build_and_persist` to ensure
     the disk cache is warm for the next request.
 
-    The legacy `.png` URL still resolves (some FB/Twitter caches
-    persist URLs for months); we just return JPEG bytes under the
-    correct image/jpeg content-type — every social platform handles
-    "wrong extension, right content-type" fine.
+    Accepts EITHER:
+      • a full UUID (canonical internal identifier), or
+      • a SEO slug ending in a `-XXXXXXXX` hex suffix (6-12 chars).
+    The slug form lets the front-end inline script pass the user-
+    visible `/auctions/bmw-m240i-...-ff615975` URL straight through
+    without an extra resolution call.
     """
-    a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    # Resolve slug suffix → canonical UUID. Mirrors the lookup used by
+    # /api/share/auction/{slug} so the same URL works for both meta and
+    # image rendering.
+    import re as _re
+    _UUID = _re.compile(r"^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$", _re.IGNORECASE)
+    a = None
+    if _UUID.match(auction_id):
+        a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
+    else:
+        parts = auction_id.rsplit("-", 1)
+        if len(parts) == 2 and _re.fullmatch(r"[a-f0-9]{6,12}", parts[1], _re.IGNORECASE):
+            suffix = parts[1].lower()
+            a = await db.auctions.find_one(
+                {"id": {"$regex": f"^{_re.escape(suffix)}"}},
+                {"_id": 0},
+            )
     if not a:
         raise HTTPException(status_code=404, detail="Auction not found")
     try:
