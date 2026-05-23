@@ -465,27 +465,51 @@ async def sitemap_images_xml(request: Request):
 
 @router.get("/og/auction/{auction_id}.png")
 async def og_auction_image(auction_id: str, request: Request):
-    """Per-auction OG image — now redirects to the auction's headline
-    image. The custom Pillow template was removed because the rendered
-    PNG was inconsistent across social platforms (Facebook stale cache,
-    Telegram cropping the bid badge). The car's actual photo is the
-    most reliable share preview.
+    """Per-auction OG share PNG (1200×630).
 
-    The route is kept for backwards compatibility with any external
-    links / crawler caches that still reference the `.png` URL.
+    Returns the freshly-rendered social card directly. The image is
+    content-addressed cached in `<UPLOAD_DIR>/og/{id}_{hash}.png` so
+    subsequent crawls of the same auction hit a static file (Nginx
+    serves it directly via the `/uploads/og/...` location). Crawlers
+    that hit this endpoint instead of the static URL still get an
+    immediate fresh render — we re-call `build_and_persist` to ensure
+    the disk cache is warm for the next request.
     """
     a = await db.auctions.find_one({"id": auction_id}, {"_id": 0})
     if not a:
         raise HTTPException(status_code=404, detail="Auction not found")
-    headline = og_image.headline_image_url(a)
-    if not headline:
-        raise HTTPException(status_code=404, detail="Auction has no image")
-    if not headline.startswith("http"):
-        proto = request.headers.get("x-forwarded-proto", "https")
-        host = request.headers.get("host") or request.url.hostname or ""
-        if host:
-            headline = f"{proto}://{host}{headline}"
-    return RedirectResponse(url=headline, status_code=302)
+    try:
+        png = await og_image.build_or_cache(a)
+        # Fire-and-forget the persisted copy so static serving can take
+        # over on subsequent crawls. We don't await it on the hot path
+        # because the in-memory bytes are already ready to ship.
+        try:
+            import asyncio as _aio
+            _aio.create_task(og_image.build_and_persist(a))
+        except Exception:
+            pass
+        return Response(
+            content=png,
+            media_type="image/png",
+            headers={
+                "Cache-Control": "public, max-age=86400, immutable",
+                "Content-Disposition": f'inline; filename="{auction_id}.png"',
+            },
+        )
+    except Exception as e:
+        # Graceful fallback: if rendering blows up, redirect to the
+        # auction's headline photo so the share preview still resolves.
+        import logging
+        logging.getLogger(__name__).warning("og render failed for %s: %s", auction_id, e)
+        headline = og_image.headline_image_url(a)
+        if not headline:
+            raise HTTPException(status_code=500, detail="OG image render failed")
+        if not headline.startswith("http"):
+            proto = request.headers.get("x-forwarded-proto", "https")
+            host = request.headers.get("host") or request.url.hostname or ""
+            if host:
+                headline = f"{proto}://{host}{headline}"
+        return RedirectResponse(url=headline, status_code=302)
 
 
 @router.get("/share/auction/{auction_id}", response_class=PlainTextResponse)
@@ -612,7 +636,17 @@ async def share_auction(
             or (a.get(f"description_{resolved_lang}") or "")[:280]
             or (a.get("description") or "")[:280]
         )
-        cover = og_image.headline_image_url(a)
+        # OG image priority chain:
+        #   1. `og_image_url` — the pre-generated 1200×630 share PNG
+        #      written at publish-time / bid-time by `build_and_persist`.
+        #      This is the BRANDED card with title + current bid + logo.
+        #   2. Auction's headline photo — unbranded but always exists.
+        #   3. Static `/og-default.jpg` fallback.
+        og_branded = a.get("og_image_url") or ""
+        if og_branded:
+            cover = og_branded
+        else:
+            cover = og_image.headline_image_url(a)
         if cover:
             image = cover if cover.startswith("http") else f"{canonical_base}{cover}"
         else:

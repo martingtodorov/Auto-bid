@@ -66,6 +66,25 @@ def _font(name: str, size: int) -> ImageFont.FreeTypeFont:
 async def _fetch_image(url: str, timeout: float = 8.0) -> Optional[bytes]:
     if not url:
         return None
+    # Local URLs (`/api/uploads/...`) are stored on disk — short-circuit
+    # the HTTP fetch and just read the file. Saves a round-trip through
+    # the public ingress AND works inside the cluster even when the
+    # public hostname isn't routable from this pod.
+    if url.startswith("/"):
+        try:
+            uploads_prefix = "/api/uploads/"
+            if url.startswith(uploads_prefix):
+                rel = url[len(uploads_prefix):]
+                fs_path = os.path.join(_uploads_root(), rel)
+                if os.path.exists(fs_path):
+                    with open(fs_path, "rb") as f:
+                        return f.read()
+        except Exception as e:
+            logger.debug("og: local cover read failed %s: %s", url, e)
+        # Fallback: try the in-cluster backend on localhost so we still
+        # cover variant-served paths or future routes that don't map 1:1
+        # to a file on disk.
+        url = f"http://127.0.0.1:8001{url}"
     try:
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as c:
             r = await c.get(url)
@@ -304,12 +323,15 @@ def _wrap(draw, text, font, max_width, max_lines=3):
     return lines
 
 
-def _cache_key(auction_id: str, current_bid: float) -> str:
-    # Cache key derives only from the fields that now appear on the
-    # card (id + gross bid). No minute bucket → a live auction whose
-    # price hasn't changed returns the same PNG for hours, which is
-    # exactly what social crawlers cache anyway.
-    raw = f"{auction_id}:{int(current_bid or 0)}:v7"
+def _cache_key(auction_id: str, current_bid: float, title: str = "", cover_url: str = "") -> str:
+    """Cache key includes everything that visually affects the rendered PNG.
+
+    By including `title` + `cover_url` (not just bid), we invalidate the cache
+    when the auction's headline changes — e.g. seller renames the listing or
+    re-orders the photos. Without this, the cached PNG would silently lag the
+    real auction state and social shares would show a stale title.
+    """
+    raw = f"{auction_id}:{int(current_bid or 0)}:{title}:{cover_url}:v8"
     return hashlib.sha1(raw.encode()).hexdigest()[:16]
 
 
@@ -329,7 +351,12 @@ async def build_or_cache(auction: dict) -> bytes:
             current_bid = raw_bid
     else:
         current_bid = raw_bid
-    key = _cache_key(aid, current_bid)
+
+    title = auction.get("title") or " ".join(
+        str(auction.get(k) or "") for k in ("year", "make", "model")
+    ).strip() or "Auto&Bid auction"
+    cover_url = (auction.get("thumbnails") or auction.get("images") or [None])[0] or ""
+    key = _cache_key(aid, current_bid, title, cover_url)
     cache_path = os.path.join(_CACHE_DIR, f"{key}.png")
     if os.path.exists(cache_path) and (time.time() - os.path.getmtime(cache_path) < _CACHE_TTL_SEC):
         try:
@@ -338,12 +365,8 @@ async def build_or_cache(auction: dict) -> bytes:
         except Exception:
             pass
 
-    cover_url = (auction.get("thumbnails") or auction.get("images") or [None])[0]
     cover_bytes = await _fetch_image(cover_url) if cover_url else None
 
-    title = auction.get("title") or " ".join(
-        str(auction.get(k) or "") for k in ("year", "make", "model")
-    ).strip() or "Auto&Bid auction"
     featured = bool(auction.get("featured"))
     bid_label = f"€{int(current_bid):,}".replace(",", "\u202f") if current_bid > 0 else None
     bid_count = int(auction.get("bid_count") or 0)
@@ -391,20 +414,84 @@ def headline_image_url(auction: dict) -> str:
 
 
 async def build_and_persist(auction: dict) -> str:
-    """Return the auction's headline image URL — used as the per-auction
-    OG share preview.
+    """Generate the per-auction social-share PNG and persist it under
+    `<UPLOAD_DIR>/og/{id}.png` so Nginx can serve it directly as a static
+    asset (no FastAPI hit per share-preview crawl).
 
-    The previous implementation composed a custom Pillow PNG (title +
-    bid + featured badge overlay) and stored it under
-    `<UPLOAD_DIR>/og/<id>.png`. We removed that pipeline because the
-    rendered images behaved inconsistently across social platforms
-    (Facebook would aggressively cache stale versions, WhatsApp would
-    crop the bid badge, Telegram would re-encode and lose typography).
+    Returns the public URL of the freshly-written PNG. The caller is
+    expected to persist this URL on the auction document as
+    `og_image_url` — the SSR `/share/auction/{id}` route then emits it
+    as the `og:image` meta without re-rendering.
 
-    The car's actual headline photo turns out to be the most reliable
-    share preview — every platform handles it correctly the first time.
-    The legacy `og_image_url` field is still updated so the share route
-    can read it directly without recomputing.
+    Cache behaviour:
+      • Filename is content-addressed via `_cache_key(...)`. A new bid
+        OR title change OR cover swap produces a different sha1 hash,
+        so old files become orphaned but the new one is regenerated.
+      • Existing fresh files (≤ `_CACHE_TTL_SEC` old) are returned
+        without re-rendering — keeps the call idempotent during high-
+        frequency bid storms.
+      • On any error we gracefully fall back to the headline photo URL,
+        so the share preview is never broken — at worst it shows the
+        unbranded car photo.
     """
-    headline = headline_image_url(auction)
-    return headline or auction.get("og_image_url") or "/og-default.jpg"
+    aid = str(auction.get("id") or "")
+    if not aid:
+        return headline_image_url(auction) or "/og-default.jpg"
+
+    # Replicate the VAT-aware bid resolution from `build_or_cache` so
+    # the persisted file matches the on-demand one and the same cache
+    # key resolves to the same hash on both code paths.
+    raw_bid = float(auction.get("current_bid_eur") or auction.get("starting_bid_eur") or 0)
+    if auction.get("vat_status") == "vat_inclusive":
+        try:
+            rate = float(auction.get("vat_rate_pct") or 0)
+            current_bid = round(raw_bid * (1 + rate / 100.0), 2)
+        except Exception:
+            current_bid = raw_bid
+    else:
+        current_bid = raw_bid
+    title = auction.get("title") or " ".join(
+        str(auction.get(k) or "") for k in ("year", "make", "model")
+    ).strip() or "Auto&Bid auction"
+    cover_url = (auction.get("thumbnails") or auction.get("images") or [None])[0] or ""
+    key = _cache_key(aid, current_bid, title, cover_url)
+
+    uploads_root = _uploads_root()
+    og_dir = os.path.join(uploads_root, "og")
+    try:
+        os.makedirs(og_dir, exist_ok=True)
+    except Exception as e:
+        logger.warning("og: cannot create %s: %s — falling back to headline", og_dir, e)
+        return headline_image_url(auction) or "/og-default.jpg"
+
+    # Per-auction stable filename — embeds the cache key so the URL
+    # changes when the content changes (busts FB/Twitter caches without
+    # us having to call their refresh APIs).
+    fname = f"{aid}_{key}.png"
+    fpath = os.path.join(og_dir, fname)
+    public_url = f"{_uploads_public_base().rstrip('/')}/og/{fname}"
+
+    if os.path.exists(fpath) and (time.time() - os.path.getmtime(fpath) < _CACHE_TTL_SEC):
+        return public_url
+
+    try:
+        png = await build_or_cache(auction)
+        with open(fpath, "wb") as f:
+            f.write(png)
+        # Best-effort cleanup of older PNGs for this same auction — we
+        # only keep the latest cache-keyed file, so leftovers from
+        # previous bids accumulate otherwise.
+        try:
+            prefix = f"{aid}_"
+            for entry in os.listdir(og_dir):
+                if entry.startswith(prefix) and entry != fname:
+                    try:
+                        os.remove(os.path.join(og_dir, entry))
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        return public_url
+    except Exception as e:
+        logger.warning("og: persist failed for %s: %s", aid, e)
+        return headline_image_url(auction) or auction.get("og_image_url") or "/og-default.jpg"
