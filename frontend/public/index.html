@@ -72,7 +72,13 @@
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
         <meta property="og:image:alt" content="Auto&Bid — Подбрани автомобили. Прозрачно наддаване." />
-        <meta property="og:url" content="https://autoandbid.bg/" />
+        <!-- og:url intentionally OMITTED. With it hard-coded to the
+             homepage, every per-auction share that hits the static SPA
+             (when nginx UA-gate isn't routing the bot to /api/share)
+             gets canonical-overridden to the homepage. Without og:url,
+             Facebook + Twitter use the FETCHED URL as canonical, which
+             is the correct per-route behaviour for an SPA served from
+             one index.html across every path. -->
         <meta property="og:locale" content="bg_BG" />
         <meta property="og:locale:alternate" content="en_US" />
         <meta property="og:locale:alternate" content="ro_RO" />
