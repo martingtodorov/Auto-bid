@@ -11,15 +11,19 @@ import EmailSettings from "../components/EmailSettings";
 import SessionsSection from "../components/SessionsSection";
 import SavedCardSection from "../components/SavedCardSection";
 import AvatarSection from "../components/AvatarSection";
+import { usePrivatePageMeta } from "../lib/usePrivatePageMeta";
+import { useBrandName } from "../lib/brand";
 
 export default function AccountSettingsPage() {
   const { t } = useTranslation();
+  const brand = useBrandName();
   const { user, loading, refresh } = useAuth();
   const [phone, setPhone] = useState("");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [searches, setSearches] = useState([]);
+  usePrivatePageMeta({ titleKey: "page_meta.settings_title", descKey: "page_meta.settings_desc", brand });
 
   useEffect(() => {
     if (!user) return;

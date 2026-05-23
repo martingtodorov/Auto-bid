@@ -5,11 +5,15 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "../lib/auth";
 import { api } from "../lib/apiClient";
 import AuctionCard from "../components/AuctionCard";
+import { usePrivatePageMeta } from "../lib/usePrivatePageMeta";
+import { useBrandName } from "../lib/brand";
 
 export default function WatchlistPage() {
   const { t } = useTranslation();
+  const brand = useBrandName();
   const { user, loading } = useAuth();
   const [items, setItems] = useState(null);
+  usePrivatePageMeta({ titleKey: "page_meta.watchlist_title", descKey: "page_meta.watchlist_desc", brand });
 
   useEffect(() => {
     if (!user) return;

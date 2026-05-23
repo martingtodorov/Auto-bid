@@ -9,43 +9,43 @@ import { useInfoPageSeo } from "../lib/useInfoPageSeo";
 import { useBrandName } from "../lib/brand";
 
 export default function ContactsPage() {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const brand = useBrandName();
   const settings = useSiteSettings();
   const html = pickCmsHtml(settings, "contacts", i18n.language);
   const custom = pickCmsContent(settings, "contacts_content", i18n.language);
   useInfoPageSeo({
-    title: `Контакти — ${brand}`,
-    description: `Свържете се с екипа на ${brand} — contact@autoandbid.com, тел. +359 87 827 9269.`,
+    title: t("page_meta.contacts_title", { brand }),
+    description: t("page_meta.contacts_desc", { brand }),
     path: "/contacts",
-    crumb: "Контакти",
+    crumb: t("nav.contacts", "Contacts"),
   });
   return (
-    <InfoPage overline="Помощ" title="Контакти">
-      {html ? <HtmlBody html={html} /> : custom ? <MarkdownBody>{custom}</MarkdownBody> : <DefaultContacts />}
+    <InfoPage overline={t("info_pages.help_overline")} title={t("nav.contacts", "Contacts")}>
+      {html ? <HtmlBody html={html} /> : custom ? <MarkdownBody>{custom}</MarkdownBody> : <DefaultContacts t={t} />}
     </InfoPage>
   );
 }
 
-function DefaultContacts() {
+function DefaultContacts({ t }) {
   return (
     <>
-      <p className="text-lg text-[hsl(var(--ink-muted))]">Нашият екип отговаря в рамките на 1 работен ден.</p>
+      <p className="text-lg text-[hsl(var(--ink-muted))]">{t("contacts.intro")}</p>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <ContactCard icon={Mail} label="Имейл" value="contact@autoandbid.com" href="mailto:contact@autoandbid.com" note="За общи запитвания и поддръжка" />
-        <ContactCard icon={Phone} label="Телефон" value="+359 87 827 9269" href="tel:+359878279269" note="Понеделник–Петък · 10:00–17:00" />
-        <ContactCard icon={Clock} label="Работно време" value="Пн–Пт: 10:00–17:00" note="Събота и неделя — почивни" />
+        <ContactCard icon={Mail} label={t("contacts.email_label")} value="contact@autoandbid.com" href="mailto:contact@autoandbid.com" note={t("contacts.email_note")} />
+        <ContactCard icon={Phone} label={t("contacts.phone_label")} value="+359 87 827 9269" href="tel:+359878279269" note={t("contacts.phone_note")} />
+        <ContactCard icon={Clock} label={t("contacts.hours_label")} value={t("contacts.hours_value")} note={t("contacts.hours_note")} />
       </div>
-      <InfoSection title="Специализирани запитвания">
+      <InfoSection title={t("contacts.specialized_title")}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div className="rounded-card border border-[hsl(var(--line))] bg-white p-5">
-            <div className="overline text-[hsl(var(--accent))]">Партньорства и дилъри</div>
-            <p className="mt-2 text-sm">Интересувате се от статус „Проверен дилър“ или обемна продажба?</p>
+            <div className="overline text-[hsl(var(--accent))]">{t("contacts.partners_overline")}</div>
+            <p className="mt-2 text-sm">{t("contacts.partners_body")}</p>
             <a href="mailto:contact@autoandbid.com" className="mt-3 inline-block text-sm font-semibold text-[hsl(var(--accent))] hover:underline">contact@autoandbid.com →</a>
           </div>
           <div className="rounded-card border border-[hsl(var(--line))] bg-white p-5">
-            <div className="overline text-[hsl(var(--accent))]">Преса и медии</div>
-            <p className="mt-2 text-sm">За интервюта, доклади и статистики.</p>
+            <div className="overline text-[hsl(var(--accent))]">{t("contacts.press_overline")}</div>
+            <p className="mt-2 text-sm">{t("contacts.press_body")}</p>
             <a href="mailto:contact@autoandbid.com" className="mt-3 inline-block text-sm font-semibold text-[hsl(var(--accent))] hover:underline">contact@autoandbid.com →</a>
           </div>
         </div>

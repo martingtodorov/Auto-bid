@@ -6,6 +6,8 @@ import { api } from "../lib/apiClient";
 import { translateEnum } from "../lib/carTranslations";
 import ImageUploader from "../components/ImageUploader";
 import VideoUploader from "../components/VideoUploader";
+import { usePrivatePageMeta } from "../lib/usePrivatePageMeta";
+import { useBrandName } from "../lib/brand";
 
 const FUELS = [
   "Бензин",
@@ -119,12 +121,14 @@ const IMG_CATEGORIES = [
 
 export default function SellPage() {
   const { t, i18n } = useTranslation();
+  const brand = useBrandName();
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState(() => emptyForm(user));
   const [err, setErr] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  usePrivatePageMeta({ titleKey: "page_meta.sell_title", descKey: "page_meta.sell_desc", brand });
 
   // Auth gate — anonymous visitors must log in / register before they
   // can fill in any sell-form details. Re-checks once `useAuth` has

@@ -17,8 +17,8 @@ export default function HowItWorksPage() {
   const html = pickCmsHtml(settings, "how_it_works", i18n.language);
   const custom = pickCmsContent(settings, "how_it_works_content", i18n.language);
   useInfoPageSeo({
-    title: `${t("nav.how_it_works", "Как работи")} — ${brand}`,
-    description: t("how_it_works.intro_body", { brand }),
+    title: t("page_meta.how_it_works_title", { brand }),
+    description: t("page_meta.how_it_works_desc", { brand }),
     path: "/how-it-works",
     crumb: t("nav.how_it_works", "Как работи"),
   });

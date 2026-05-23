@@ -8,51 +8,55 @@ import { useInfoPageSeo } from "../lib/useInfoPageSeo";
 import { useBrandName } from "../lib/brand";
 
 export default function TermsPage() {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const brand = useBrandName();
   const settings = useSiteSettings();
   const html = pickCmsHtml(settings, "terms", i18n.language);
   const custom = pickCmsContent(settings, "terms_content", i18n.language);
   useInfoPageSeo({
-    title: `Общи условия — ${brand}`,
-    description: `Общите условия за ползване на платформата ${brand} — права, задължения на продавачи и купувачи.`,
+    title: t("page_meta.terms_title", { brand }),
+    description: t("page_meta.terms_desc", { brand }),
     path: "/terms",
-    crumb: "Общи условия",
+    crumb: t("nav.terms", "Terms"),
   });
   return (
-    <InfoPage overline="Правна информация" title="Общи условия">
+    <InfoPage overline={t("info_pages.legal_overline")} title={t("nav.terms", "Terms")}>
       {html ? (
         <HtmlBody html={html} />
       ) : custom ? (
         <MarkdownBody>{custom}</MarkdownBody>
       ) : (
-        <DefaultTerms pct={settings?.buyer_fee_pct ?? 2} brand={brand} />
+        <DefaultTerms pct={settings?.buyer_fee_pct ?? 2} brand={brand} t={t} />
       )}
     </InfoPage>
   );
 }
 
-function DefaultTerms({ pct, brand }) {
+function DefaultTerms({ pct, brand, t }) {
   return (
     <>
-      <p className="text-sm text-[hsl(var(--ink-muted))]">Последна актуализация: 15 февруари 2026 г.</p>
-      <InfoSection title="1. Обхват и предмет">
-        <p>Настоящите общи условия уреждат отношенията между „{brand}“ и потребителите — купувачи и продавачи, участващи в онлайн търгове за моторни превозни средства.</p>
+      <p className="text-sm text-[hsl(var(--ink-muted))]">{t("terms.last_updated")}</p>
+      <InfoSection title={t("terms.s1_title")}>
+        <p>{t("terms.s1_body", { brand })}</p>
       </InfoSection>
-      <InfoSection title="2. Регистрация">
-        <p>Регистрацията е безплатна. Потребителят гарантира истинността на предоставените лични данни.</p>
+      <InfoSection title={t("terms.s2_title")}>
+        <p>{t("terms.s2_body")}</p>
       </InfoSection>
-      <InfoSection title="3. Търгове и наддаване">
-        <p>Всяка активна обява е договорно обвързваща. Наддаването представлява неотменима оферта за покупка на обявената цена плюс {pct}% buyer's premium. Pre-authorization от {pct}% се блокира на картата на наддавача при всяка нова оферта.</p>
+      <InfoSection title={t("terms.s3_title")}>
+        <p>{t("terms.s3_body", { pct })}</p>
       </InfoSection>
-      <InfoSection title="4. Продавачи и обяви">
-        <p>Обявите се одобряват от редакцията в рамките на 48 часа. Резервна цена (по избор) не е задължителна.</p>
+      <InfoSection title={t("terms.s4_title")}>
+        <p>{t("terms.s4_body")}</p>
       </InfoSection>
-      <InfoSection title="5. Сделка и предаване">
-        <p>Плащането между купувача и продавача се извършва директно — банков превод или ескроу. {brand} не съхранява средствата на сделката.</p>
+      <InfoSection title={t("terms.s5_title")}>
+        <p>{t("terms.s5_body", { brand })}</p>
       </InfoSection>
-      <InfoSection title="6. Контакти и спорове">
-        <p>За въпроси: <a href="mailto:contact@autoandbid.com" className="text-[hsl(var(--accent))] hover:underline">contact@autoandbid.com</a>. Компетентен е Софийски районен съд.</p>
+      <InfoSection title={t("terms.s6_title")}>
+        <p>
+          {t("terms.s6_body_prefix")}
+          <a href="mailto:contact@autoandbid.com" className="text-[hsl(var(--accent))] hover:underline">contact@autoandbid.com</a>
+          {t("terms.s6_body_suffix")}
+        </p>
       </InfoSection>
     </>
   );

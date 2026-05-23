@@ -144,33 +144,35 @@ export function computeBuyerFee(amount, settings) {
 }
 
 /**
- * Pick the right CMS text for the active language with graceful fallback chain:
- *   <base>_<lang> → <base>_bg → <base> (legacy BG field) → ""
- * `base` is one of: "faq_content", "terms_content", "fees_content",
- * "contacts_content", "how_it_works_content".
+ * Pick the right CMS text for the active language.
+ *
+ * IMPORTANT: We do NOT fall back across languages. If the admin has set
+ * `faq_content_bg` but not `faq_content_ro`, a Romanian visitor MUST see
+ * the i18n React default (translated by the app), not the Bulgarian text.
+ * Cross-language fallback was a bug — admins explicitly translate per
+ * locale so an empty locale field means "use the React-side translation",
+ * not "fall back to BG".
+ *
+ * Returns the value for the EXACT language only. For backwards-compat we
+ * still accept the legacy non-suffixed field when the active language IS
+ * Bulgarian.
  */
 export function pickCmsContent(settings, base, lang) {
   if (!settings) return "";
   const code = (lang || "bg").slice(0, 2);
-  return (
-    (settings[`${base}_${code}`] || "").trim() ||
-    (settings[`${base}_bg`] || "").trim() ||
-    (settings[base] || "").trim() ||
-    ""
-  );
+  const direct = (settings[`${base}_${code}`] || "").trim();
+  if (direct) return direct;
+  // Legacy compat: accept the non-suffixed field as an alias for BG.
+  if (code === "bg") return (settings[base] || "").trim();
+  return "";
 }
 
 /**
- * Same fallback chain, but for the *_html_<lang> variant.  Returns the raw
- * HTML string if the admin has provided one; empty string otherwise.
- * `base` is one of: "faq", "terms", "fees", "contacts", "how_it_works".
+ * Same per-language strictness as pickCmsContent — no cross-language
+ * fallback. Returns the HTML override for the EXACT language only.
  */
 export function pickCmsHtml(settings, base, lang) {
   if (!settings) return "";
   const code = (lang || "bg").slice(0, 2);
-  return (
-    (settings[`${base}_html_${code}`] || "").trim() ||
-    (settings[`${base}_html_bg`] || "").trim() ||
-    ""
-  );
+  return (settings[`${base}_html_${code}`] || "").trim();
 }

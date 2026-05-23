@@ -4,11 +4,15 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "../lib/auth";
 import { api, formatEUR } from "../lib/apiClient";
 import { auctionUrl } from "../lib/auctionUrl";
+import { usePrivatePageMeta } from "../lib/usePrivatePageMeta";
+import { useBrandName } from "../lib/brand";
 
 export default function DashboardPage() {
   const { t, i18n } = useTranslation();
+  const brand = useBrandName();
   const { user, loading } = useAuth();
   const [bids, setBids] = useState([]);
+  usePrivatePageMeta({ titleKey: "page_meta.dashboard_title", descKey: "page_meta.dashboard_desc", brand });
 
   useEffect(() => {
     if (!user) return;

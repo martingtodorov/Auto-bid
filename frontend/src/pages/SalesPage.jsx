@@ -35,14 +35,16 @@ export default function SalesPage() {
   // SEO
   useEffect(() => {
     const origin = window.location.origin;
+    const lang = (i18n.resolvedLanguage || i18n.language || "bg").slice(0, 2);
     setPageMeta({
-      title: `Архив продажби и пазарни статистики — ${brand}`,
-      description: `Реални цени на продадени автомобили в ${brand}. Средни цени по марка, месечни тенденции и публичен архив на приключилите сделки.`,
+      title: t("page_meta.sales_title", { brand }),
+      description: t("page_meta.sales_desc", { brand }),
       url: window.location.href,
+      locale: lang,
       jsonLd: combineJsonLd(
         buildBreadcrumbs([
-          { name: "Начало", url: origin },
-          { name: "Продадени", url: window.location.href },
+          { name: t("page_meta.home_crumb"), url: origin },
+          { name: t("nav.sold", "Sold"), url: window.location.href },
         ]),
         buildAuctionItemList(
           items,
@@ -51,7 +53,7 @@ export default function SalesPage() {
         ),
       ),
     });
-  }, [brand, items]);
+  }, [brand, items, t, i18n.language, i18n.resolvedLanguage]);
 
   // Stats (admin/moderator only — regular users don't need platform analytics)
   useEffect(() => {

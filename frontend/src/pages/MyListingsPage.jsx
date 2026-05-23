@@ -7,6 +7,8 @@ import { api, formatEUR, timeLeft, formatTimeLeft } from "../lib/apiClient";
 import { grossEUR } from "../lib/vat";
 import SellerRequestModal from "../components/SellerRequestModal";
 import { auctionUrl } from "../lib/auctionUrl";
+import { usePrivatePageMeta } from "../lib/usePrivatePageMeta";
+import { useBrandName } from "../lib/brand";
 
 /** i18n-aware status metadata: labels come from locales, icons+colors stay static */
 const STATUS_ICON = {
@@ -21,6 +23,7 @@ const STATUS_ICON = {
 
 export default function MyListingsPage() {
   const { t } = useTranslation();
+  const brand = useBrandName();
   const { user, loading } = useAuth();
   const [items, setItems] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -30,6 +33,7 @@ export default function MyListingsPage() {
   const [err, setErr] = useState("");
   const [requestsByAuction, setRequestsByAuction] = useState({});
   const [modal, setModal] = useState(null); // { auction, mode }
+  usePrivatePageMeta({ titleKey: "page_meta.my_listings_title", descKey: "page_meta.my_listings_desc", brand });
 
   const load = async () => {
     try {
@@ -125,19 +129,19 @@ export default function MyListingsPage() {
     } catch (e) { setErr(formatError(e)); }
   };
   const withdraw = async (id) => {
-    if (!window.confirm("Оттеглете ли тази обява?")) return;
+    if (!window.confirm(t("my_listings.withdraw_confirm"))) return;
     setErr("");
     try { await api.delete(`/auctions/${id}`); load(); }
     catch (e) { setErr(formatError(e)); }
   };
   const acceptHighBid = async (id) => {
-    if (!window.confirm("Приемате ли водещото наддаване?")) return;
+    if (!window.confirm(t("my_listings.accept_high_bid_confirm"))) return;
     setErr("");
     try { await api.post(`/auctions/${id}/accept-high-bid`); load(); }
     catch (e) { setErr(formatError(e)); }
   };
   const sendCounter = async (id) => {
-    if (!counterPrice || Number(counterPrice) <= 0) { setErr("Невалидна цена"); return; }
+    if (!counterPrice || Number(counterPrice) <= 0) { setErr(t("my_listings.invalid_price")); return; }
     setErr("");
     try {
       await api.post(`/auctions/${id}/counter-offer`, { price_eur: Number(counterPrice) });
@@ -187,7 +191,7 @@ export default function MyListingsPage() {
                 <div key={a.id} className="rounded-card border border-[hsl(var(--line))] overflow-hidden bg-white" data-testid={`listing-${a.id}`}>
                   <div className="grid grid-cols-1 md:grid-cols-[180px_1fr_auto] gap-0">
                     <div className="aspect-[4/3] md:aspect-auto md:min-h-[160px] bg-[hsl(var(--surface))]">
-                      {a.images?.[0] ? <img src={a.thumbnails?.[0] || a.images[0]} alt={a.title} className="w-full h-full object-cover" loading="lazy" /> : <div className="w-full h-full flex items-center justify-center text-[hsl(var(--ink-muted))] text-xs">Без снимка</div>}
+                      {a.images?.[0] ? <img src={a.thumbnails?.[0] || a.images[0]} alt={a.title} className="w-full h-full object-cover" loading="lazy" /> : <div className="w-full h-full flex items-center justify-center text-[hsl(var(--ink-muted))] text-xs">{t("my_listings.no_photo")}</div>}
                     </div>
                     <div className="p-5">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -201,15 +205,15 @@ export default function MyListingsPage() {
                       </div>
                       {editing === a.id ? (
                         <div className="mt-4 space-y-3">
-                          <input value={editForm.title || ""} onChange={(e) => setEditForm({...editForm, title: e.target.value})} className="w-full border border-[hsl(var(--line))] h-10 px-3 text-sm" placeholder="Заглавие" data-testid={`edit-title-${a.id}`} />
-                          <textarea value={editForm.description || ""} onChange={(e) => setEditForm({...editForm, description: e.target.value})} rows={3} className="w-full border border-[hsl(var(--line))] p-3 text-sm" placeholder="Описание" />
+                          <input value={editForm.title || ""} onChange={(e) => setEditForm({...editForm, title: e.target.value})} className="w-full border border-[hsl(var(--line))] h-10 px-3 text-sm" placeholder={t("my_listings.edit_title_placeholder")} data-testid={`edit-title-${a.id}`} />
+                          <textarea value={editForm.description || ""} onChange={(e) => setEditForm({...editForm, description: e.target.value})} rows={3} className="w-full border border-[hsl(var(--line))] p-3 text-sm" placeholder={t("my_listings.edit_desc_placeholder")} />
                           <div className="grid grid-cols-2 gap-3">
-                            <input type="number" value={editForm.starting_bid_eur || ""} onChange={(e) => setEditForm({...editForm, starting_bid_eur: e.target.value})} className="w-full border border-[hsl(var(--line))] h-10 px-3 text-sm" placeholder="Начална €" />
-                            <input type="number" value={editForm.reserve_eur || ""} onChange={(e) => setEditForm({...editForm, reserve_eur: e.target.value})} className="w-full border border-[hsl(var(--line))] h-10 px-3 text-sm" placeholder="Резерв € (опц.)" />
+                            <input type="number" value={editForm.starting_bid_eur || ""} onChange={(e) => setEditForm({...editForm, starting_bid_eur: e.target.value})} className="w-full border border-[hsl(var(--line))] h-10 px-3 text-sm" placeholder={t("my_listings.starting_eur_placeholder")} />
+                            <input type="number" value={editForm.reserve_eur || ""} onChange={(e) => setEditForm({...editForm, reserve_eur: e.target.value})} className="w-full border border-[hsl(var(--line))] h-10 px-3 text-sm" placeholder={t("my_listings.reserve_eur_placeholder")} />
                           </div>
                           <div className="flex gap-2 justify-end">
-                            <button onClick={() => setEditing(null)} className="btn btn-secondary !py-2 !px-4">Отказ</button>
-                            <button onClick={() => saveEdit(a.id)} className="btn btn-primary !py-2 !px-4" data-testid={`save-edit-${a.id}`}>Запази</button>
+                            <button onClick={() => setEditing(null)} className="btn btn-secondary !py-2 !px-4">{t("my_listings.cancel")}</button>
+                            <button onClick={() => saveEdit(a.id)} className="btn btn-primary !py-2 !px-4" data-testid={`save-edit-${a.id}`}>{t("my_listings.save")}</button>
                           </div>
                         </div>
                       ) : (
@@ -308,23 +312,23 @@ export default function MyListingsPage() {
                     </div>
                     <div className="p-5 md:border-l border-[hsl(var(--line))] flex flex-col justify-center items-start md:items-end gap-2 min-w-[200px]">
                       {a.status === "live" && (<>
-                        <div className="overline text-[hsl(var(--ink-muted))]">Текуща</div>
+                        <div className="overline text-[hsl(var(--ink-muted))]">{t("my_listings.current_label")}</div>
                         <div className="font-serif text-2xl">{formatEUR(grossEUR(a.current_bid_eur, a))}</div>
                         <div className="text-xs text-[hsl(var(--ink-muted))]">{a.bid_count || 0} {t("time.bids_short")} · {tl ? formatTimeLeft(tl, t) : ""}</div>
                       </>)}
                       {a.status === "sold" && (<>
-                        <div className="overline text-[hsl(var(--ink-muted))]">Продаден за</div>
+                        <div className="overline text-[hsl(var(--ink-muted))]">{t("my_listings.sold_for_label")}</div>
                         <div className="font-serif text-2xl">{formatEUR(grossEUR(a.current_bid_eur, a))}</div>
                       </>)}
                       {(a.status === "pending" || a.status === "rejected" || a.status === "withdrawn") && (<>
-                        <div className="overline text-[hsl(var(--ink-muted))]">Начална</div>
+                        <div className="overline text-[hsl(var(--ink-muted))]">{t("my_listings.starting_label")}</div>
                         <div className="font-serif text-2xl">{formatEUR(grossEUR(a.starting_bid_eur, a))}</div>
                       </>)}
                       {isRNM && (<>
-                        <div className="overline text-[hsl(var(--ink-muted))]">Водеща оферта</div>
+                        <div className="overline text-[hsl(var(--ink-muted))]">{t("my_listings.leading_offer_label")}</div>
                         <div className="font-serif text-2xl">{formatEUR(grossEUR(a.current_bid_eur, a))}</div>
                       </>)}
-                      {(a.status === "live" || a.status === "sold" || isRNM) && <Link to={auctionUrl(a)} className="btn btn-secondary !py-2 !px-4 mt-1">Виж обявата</Link>}
+                      {(a.status === "live" || a.status === "sold" || isRNM) && <Link to={auctionUrl(a)} className="btn btn-secondary !py-2 !px-4 mt-1">{t("my_listings.view_auction")}</Link>}
                     </div>
                   </div>
                 </div>

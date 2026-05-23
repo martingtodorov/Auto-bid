@@ -7,6 +7,8 @@ import { formatError, useAuth } from "../lib/auth";
 import { auctionUrl } from "../lib/auctionUrl";
 import { minNextBid } from "../lib/bidUtils";
 import TopUpCreditModal from "../components/TopUpCreditModal";
+import { usePrivatePageMeta } from "../lib/usePrivatePageMeta";
+import { useBrandName } from "../lib/brand";
 
 const API_BASE = process.env.REACT_APP_BACKEND_URL;
 
@@ -22,6 +24,7 @@ const API_BASE = process.env.REACT_APP_BACKEND_URL;
  */
 export default function MyBidsPage() {
   const { t } = useTranslation();
+  const brand = useBrandName();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [summary, setSummary] = useState(null);
@@ -33,6 +36,7 @@ export default function MyBidsPage() {
   const [bidding, setBidding] = useState({});  // { auction_id: bool }
   const wsRefs = useRef({});  // { auction_id: WebSocket }
   const reloadTimer = useRef(null);
+  usePrivatePageMeta({ titleKey: "page_meta.my_bids_title", descKey: "page_meta.my_bids_desc", brand });
 
   const load = useCallback(async () => {
     try {
