@@ -50,8 +50,11 @@
             "autoandbid.ro": { origin: "https://autoandbid.ro", locale: "ro_RO" },
             "autoandbid.com": { origin: "https://autoandbid.com", locale: "en_US" }
           };
-          var entry = map[host];
-          if (!entry) return; // preview / dev / unknown — leave defaults
+          // For preview / dev / unknown hosts we still need to patch the
+          // OG meta so iOS share sheet + Discord webhooks + any JS-capable
+          // crawler can resolve the absolute image URL against the page
+          // they actually fetched (not the hardcoded autoandbid.bg).
+          var entry = map[host] || { origin: location.origin, locale: "bg_BG" };
 
           var setLink = function (rel, href) {
             var el = document.querySelector('link[rel="' + rel + '"]');
@@ -66,27 +69,45 @@
           setMeta('meta[property="og:url"]', entry.origin + location.pathname + location.search);
           setMeta('meta[property="og:locale"]', entry.locale);
 
-          // ── Route-aware OG image + title ────────────────────────────────
+          // ── Route-aware OG image + title + description ──────────────────
           // For non-bot crawlers (iOS share sheet preview, email link
           // unfurl, Discord webhooks, etc.) we cannot rely on Nginx's
           // UA-gated SSR — they hit the static SPA HTML directly. Patch
           // the OG signals synchronously based on the URL so the share
           // preview still resolves to the correct asset.
           var path = location.pathname.replace(/\/+$/, "") || "/";
-          if (path === "" || path === "/" || path === "/auctions") {
+          var homeTitle, homeDesc;
+          if (entry.locale === "bg_BG") {
+            homeTitle = "Auto&Bid — Подбрани автомобили. Прозрачно наддаване.";
+            homeDesc = "Подбрани автомобили. Прозрачно наддаване. Открийте подбрани автомобили с подробна документация, качествени снимки и ясни условия за участие в търга.";
+          } else if (entry.locale === "ro_RO") {
+            homeTitle = "Auto&Bid — Mașini selectate. Licitare transparentă.";
+            homeDesc = "Mașini selectate. Licitare transparentă. Descoperă mașini selectate cu documentație detaliată, fotografii de calitate și condiții clare de licitare.";
+          } else {
+            homeTitle = "Auto&Bid — Curated cars. Transparent bidding.";
+            homeDesc = "Curated cars. Transparent bidding. Browse curated cars with detailed documentation, quality photos and clear auction terms.";
+          }
+          if (path === "" || path === "/" || path === "/auctions" || path.indexOf("/auctions?") === 0) {
             // Homepage AND the /auctions index share the same 2×2 brand
             // card. Both pages are brand-led "marketplace overview"
             // surfaces — using one card keeps the social preview
             // recognisable across them.
             setMeta('meta[property="og:image"]', entry.origin + "/api/og/home.jpg");
+            setMeta('meta[property="og:image:secure_url"]', entry.origin + "/api/og/home.jpg");
             setMeta('meta[name="twitter:image"]', entry.origin + "/api/og/home.jpg");
+            setMeta('meta[property="og:title"]', homeTitle);
+            setMeta('meta[name="twitter:title"]', homeTitle);
+            setMeta('meta[property="og:description"]', homeDesc);
+            setMeta('meta[name="twitter:description"]', homeDesc);
+            document.title = homeTitle;
           } else {
             var m = path.match(/^\/auctions\/([^/]+)$/);
             if (m) {
               // `/auctions/<slug>` — point OG image at the per-auction
-              // generator (it resolves the slug suffix server-side).
+              // generator (it 302-redirects to the persisted card).
               var slug = m[1];
               setMeta('meta[property="og:image"]', entry.origin + "/api/og/auction/" + slug + ".jpg");
+              setMeta('meta[property="og:image:secure_url"]', entry.origin + "/api/og/auction/" + slug + ".jpg");
               setMeta('meta[name="twitter:image"]', entry.origin + "/api/og/auction/" + slug + ".jpg");
               // Title: best-effort derive from the slug — strip the
               // hex suffix and title-case the remaining words. React
@@ -144,22 +165,30 @@
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="Auto&Bid" />
 
-        <!-- Open Graph -->
+        <!-- Open Graph — defaults below are absolute URLs pointing at the
+             primary BG domain so non-JS social crawlers (Facebook, WhatsApp,
+             LinkedIn) get a valid preview even when they hit the static SPA
+             HTML directly. The inline script in <head> above rewrites these
+             at runtime for `.com` / `.ro` visitors and for non-home routes
+             (auction detail pages set their own meta via setPageMeta). -->
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="Auto&Bid" />
-        <meta property="og:title" content="Auto&Bid — Онлайн търгове за автомобили" />
-        <meta property="og:description" content="Открийте изключителни автомобили на онлайн търг. Прозрачно наддаване, редакционен преглед и 60+ снимки на всяка обява." />
-        <meta property="og:image" content="/api/og/home.jpg" />
+        <meta property="og:title" content="Auto&Bid — Подбрани автомобили. Прозрачно наддаване." />
+        <meta property="og:description" content="Подбрани автомобили. Прозрачно наддаване. Открийте подбрани автомобили с подробна документация, качествени снимки и ясни условия за участие в търга." />
+        <meta property="og:image" content="https://autoandbid.bg/api/og/home.jpg" />
+        <meta property="og:image:secure_url" content="https://autoandbid.bg/api/og/home.jpg" />
+        <meta property="og:image:type" content="image/jpeg" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
+        <meta property="og:image:alt" content="Auto&Bid — Подбрани автомобили. Прозрачно наддаване." />
         <meta property="og:locale" content="bg_BG" />
-        <meta property="og:url" content="https://autoandbid.com/" />
+        <meta property="og:url" content="https://autoandbid.bg/" />
 
         <!-- Twitter -->
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Auto&Bid — Онлайн търгове за автомобили" />
-        <meta name="twitter:description" content="Най-добрите автомобили на търг. Редакционно подбрани, документирани и защитени." />
-        <meta name="twitter:image" content="/api/og/home.jpg" />
+        <meta name="twitter:title" content="Auto&Bid — Подбрани автомобили. Прозрачно наддаване." />
+        <meta name="twitter:description" content="Подбрани автомобили. Прозрачно наддаване. Открийте подбрани автомобили с подробна документация, качествени снимки и ясни условия за участие в търга." />
+        <meta name="twitter:image" content="https://autoandbid.bg/api/og/home.jpg" />
 
         <!-- Structured Data: Organization + WebSite with SearchAction -->
         <script type="application/ld+json">

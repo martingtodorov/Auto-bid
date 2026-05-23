@@ -64,10 +64,14 @@ const ensureLink = (rel, href, extra = {}) => {
 };
 
 const DEFAULT = {
-  title: "Auto&Bid.bg — Онлайн търгове за автомобили",
+  title: "Auto&Bid — Подбрани автомобили. Прозрачно наддаване.",
   description:
-    "Auto&Bid.bg — най-добрите автомобили на търг. Прозрачно наддаване, редакционен преглед, 60+ снимки и защита на купувача.",
-  image: `${window.location.origin}/og-default.jpg`,
+    "Подбрани автомобили. Прозрачно наддаване. Открийте подбрани автомобили с подробна документация, качествени снимки и ясни условия за участие в търга.",
+  // The dynamic homepage card endpoint — 302-redirects to the persisted,
+  // content-addressed `/api/uploads/og/home_{hash}.jpg`. Used for any
+  // page that doesn't supply its own `image`; the homepage + /auctions
+  // index BOTH share this brand-led 2×2 grid card.
+  image: `${window.location.origin}/api/og/home.jpg`,
   url: window.location.origin,
 };
 
