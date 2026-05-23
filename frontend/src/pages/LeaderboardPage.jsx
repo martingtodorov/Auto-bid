@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Trophy, TrendingUp, MessageSquare, Gavel, BadgeCheck } from "lucide-react";
 
 import { api, formatEUR } from "../lib/apiClient";
-import { setPageMeta, resetPageMeta } from "../lib/seo";
+import { setPageMeta, resetPageMeta, buildBreadcrumbs, buildPersonRanking, combineJsonLd } from "../lib/seo";
 
 const TABS = [
   { key: "reputation", Icon: Trophy, labelKey: "leaderboard.tab_reputation", labelDefault: "Репутация" },
@@ -31,15 +31,32 @@ export default function LeaderboardPage() {
   const rows = cache[key];
 
   useEffect(() => {
+    const origin = window.location.origin;
+    const url = window.location.href;
     setPageMeta({
       title: t("leaderboard.meta_title", "Класация · Auto&Bid"),
       description: t(
         "leaderboard.meta_desc",
         "Най-активните продавачи, коментатори и наддавачи в Auto&Bid.",
       ),
+      url,
+      jsonLd: combineJsonLd(
+        buildBreadcrumbs([
+          { name: t("nav.home", "Начало"), url: origin + "/" },
+          { name: t("leaderboard.title", "Класация"), url },
+        ]),
+        // Person ranking gives Google structured insight into who the
+        // top community members are — useful for E-E-A-T signals when
+        // those users also have public profile pages.
+        buildPersonRanking(
+          (rows || []).map((r) => ({ name: r.name || r.username })),
+          null,
+          t("leaderboard.title", "Класация"),
+        ),
+      ),
     });
     return () => resetPageMeta();
-  }, [t]);
+  }, [t, rows]);
 
   useEffect(() => {
     if (cache[key]) { setLoading(false); return; }

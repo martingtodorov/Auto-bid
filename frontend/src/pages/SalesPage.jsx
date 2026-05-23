@@ -4,7 +4,7 @@ import { TrendingUp, BarChart3, Calendar, Crown, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { api, formatEUR, formatKM } from "../lib/apiClient";
 import AuctionCard from "../components/AuctionCard";
-import { setPageMeta, combineJsonLd, buildBreadcrumbs } from "../lib/seo";
+import { setPageMeta, combineJsonLd, buildBreadcrumbs, buildAuctionItemList } from "../lib/seo";
 import { useAuth } from "../lib/auth";
 import { translateEnum } from "../lib/carTranslations";
 import { useBrandName } from "../lib/brand";
@@ -34,16 +34,24 @@ export default function SalesPage() {
 
   // SEO
   useEffect(() => {
+    const origin = window.location.origin;
     setPageMeta({
       title: `Архив продажби и пазарни статистики — ${brand}`,
       description: `Реални цени на продадени автомобили в ${brand}. Средни цени по марка, месечни тенденции и публичен архив на приключилите сделки.`,
       url: window.location.href,
-      jsonLd: combineJsonLd(buildBreadcrumbs([
-        { name: "Начало", url: window.location.origin },
-        { name: "Продадени", url: window.location.href },
-      ])),
+      jsonLd: combineJsonLd(
+        buildBreadcrumbs([
+          { name: "Начало", url: origin },
+          { name: "Продадени", url: window.location.href },
+        ]),
+        buildAuctionItemList(
+          items,
+          (a) => origin + auctionUrl(a),
+          "Sold cars",
+        ),
+      ),
     });
-  }, [brand]);
+  }, [brand, items]);
 
   // Stats (admin/moderator only — regular users don't need platform analytics)
   useEffect(() => {

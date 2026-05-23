@@ -249,6 +249,21 @@ export function buildVehicleJsonLd(a, url) {
   if (a.doors) data.numberOfDoors = a.doors;
   if (a.drive_type) data.driveWheelConfiguration = a.drive_type;
 
+  // AggregateRating — buyer-to-seller reviews surface as star ratings in
+  // Google SERP. Only emit when there are ≥ 1 reviews; an empty review
+  // count triggers a structured-data warning in Search Console.
+  const ratingCount = Number(a.seller_rating_count || 0);
+  const ratingAvg = Number(a.seller_rating_avg || 0);
+  if (ratingCount > 0 && ratingAvg > 0) {
+    data.aggregateRating = {
+      "@type": "AggregateRating",
+      ratingValue: ratingAvg,
+      reviewCount: ratingCount,
+      bestRating: 5,
+      worstRating: 1,
+    };
+  }
+
   // Clean top-level undefined
   Object.keys(data).forEach((k) => data[k] === undefined && delete data[k]);
   return data;
@@ -292,4 +307,101 @@ export function combineJsonLd(...blocks) {
   if (!clean.length) return null;
   if (clean.length === 1) return clean[0];
   return { "@context": "https://schema.org", "@graph": clean };
+}
+
+// ---------------------------------------------------------------------------
+// Organization + WebSite block for the homepage. Unlocks the Google
+// "Sitelinks search box" on SERP when our site is authoritative for a query
+// like "Auto&Bid" — Google embeds a search input directly in the listing.
+//
+// Spec: https://developers.google.com/search/docs/appearance/sitelinks-search-box
+// ---------------------------------------------------------------------------
+export function buildOrganizationAndWebSite({ name, url, logo, sameAs, searchUrl } = {}) {
+  const org = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: name || "Auto&Bid",
+    url,
+    logo,
+  };
+  if (Array.isArray(sameAs) && sameAs.length) org.sameAs = sameAs;
+  Object.keys(org).forEach((k) => org[k] === undefined && delete org[k]);
+
+  const website = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: name || "Auto&Bid",
+    url,
+  };
+  if (searchUrl) {
+    website.potentialAction = {
+      "@type": "SearchAction",
+      target: { "@type": "EntryPoint", urlTemplate: `${searchUrl}{search_term_string}` },
+      "query-input": "required name=search_term_string",
+    };
+  }
+  Object.keys(website).forEach((k) => website[k] === undefined && delete website[k]);
+  return [org, website];
+}
+
+// ---------------------------------------------------------------------------
+// ItemList of Vehicle items for /auctions and /sold-cars index pages.
+//
+// Google can show a "Vehicle listing" carousel in SERP when an index page
+// exposes an ItemList of products/vehicles. Each ListItem points to the
+// canonical auction URL — Google then crawls those individual pages for the
+// rich Vehicle markup we already emit on AuctionDetailPage.
+//
+// `items` must be an array of auction-shaped objects with at minimum
+// {id, title, slug?}; we use the same auctionUrl() resolver the cards do.
+// `urlFor` is a function (auction) => absolute_url so callers can inject the
+// app's own routing/locale logic without a circular import.
+// ---------------------------------------------------------------------------
+export function buildAuctionItemList(items, urlFor, name) {
+  if (!Array.isArray(items) || !items.length) return null;
+  // Cap at 30 — Google ignores anything beyond that and we keep the payload
+  // small enough to inline in the page <head>.
+  const capped = items.slice(0, 30);
+  return {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name: name || "Auctions",
+    numberOfItems: capped.length,
+    itemListElement: capped.map((a, i) => {
+      const li = {
+        "@type": "ListItem",
+        position: i + 1,
+        url: urlFor(a),
+        name: a.title,
+      };
+      if (a.images && a.images[0]) li.image = a.images[0];
+      return li;
+    }),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// CollectionPage wrapper for the Leaderboard. Leaderboard isn't a product
+// listing so ItemList of users would be noise — instead we emit a
+// CollectionPage describing the page itself + ItemList of top entries as
+// `Person` items (no `Vehicle` here).
+// ---------------------------------------------------------------------------
+export function buildPersonRanking(items, urlFor, name) {
+  if (!Array.isArray(items) || !items.length) return null;
+  const capped = items.slice(0, 25);
+  return {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name: name || "Leaderboard",
+    numberOfItems: capped.length,
+    itemListElement: capped.map((u, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      item: {
+        "@type": "Person",
+        name: u.name || u.username,
+        url: urlFor ? urlFor(u) : undefined,
+      },
+    })),
+  };
 }

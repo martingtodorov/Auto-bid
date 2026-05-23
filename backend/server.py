@@ -1273,6 +1273,19 @@ async def get_auction(auction_id: str, request: Request):
         public["seller_is_verified_dealer"] = bool(seller and seller.get("is_verified_dealer"))
         if seller and seller.get("profile_slug"):
             public["seller_slug"] = seller["profile_slug"]
+    # Aggregate buyer→seller rating — exposed so the frontend can emit
+    # AggregateRating JSON-LD on the auction detail page (Google rich
+    # snippet with star rating in SERP). Platform listings have no
+    # buyer reviews so we skip the lookup.
+    if seller_id and seller_id != "platform":
+        try:
+            r_cur = db.reviews.find({"seller_id": seller_id}, {"_id": 0, "rating": 1})
+            r_vals = [int(r["rating"]) async for r in r_cur if r.get("rating") is not None]
+            if r_vals:
+                public["seller_rating_avg"] = round(sum(r_vals) / len(r_vals), 2)
+                public["seller_rating_count"] = len(r_vals)
+        except Exception:
+            pass
     # Reveal full VIN to: seller, admin (always), bidders on live auctions,
     # or any user with a high-value pre-authorization (≥ €10,000) anywhere
     # on the platform. On ended/sold/cancelled auctions the VIN stays masked

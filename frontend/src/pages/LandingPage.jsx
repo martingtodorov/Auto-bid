@@ -6,7 +6,7 @@ import DOMPurify from "dompurify";
 import { api, formatEUR, formatLocal } from "../lib/apiClient";
 import { readLandingCache, landingCacheIsFresh, fetchLandingData } from "../lib/landingCache";
 import AuctionCard from "../components/AuctionCard";
-import { setPageMeta, resetPageMeta } from "../lib/seo";
+import { setPageMeta, resetPageMeta, buildOrganizationAndWebSite, combineJsonLd } from "../lib/seo";
 import { useSiteSettings } from "../lib/settings";
 import { translateEnum } from "../lib/carTranslations";
 import { auctionUrl } from "../lib/auctionUrl";
@@ -32,13 +32,28 @@ export default function LandingPage() {
   const seoTitle = settings?.[`seo_title_${lang}`] || settings?.seo_title;
   const seoDescription = settings?.[`seo_description_${lang}`] || settings?.seo_description;
   useEffect(() => {
-    if (seoTitle || seoDescription) {
-      setPageMeta({
-        title: seoTitle,
-        description: seoDescription,
-        url: window.location.origin,
-      });
-    }
+    const origin = window.location.origin;
+    // Organization + WebSite (with SearchAction) is emitted on EVERY page
+    // load — they describe the site, not just an article. They unlock the
+    // Google "Sitelinks search box" treatment when our site ranks for a
+    // brand query and add a knowledge-panel-ready org card.
+    const orgWebsite = buildOrganizationAndWebSite({
+      name: "Auto&Bid",
+      url: origin,
+      logo: `${origin}/og-default.jpg`,
+      sameAs: [
+        "https://autoandbid.bg",
+        "https://autoandbid.com",
+        "https://autoandbid.ro",
+      ],
+      searchUrl: `${origin}/auctions?q=`,
+    });
+    setPageMeta({
+      title: seoTitle,
+      description: seoDescription,
+      url: origin,
+      jsonLd: combineJsonLd(...orgWebsite),
+    });
     return () => resetPageMeta();
   }, [seoTitle, seoDescription]);
 

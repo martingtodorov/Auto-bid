@@ -7,8 +7,9 @@ import Pagination from "../components/Pagination";
 import { SlidersHorizontal, X, Search, BookmarkPlus, Check } from "lucide-react";
 import { mergeMakes } from "../lib/makes";
 import { translateEnum } from "../lib/carTranslations";
-import { setPageMeta, resetPageMeta, buildBreadcrumbs } from "../lib/seo";
+import { setPageMeta, resetPageMeta, buildBreadcrumbs, buildAuctionItemList, combineJsonLd } from "../lib/seo";
 import { useBrandName } from "../lib/brand";
+import { auctionUrl } from "../lib/auctionUrl";
 
 export default function AuctionsPage() {
   const { t, i18n } = useTranslation();
@@ -77,17 +78,27 @@ export default function AuctionsPage() {
   }, []);
 
   useEffect(() => {
+    const origin = window.location.origin;
+    const breadcrumbs = buildBreadcrumbs([
+      { name: t("nav.home", "Home"), url: origin + "/" },
+      { name: t("nav.auctions", "Auctions"), url: origin + "/auctions" },
+    ]);
+    // ItemList lets Google render a "Vehicle listings" carousel in SERP.
+    // The list points each entry at the canonical detail URL — Google
+    // then re-uses the rich Vehicle JSON-LD emitted on that page.
+    const itemList = buildAuctionItemList(
+      items,
+      (a) => origin + auctionUrl(a),
+      t("seo.all_auctions_title", "All auctions"),
+    );
     setPageMeta({
       title: `${t("seo.all_auctions_title", "All auctions")} — ${brand}`,
       description: t("seo.all_auctions_description", `Browse all active car auctions on ${brand} — filter by make, year, fuel and price.`),
       url: window.location.href,
-      jsonLd: buildBreadcrumbs([
-        { name: t("nav.home", "Home"), url: window.location.origin + "/" },
-        { name: t("nav.auctions", "Auctions"), url: window.location.origin + "/auctions" },
-      ]),
+      jsonLd: combineJsonLd(breadcrumbs, itemList),
     });
     return () => resetPageMeta();
-  }, [brand, t]);
+  }, [brand, t, items]);
 
   const load = useCallback(async () => {
     // Don't flip back into "loading" on revalidation — if we already have
