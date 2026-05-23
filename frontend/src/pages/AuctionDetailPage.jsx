@@ -1968,28 +1968,55 @@ function ShareButton({ auction }) {
   const shareUrl = `${window.location.origin}${auctionUrl(auction)}`;
 
   const share = async () => {
-    // Pass ONLY `title` + `url` to navigator.share. The receiving app
-    // (iMessage, WhatsApp, Telegram, Discord) fetches the URL and
-    // assembles a rich LINK PREVIEW card from our Open Graph meta —
-    // image, title, description appear inside one bubble instead of
-    // showing the photo as a separate file attachment.
-    //
-    // No `text` field: it would render as a quoted paragraph above the
-    // preview, doubling the message. No `files` field either: attaching
-    // the OG JPEG turns the share into a photo+caption combo (the user
-    // explicitly asked to keep this as a clean link preview).
     const ogTitle = document.querySelector('meta[property="og:title"]')?.content
       || document.title
       || auction?.title;
+    const ogImage = document.querySelector('meta[property="og:image"]')?.content;
+
+    // Try sharing WITH the OG image as a File attachment. The receiving
+    // app (iMessage, WhatsApp, Telegram, Messenger) will display the
+    // image directly — no dependency on its own OG scraper.  Works on
+    // iOS Safari 15+, Android Chrome 89+, Edge 93+; on older browsers
+    // we fall through to title+url.  No `text` field on either path
+    // per design direction (no quoted description above the preview).
+    if (navigator.share && navigator.canShare && ogImage) {
+      try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 2500);
+        const resp = await fetch(ogImage, { signal: ctrl.signal, credentials: "omit" });
+        clearTimeout(timer);
+        if (resp.ok) {
+          const blob = await resp.blob();
+          const ext = blob.type === "image/png" ? "png" : "jpg";
+          const file = new File(
+            [blob],
+            `auction-${auction?.id || "share"}.${ext}`,
+            { type: blob.type || "image/jpeg" },
+          );
+          const payload = { title: ogTitle, url: shareUrl, files: [file] };
+          if (navigator.canShare(payload)) {
+            await navigator.share(payload);
+            return;
+          }
+        }
+      } catch (err) {
+        const name = err?.name || "";
+        // Distinguish a user-cancelled share-sheet (NotAllowedError) from
+        // a fetch timeout (AbortError thrown by our own AbortController).
+        // The fetch happens BEFORE the share-sheet opens, so any error
+        // here is the fetch failing — we still want to give the user a
+        // share sheet, just without the file attachment.
+        if (name === "NotAllowedError") return;
+      }
+    }
+
+    // Fallback: title + url only (no image attachment, no description).
+    // Receiving app fetches the URL and renders a link preview from OG.
     const data = { title: ogTitle, url: shareUrl };
     if (navigator.share) {
       try {
         await navigator.share(data);
       } catch (err) {
-        // AbortError = user cancelled the native share sheet — DO
-        // NOT fall through to clipboard / prompt. Any other error
-        // means navigator.share threw before showing the sheet, so we
-        // still try clipboard as a graceful fallback.
         const name = err?.name || "";
         if (name === "AbortError" || name === "NotAllowedError") return;
       }
