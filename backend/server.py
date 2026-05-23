@@ -7272,17 +7272,42 @@ _SOCIAL_BOTS_RE = re.compile(
 _PUBLIC_AUCTION_PATH_RE = re.compile(r"^/auctions/([A-Za-z0-9_-]+)(?:/.*)?$")
 
 
+# Listing / index routes the SPA serves: when a social-bot crawler hits
+# any of these, redirect to the corresponding /api/share/... SSR route
+# so the resulting HTML carries a full OG meta block with absolute URLs.
+_PUBLIC_LISTING_ROUTES = {
+    "/": "/api/share/home",
+    "/auctions": "/api/share/auctions",
+    "/auctions/": "/api/share/auctions",
+    "/sales": "/api/share/sales",
+    "/sales/": "/api/share/sales",
+    "/sold": "/api/share/sales",
+    "/sold/": "/api/share/sales",
+    "/leaderboard": "/api/share/leaderboard",
+    "/leaderboard/": "/api/share/leaderboard",
+}
+
+
 @app.middleware("http")
 async def social_bot_share_middleware(request: Request, call_next):
     method = request.method.upper()
     if method not in ("GET", "HEAD"):
         return await call_next(request)
     path = request.scope.get("path", "")
-    m = _PUBLIC_AUCTION_PATH_RE.match(path)
-    if not m:
-        return await call_next(request)
     ua = (request.headers.get("user-agent") or "").lower()
     if not _SOCIAL_BOTS_RE.search(ua):
+        return await call_next(request)
+
+    # 1) Listing / index routes — direct mapping.
+    listing_target = _PUBLIC_LISTING_ROUTES.get(path)
+    if listing_target:
+        request.scope["path"] = listing_target
+        request.scope["raw_path"] = listing_target.encode()
+        return await call_next(request)
+
+    # 2) Auction detail route — resolve slug → UUID, then redirect.
+    m = _PUBLIC_AUCTION_PATH_RE.match(path)
+    if not m:
         return await call_next(request)
     raw = m.group(1)
     # Resolve the slug → canonical UUID. If we can't, fall through and let

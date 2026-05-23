@@ -73,7 +73,11 @@
           // the OG signals synchronously based on the URL so the share
           // preview still resolves to the correct asset.
           var path = location.pathname.replace(/\/+$/, "") || "/";
-          if (path === "" || path === "/") {
+          if (path === "" || path === "/" || path === "/auctions") {
+            // Homepage AND the /auctions index share the same 2×2 brand
+            // card. Both pages are brand-led "marketplace overview"
+            // surfaces — using one card keeps the social preview
+            // recognisable across them.
             setMeta('meta[property="og:image"]', entry.origin + "/api/og/home.jpg");
             setMeta('meta[name="twitter:image"]', entry.origin + "/api/og/home.jpg");
           } else {

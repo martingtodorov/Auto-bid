@@ -764,6 +764,14 @@ async def share_auction(
 # Keep it inline (no DB lookup) so the response is fast and crawlable
 # even if Mongo is unreachable.
 _LISTING_META = {
+    "home": {
+        "bg": ("Auto&Bid — Онлайн търгове за автомобили",
+               "Подбрани автомобили. Прозрачно наддаване. Открийте подбрани автомобили с подробна документация, качествени снимки и ясни условия за участие в търга."),
+        "en": ("Auto&Bid — Online car auctions",
+               "Curated cars. Transparent bidding. Browse curated cars with detailed documentation, quality photos and clear auction terms."),
+        "ro": ("Auto&Bid — Licitații online pentru mașini",
+               "Mașini selectate. Licitare transparentă. Descoperă mașini selectate cu documentație detaliată, fotografii de calitate și condiții clare de licitare."),
+    },
     "auctions": {
         "bg": ("Активни автомобилни търгове · Auto&Bid",
                "Разгледайте всички активни автомобилни търгове в България — филтрирайте по марка, година, гориво и цена. Уникални оферти всеки ден."),
@@ -902,6 +910,21 @@ async def _build_listing_ssr(
 </body>
 </html>"""
     return Response(content=html, media_type="text/html; charset=utf-8")
+
+
+@router.get("/share/home", response_class=PlainTextResponse)
+@router.get("/share/", response_class=PlainTextResponse)
+async def share_home(request: Request, lang: Optional[str] = Query(None, regex="^(bg|en|ro)$")):
+    """SSR snapshot of the homepage.
+
+    Hit by social-bot middleware when a crawler scrapes the bare apex
+    domain (`https://autoandbid.bg/`). Returns the full OG meta block
+    with absolute URLs (relative `/api/og/home.jpg` is rejected by
+    Facebook + most messenger previewers), plus an Organization +
+    WebSite JSON-LD graph and the dynamic 4-car brand card as
+    `og:image`.
+    """
+    return await _build_listing_ssr(request, "home", "/", lang=lang)
 
 
 @router.get("/share/auctions", response_class=PlainTextResponse)
