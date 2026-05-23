@@ -99,6 +99,14 @@ export function setPageMeta({ title, description, image, url, jsonLd, robots, lo
   ensureMeta('meta[property="og:title"]', "content", t);
   ensureMeta('meta[property="og:description"]', "content", d);
   ensureMeta('meta[property="og:image"]', "content", img);
+  // `og:image:secure_url` is the HTTPS-explicit variant of `og:image`;
+  // Facebook + WhatsApp use it PREFERENTIALLY over `og:image` when both
+  // are present. Static index.html hardcodes a homepage URL there as a
+  // sensible default — if we don't override it here, every per-auction
+  // share preview shows the homepage card instead of the per-auction
+  // card (rare class of bug — only manifests on receiving apps that
+  // honour `secure_url` first).
+  ensureMeta('meta[property="og:image:secure_url"]', "content", img);
   ensureMeta('meta[property="og:url"]', "content", u);
   ensureMeta('meta[property="og:type"]', "content", title && title !== DEFAULT.title ? "article" : "website");
   if (locale) {
