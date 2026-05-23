@@ -1968,68 +1968,28 @@ function ShareButton({ auction }) {
   const shareUrl = `${window.location.origin}${auctionUrl(auction)}`;
 
   const share = async () => {
-    // Read the live OG meta values that React's `setPageMeta` has
-    // already populated on this page. We pass these EXPLICITLY to
-    // `navigator.share()` so the receiving app (iMessage, WhatsApp,
-    // Telegram, Discord) gets a fully-populated preview even when its
-    // own OG scraper is rate-limited, off, or doesn't follow redirects
-    // (most iMessage previews do NOT re-fetch the URL — they show
-    // verbatim whatever `navigator.share` hands them).
-    const meta = (sel) => document.querySelector(sel)?.getAttribute("content") || "";
-    const ogTitle = meta('meta[property="og:title"]') || document.title || auction?.title;
-    const ogDesc = meta('meta[property="og:description"]');
-    const ogImage = meta('meta[property="og:image"]');
-    const text = ogDesc ? ogDesc.slice(0, 280) : "";
-
-    // ── Try sharing WITH the OG image as a File attachment first ─────
-    // Web Share API Level 2 (`navigator.share({ files })`) lets us hand
-    // the receiving app the branded OG card directly — so the preview
-    // never depends on the target's own OG scraper. Works on iOS Safari
-    // 15+, Android Chrome 89+, Edge 93+; the others gracefully fall back
-    // to the text-only share below.
-    if (navigator.share && navigator.canShare && ogImage) {
-      try {
-        // Race the fetch against a 2 s timeout — sharing must FEEL
-        // instant from the user's perspective. If the image takes too
-        // long (cold OG cache, slow network) we fall back to the
-        // metadata-only share.
-        const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), 2000);
-        const resp = await fetch(ogImage, { signal: ctrl.signal, credentials: "omit" });
-        clearTimeout(t);
-        if (resp.ok) {
-          const blob = await resp.blob();
-          const ext = blob.type === "image/png" ? "png" : "jpg";
-          const file = new File([blob], `auction-${auction?.id || "share"}.${ext}`, { type: blob.type || "image/jpeg" });
-          const payload = { title: ogTitle, text, url: shareUrl, files: [file] };
-          if (navigator.canShare(payload)) {
-            await navigator.share(payload);
-            return;
-          }
-        }
-      } catch (err) {
-        const name = err?.name || "";
-        // User dismissed the share sheet (or it was rejected). Don't
-        // fall through to text-only share — that would re-prompt them.
-        if (name === "AbortError" || name === "NotAllowedError") {
-          // AbortError can come from EITHER the fetch timeout OR the
-          // user dismissing the share sheet. Heuristic: if we never got
-          // to call `navigator.share()` (the share-sheet error path
-          // throws synchronously after `await` resolves), AbortError
-          // means timeout → keep going to text fallback.
-          if (name === "NotAllowedError") return;
-          // Otherwise the fetch was aborted by our 2s timeout — keep
-          // going to text-only fallback below.
-        }
-      }
-    }
-
-    // ── Text + URL fallback (no file attachment) ─────────────────────
-    const data = { title: ogTitle, text, url: shareUrl };
+    // Pass ONLY `title` + `url` to navigator.share. The receiving app
+    // (iMessage, WhatsApp, Telegram, Discord) fetches the URL and
+    // assembles a rich LINK PREVIEW card from our Open Graph meta —
+    // image, title, description appear inside one bubble instead of
+    // showing the photo as a separate file attachment.
+    //
+    // No `text` field: it would render as a quoted paragraph above the
+    // preview, doubling the message. No `files` field either: attaching
+    // the OG JPEG turns the share into a photo+caption combo (the user
+    // explicitly asked to keep this as a clean link preview).
+    const ogTitle = document.querySelector('meta[property="og:title"]')?.content
+      || document.title
+      || auction?.title;
+    const data = { title: ogTitle, url: shareUrl };
     if (navigator.share) {
       try {
         await navigator.share(data);
       } catch (err) {
+        // AbortError = user cancelled the native share sheet — DO
+        // NOT fall through to clipboard / prompt. Any other error
+        // means navigator.share threw before showing the sheet, so we
+        // still try clipboard as a graceful fallback.
         const name = err?.name || "";
         if (name === "AbortError" || name === "NotAllowedError") return;
       }
