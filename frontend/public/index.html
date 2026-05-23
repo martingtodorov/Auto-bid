@@ -14,7 +14,17 @@
         <meta name="author" content="autoandbid.com" />
         <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
         <meta name="googlebot" content="index, follow" />
-        <link rel="canonical" href="https://autoandbid.com/" />
+        <!-- canonical is intentionally OMITTED here. The static SPA HTML is
+             served from all three apex domains (autoandbid.bg / .com / .ro)
+             and across every internal route (/, /auctions, /auctions/{slug},
+             /sales, /leaderboard). Hard-coding a canonical to the homepage
+             caused Facebook / Viber / LinkedIn to cache EVERY auction-detail
+             share as a homepage preview. Crawlers that hit the SPA without
+             matching the social-bot UA list now fall back to using the
+             FETCHED URL as their canonical, which is the correct behaviour
+             for every route. Bots that DO match the UA list are routed to
+             /api/share/... by nginx, which emits a proper self-referencing
+             canonical per request host. -->
         <link rel="alternate" hreflang="bg" href="https://autoandbid.bg/" />
         <link rel="alternate" hreflang="ro" href="https://autoandbid.ro/" />
         <link rel="alternate" hreflang="en" href="https://autoandbid.com/" />
@@ -175,20 +185,23 @@
         <meta property="og:site_name" content="Auto&Bid" />
         <meta property="og:title" content="Auto&Bid — Подбрани автомобили. Прозрачно наддаване." />
         <meta property="og:description" content="Подбрани автомобили. Прозрачно наддаване. Открийте подбрани автомобили с подробна документация, качествени снимки и ясни условия за участие в търга." />
-        <meta property="og:image" content="https://autoandbid.bg/api/og/home.jpg" />
-        <meta property="og:image:secure_url" content="https://autoandbid.bg/api/og/home.jpg" />
+        <meta property="og:image" content="/api/og/home.jpg" />
+        <meta property="og:image:secure_url" content="/api/og/home.jpg" />
         <meta property="og:image:type" content="image/jpeg" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
         <meta property="og:image:alt" content="Auto&Bid — Подбрани автомобили. Прозрачно наддаване." />
         <meta property="og:locale" content="bg_BG" />
-        <meta property="og:url" content="https://autoandbid.bg/" />
+        <!-- og:url intentionally omitted from the static SPA HTML — same
+             reasoning as canonical above. The inline <script> at the top
+             of <head> sets it dynamically for JS-capable crawlers; bots
+             that hit nginx get the SSR endpoint's per-host og:url. -->
 
         <!-- Twitter -->
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Auto&Bid — Подбрани автомобили. Прозрачно наддаване." />
         <meta name="twitter:description" content="Подбрани автомобили. Прозрачно наддаване. Открийте подбрани автомобили с подробна документация, качествени снимки и ясни условия за участие в търга." />
-        <meta name="twitter:image" content="https://autoandbid.bg/api/og/home.jpg" />
+        <meta name="twitter:image" content="/api/og/home.jpg" />
 
         <!-- Structured Data: Organization + WebSite with SearchAction -->
         <script type="application/ld+json">
