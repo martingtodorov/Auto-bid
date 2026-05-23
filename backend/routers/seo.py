@@ -6,6 +6,7 @@ import os
 import re
 import json as _json
 import json
+from datetime import datetime, timezone
 from html import escape as _esc
 from typing import Optional
 
@@ -725,6 +726,20 @@ async def share_auction(
             image = cover if cover.startswith("http") else f"{canonical_base}{cover}"
         else:
             image = f"{canonical_base}/og-default.jpg"
+        # Append a content-hash query string so Facebook + Viber cannot
+        # reuse a stale cached preview when the auction's title / bid /
+        # cover changes. The hash lives in the filename already, so this
+        # extra `?v=` is belt-and-suspenders for platforms that compute
+        # their cache key from the og:image URL string verbatim.
+        if "?" not in image:
+            cache_token = (a.get("og_image_updated_at") or a.get("last_bid_at") or a.get("updated_at") or "")
+            if cache_token:
+                # Use first 10 chars of ISO timestamp (sec resolution) as
+                # the cache buster — short enough to keep the URL clean,
+                # specific enough to change on every meaningful update.
+                import hashlib as _hashlib
+                token = _hashlib.sha1(str(cache_token).encode()).hexdigest()[:10]
+                image = f"{image}?v={token}"
         json_ld = f'<script type="application/ld+json">{_json_ld_vehicle(a, target)}</script>'
 
     # Compose hreflang link tags.
@@ -732,6 +747,23 @@ async def share_auction(
         f'<link rel="alternate" hreflang="{code}" href="{_esc(href)}">'
         for code, href in alt_links
     )
+
+    # `og:updated_time` is the dominant signal that tells Facebook +
+    # Viber + LinkedIn to refetch a previously-cached URL. We set it to
+    # the auction's most recent mutation (last bid > publish time > now)
+    # so any state change (new bid, title edit, cover swap, OG rebuild)
+    # automatically invalidates their server-side cache without us
+    # having to hit each platform's Sharing Debugger by hand.
+    if a:
+        updated_time = (
+            a.get("og_image_updated_at")
+            or a.get("last_bid_at")
+            or a.get("published_at")
+            or a.get("updated_at")
+            or datetime.now(timezone.utc).isoformat()
+        )
+    else:
+        updated_time = datetime.now(timezone.utc).isoformat()
 
     html = f"""<!DOCTYPE html>
 <html lang="{html_lang}">
@@ -744,11 +776,18 @@ async def share_auction(
 <meta property="og:title" content="{_esc(title)}">
 <meta property="og:description" content="{_esc(description)}">
 <meta property="og:image" content="{_esc(image)}">
+<meta property="og:image:secure_url" content="{_esc(image)}">
+<meta property="og:image:type" content="image/jpeg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="{_esc(title)}">
 <meta property="og:url" content="{_esc(target)}">
 <meta property="og:locale" content="{og_locale}">
 <meta property="og:locale:alternate" content="bg_BG">
 <meta property="og:locale:alternate" content="en_US">
 <meta property="og:locale:alternate" content="ro_RO">
+<meta property="og:updated_time" content="{_esc(updated_time)}">
+<meta property="article:modified_time" content="{_esc(updated_time)}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{_esc(title)}">
 <meta name="twitter:description" content="{_esc(description)}">
@@ -763,7 +802,19 @@ async def share_auction(
 <p>Redirecting to <a href="{_esc(target)}">{_esc(target)}</a>…</p>
 </body>
 </html>"""
-    return Response(content=html, media_type="text/html; charset=utf-8")
+    # Cache-control: tell social-platform scrapers to revalidate on
+    # every fetch (max-age=0) while still letting their edge accept a
+    # cached copy for the brief moment between scrapes (s-maxage=60).
+    # Without this, FB/Viber/LinkedIn happily reuse a stale copy for
+    # weeks even after `og:updated_time` advances.
+    return Response(
+        content=html,
+        media_type="text/html; charset=utf-8",
+        headers={
+            "Cache-Control": "public, max-age=0, must-revalidate, s-maxage=60",
+            "X-Robots-Tag": "noindex",
+        },
+    )
 
 
 
@@ -907,6 +958,13 @@ async def _build_listing_ssr(
     if json_ld_extra:
         json_ld_html += f'\n<script type="application/ld+json">{json_ld_extra}</script>'
 
+    # Cache-busting og:updated_time for FB/Viber/LinkedIn — bumped to
+    # the current minute so any rescrape after a cached preview sees a
+    # fresher signal and refetches. Homepage and listing pages don't
+    # have a stable per-auction mutation timestamp, so we tick this
+    # every minute (FB rescrapes at most every 30 minutes anyway).
+    listing_updated = datetime.now(timezone.utc).replace(second=0, microsecond=0).isoformat()
+
     html = f"""<!DOCTYPE html>
 <html lang="{resolved_lang}">
 <head>
@@ -918,11 +976,17 @@ async def _build_listing_ssr(
 <meta property="og:title" content="{_esc(title)}">
 <meta property="og:description" content="{_esc(description)}">
 <meta property="og:image" content="{_esc(image)}">
+<meta property="og:image:secure_url" content="{_esc(image)}">
+<meta property="og:image:type" content="image/jpeg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="{_esc(title)}">
 <meta property="og:url" content="{_esc(target)}">
 <meta property="og:locale" content="{og_locale}">
 <meta property="og:locale:alternate" content="bg_BG">
 <meta property="og:locale:alternate" content="en_US">
 <meta property="og:locale:alternate" content="ro_RO">
+<meta property="og:updated_time" content="{_esc(listing_updated)}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{_esc(title)}">
 <meta name="twitter:description" content="{_esc(description)}">
@@ -939,7 +1003,14 @@ async def _build_listing_ssr(
 <script>window.location.replace({json.dumps(target)});</script>
 </body>
 </html>"""
-    return Response(content=html, media_type="text/html; charset=utf-8")
+    return Response(
+        content=html,
+        media_type="text/html; charset=utf-8",
+        headers={
+            "Cache-Control": "public, max-age=0, must-revalidate, s-maxage=60",
+            "X-Robots-Tag": "noindex",
+        },
+    )
 
 
 @router.get("/share/home", response_class=PlainTextResponse)
