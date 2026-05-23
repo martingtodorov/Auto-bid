@@ -30,9 +30,7 @@ export default function AuctionDetailSkeleton() {
       {/* Breadcrumbs */}
       <div className="flex items-center gap-2 mb-6">
         <Bone className="h-3 w-16" />
-        <span className="text-[hsl(var(--ink-muted))]">/</span>
         <Bone className="h-3 w-20" />
-        <span className="text-[hsl(var(--ink-muted))]">/</span>
         <Bone className="h-3 w-32" />
       </div>
 
