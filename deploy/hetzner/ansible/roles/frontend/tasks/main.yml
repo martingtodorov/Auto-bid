@@ -179,11 +179,15 @@
       tail -n 50 /etc/nginx/sites-available/autoandbid
       exit 1
     fi
-    if ! grep -qE 'proxy_pass[[:space:]]+http://ab-back1:8001/uploads/' /etc/nginx/sites-available/autoandbid; then
-      echo "FATAL: deployed config has no '/uploads/' proxy_pass to backend"
+    # Verify /uploads/ is served from disk via `alias` (current arch).
+    # Earlier audits checked for `proxy_pass /uploads/` (legacy arch
+    # where uploads round-tripped through FastAPI). The CDN vhost now
+    # aliases /opt/autobids/uploads directly for zero-backend-hop serves.
+    if ! grep -qE 'alias[[:space:]]+/opt/autobids/uploads' /etc/nginx/sites-available/autoandbid; then
+      echo "FATAL: deployed config has no 'alias /opt/autobids/uploads' for CDN /uploads/"
       exit 1
     fi
-    echo "deployed config has dedicated img.autoandbid.bg vhost + uploads proxy_pass ✓"
+    echo "deployed config has dedicated img.autoandbid.bg vhost + uploads alias ✓"
   args:
     executable: /bin/bash
   changed_when: false

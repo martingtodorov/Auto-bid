@@ -101,11 +101,13 @@
           tail -n 80 /etc/nginx/sites-available/autoandbid
           exit 1
         fi
-        if ! grep -qE 'proxy_pass[[:space:]]+http://[^[:space:]]+/uploads/' /etc/nginx/sites-available/autoandbid; then
-          echo "FATAL: deployed nginx config has no '/uploads/' proxy_pass to backend"
+        # Verify /uploads/ is served from disk via `alias` (current arch).
+        # Earlier audits checked for `proxy_pass /uploads/` (legacy arch).
+        if ! grep -qE 'alias[[:space:]]+/opt/autobids/uploads' /etc/nginx/sites-available/autoandbid; then
+          echo "FATAL: deployed nginx config has no 'alias /opt/autobids/uploads' for CDN /uploads/"
           exit 1
         fi
-        echo "deployed nginx config has CDN vhost + /uploads/ proxy_pass ✓"
+        echo "deployed nginx config has CDN vhost + /uploads/ alias ✓"
       args:
         executable: /bin/bash
       changed_when: false
