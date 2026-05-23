@@ -60,6 +60,19 @@ async def _deindex_enabled() -> bool:
     return bool(doc and doc.get("deindex_mode"))
 
 
+def _fb_app_id_tag() -> str:
+    """Emit `<meta property="fb:app_id" content="...">` when the env
+    variable is configured. Facebook's Sharing Debugger flags missing
+    `fb:app_id` as a warning; setting it links our share previews to
+    the Domain Insights dashboard for that app. Returns an empty string
+    when unset so we never emit an empty tag (which FB also rejects).
+    """
+    fb_id = (os.environ.get("FB_APP_ID") or "").strip()
+    if not fb_id:
+        return ""
+    return f'<meta property="fb:app_id" content="{_esc(fb_id)}">'
+
+
 @router.get("/robots.txt", response_class=PlainTextResponse)
 async def robots_txt(request: Request):
     """Dynamic robots.txt — flips to full Disallow when admin enables
@@ -805,6 +818,7 @@ async def share_auction(
 <meta property="og:locale:alternate" content="ro_RO">
 <meta property="og:updated_time" content="{_esc(updated_time)}">
 <meta property="article:modified_time" content="{_esc(updated_time)}">
+{_fb_app_id_tag()}
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{_esc(title)}">
 <meta name="twitter:description" content="{_esc(description)}">
@@ -1013,6 +1027,7 @@ async def _build_listing_ssr(
 <meta property="og:locale:alternate" content="en_US">
 <meta property="og:locale:alternate" content="ro_RO">
 <meta property="og:updated_time" content="{_esc(listing_updated)}">
+{_fb_app_id_tag()}
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{_esc(title)}">
 <meta name="twitter:description" content="{_esc(description)}">

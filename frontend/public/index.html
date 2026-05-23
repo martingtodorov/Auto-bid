@@ -72,9 +72,16 @@
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
         <meta property="og:image:alt" content="Auto&Bid — Подбрани автомобили. Прозрачно наддаване." />
+        <meta property="og:url" content="https://autoandbid.bg/" />
         <meta property="og:locale" content="bg_BG" />
         <meta property="og:locale:alternate" content="en_US" />
         <meta property="og:locale:alternate" content="ro_RO" />
+        <!-- fb:app_id intentionally NOT emitted in this static fallback.
+             Every real social-bot UA (FacebookExternalHit, Twitterbot,
+             LinkedInBot) is rewritten by nginx to /api/share/... which
+             injects fb:app_id from the backend's FB_APP_ID env var.
+             Hard-coding a CRA placeholder here would leak
+             `%REACT_APP_FB_APP_ID%` literal when the var is unset. -->
 
         <!-- Twitter -->
         <meta name="twitter:card" content="summary_large_image" />
