@@ -463,6 +463,41 @@ async def sitemap_images_xml(request: Request):
     return Response(content="\n".join(xml), media_type="application/xml; charset=utf-8")
 
 
+@router.get("/og/home.png")
+@router.get("/og/home.jpg")
+async def og_home_image():
+    """Homepage OG share card (1200×630 JPEG).
+
+    Renders a 2×2 grid of the current featured/active auction covers +
+    Auto&Bid brand mark. Content-addressed cached by auction-ID hash so
+    a new featured listing automatically produces a new URL (busts FB /
+    Twitter / WhatsApp preview caches without a manual sharing-debugger
+    refresh).
+    """
+    try:
+        img = await og_image.build_home_card(force=False)
+        # Fire-and-forget the persisted copy so static serving can take
+        # over on subsequent crawls.
+        try:
+            import asyncio as _aio
+            _aio.create_task(og_image.build_and_persist_home())
+        except Exception:
+            pass
+        return Response(
+            content=img,
+            media_type="image/jpeg",
+            headers={
+                "Cache-Control": "public, max-age=3600",
+                "Content-Disposition": 'inline; filename="auto-and-bid-home.jpg"',
+            },
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("og:home render failed: %s", e)
+        raise HTTPException(status_code=500, detail="OG home image render failed")
+
+
+
 @router.get("/og/auction/{auction_id}.png")
 @router.get("/og/auction/{auction_id}.jpg")
 async def og_auction_image(auction_id: str, request: Request):
@@ -774,7 +809,16 @@ async def _build_listing_ssr(
     og_locale = {"bg": "bg_BG", "en": "en_US", "ro": "ro_RO"}[resolved_lang]
     canonical_base = _canonical_base_for_lang(resolved_lang)
     target = f"{canonical_base}{page_path}"
-    image = f"{canonical_base}/og-default.jpg"
+    # Default share image: dynamic homepage card for `/` and `/auctions`
+    # (the brand-led 2×2 grid of currently-featured + most-recent active
+    # listings); listings pages without their own ItemList fall back to
+    # the same brand card. The static `/og-default.jpg` is kept only as
+    # a last-resort placeholder so the redirect-to-SPA still has SOME
+    # preview if the dynamic renderer is offline.
+    if page_key in {"home", "auctions"}:
+        image = f"{canonical_base}/api/og/home.jpg"
+    else:
+        image = f"{canonical_base}/og-default.jpg"
     tld_map = {"bg": "autoandbid.bg", "en": "autoandbid.com", "ro": "autoandbid.ro"}
     alt_links = [(code, f"https://{domain}{page_path}") for code, domain in tld_map.items()]
     alt_links.append(("x-default", f"https://{tld_map['en']}{page_path}"))

@@ -3300,6 +3300,14 @@ async def promote_finalize(auction_id: str, body: dict,
         {"session_id": session_id},
         {"$set": {"status": "activated", "activated_at": now_iso}},
     )
+    # Featured rotation changed — refresh the homepage social card so the
+    # next FB/Twitter scrape sees the new lineup. Fire-and-forget; the
+    # disk write is idempotent and cleans up older `home_*.jpg` files.
+    try:
+        from services.og_image import build_and_persist_home
+        asyncio.create_task(build_and_persist_home())
+    except Exception as e:
+        logger.warning("og:home rebuild on featured-activate failed: %s", e)
     return {"ok": True, "auction_id": auction_id}
 
 
@@ -3983,6 +3991,14 @@ async def admin_approve(auction_id: str, _admin: dict = Depends(require_admin)):
     except Exception as e:
         logger.warning("og:publish: eager build failed for %s: %s — scheduling retry", auction_id, e)
         asyncio.create_task(_retry_og_image(auction_id, delay_sec=30))
+    # Active-auction lineup changed → refresh the homepage social card.
+    # The 2×2 grid uses the most-recent published listings, so a brand-
+    # new auction must invalidate the home og:image cache too.
+    try:
+        from services.og_image import build_and_persist_home
+        asyncio.create_task(build_and_persist_home())
+    except Exception as e:
+        logger.warning("og:home rebuild on publish failed: %s", e)
     return {"ok": True}
 
 

@@ -65,6 +65,14 @@
           setLink("canonical", entry.origin + "/");
           setMeta('meta[property="og:url"]', entry.origin + "/");
           setMeta('meta[property="og:locale"]', entry.locale);
+          // Point both og:image + twitter:image at the dynamic homepage
+          // card (`/api/og/home.jpg`). Only flip when we're on the literal
+          // home route — listing/detail pages set their own image via
+          // setPageMeta and we must not override those.
+          if (location.pathname === "/" || location.pathname === "") {
+            setMeta('meta[property="og:image"]', entry.origin + "/api/og/home.jpg");
+            setMeta('meta[name="twitter:image"]', entry.origin + "/api/og/home.jpg");
+          }
 
           // Re-emit the JSON-LD Organization / WebSite block with the
           // correct domain references — keeping the @id, url and logo
@@ -111,7 +119,7 @@
         <meta property="og:site_name" content="Auto&Bid" />
         <meta property="og:title" content="Auto&Bid — Онлайн търгове за автомобили" />
         <meta property="og:description" content="Открийте изключителни автомобили на онлайн търг. Прозрачно наддаване, редакционен преглед и 60+ снимки на всяка обява." />
-        <meta property="og:image" content="/og-default.jpg" />
+        <meta property="og:image" content="/api/og/home.jpg" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
         <meta property="og:locale" content="bg_BG" />
@@ -121,7 +129,7 @@
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Auto&Bid — Онлайн търгове за автомобили" />
         <meta name="twitter:description" content="Най-добрите автомобили на търг. Редакционно подбрани, документирани и защитени." />
-        <meta name="twitter:image" content="/og-default.jpg" />
+        <meta name="twitter:image" content="/api/og/home.jpg" />
 
         <!-- Structured Data: Organization + WebSite with SearchAction -->
         <script type="application/ld+json">

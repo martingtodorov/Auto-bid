@@ -603,3 +603,227 @@ async def build_and_persist(auction: dict) -> str:
     except Exception as e:
         logger.warning("og: persist failed for %s: %s", aid, e)
         return headline_image_url(auction) or auction.get("og_image_url") or "/og-default.jpg"
+
+
+
+# ---------------------------------------------------------------------------
+# HOMEPAGE share card (1200×630).
+#
+# Layout:
+#   • Left half: 2×2 grid of square cover photos from the homepage —
+#     top row = first 2 "Featured listings", bottom row = first 2
+#     "Active auctions". Each tile is content-cropped to a square.
+#   • Right half: Auto&Bid wordmark + brand tagline:
+#       "Подбрани автомобили."           (black, big)
+#       "Прозрачно наддаване."           (emerald accent, big)
+#
+# Caching: filename embeds a sha1 of the four auction IDs (in order)
+# so the homepage card invalidates the moment featured/active line-ups
+# change. New listing rotation → new URL hash → social platform refetch.
+# ---------------------------------------------------------------------------
+
+# Layout constants for the home grid. 2×2 of square tiles with a small
+# white gutter so each car remains visually distinct (the wider 720px
+# split would smear the lower-right tile into the right panel).
+_HOME_GRID_LEFT = 40
+_HOME_GRID_TOP = 35
+_HOME_TILE = 280
+_HOME_GAP = 8
+_HOME_GRID_W = _HOME_TILE * 2 + _HOME_GAP  # 568
+_HOME_GRID_H = _HOME_TILE * 2 + _HOME_GAP  # 568
+_HOME_PANEL_X = _HOME_GRID_LEFT + _HOME_GRID_W + 40  # ≈ 648
+_HOME_PANEL_W = _W - _HOME_PANEL_X - 30
+
+
+def _square_crop(src: Image.Image, size: int) -> Image.Image:
+    """Center-crop `src` to a square `size×size` thumbnail (RGBA)."""
+    if src.mode != "RGBA":
+        src = src.convert("RGBA")
+    short = min(src.width, src.height)
+    left = (src.width - short) // 2
+    top = (src.height - short) // 2
+    sq = src.crop((left, top, left + short, top + short))
+    return sq.resize((size, size), Image.LANCZOS)
+
+
+def _placeholder_tile(size: int) -> Image.Image:
+    """Solid emerald-soft placeholder for tiles with no available photo."""
+    t = Image.new("RGBA", (size, size), _ACCENT_SOFT + (255,))
+    d = ImageDraw.Draw(t)
+    # Tiny watermark logo so the placeholder doesn't look broken.
+    f = _font("Manrope-Bold.ttf", 36)
+    txt = "A&B"
+    w = d.textlength(txt, font=f)
+    d.text(((size - int(w)) // 2, (size - 36) // 2 - 4), txt, font=f, fill=_ACCENT + (220,))
+    return t
+
+
+def _compose_home_image(cover_bytes_list: list[Optional[bytes]]) -> bytes:
+    """Render the homepage share card. `cover_bytes_list` is a list of 4
+    optional PNG/JPEG byte strings; missing/failed entries fall back to
+    the placeholder tile."""
+    canvas = Image.new("RGBA", (_W, _H), _BG + (255,))
+    draw = ImageDraw.Draw(canvas)
+
+    # --- LEFT: 2×2 grid -------------------------------------------------
+    for idx in range(4):
+        col, row = idx % 2, idx // 2
+        x = _HOME_GRID_LEFT + col * (_HOME_TILE + _HOME_GAP)
+        y = _HOME_GRID_TOP + row * (_HOME_TILE + _HOME_GAP)
+        tile_bytes = cover_bytes_list[idx] if idx < len(cover_bytes_list) else None
+        tile_img: Image.Image
+        if tile_bytes:
+            try:
+                tile_img = _square_crop(Image.open(io.BytesIO(tile_bytes)), _HOME_TILE)
+            except Exception as e:
+                logger.warning("og:home tile decode failed (idx=%d): %s", idx, e)
+                tile_img = _placeholder_tile(_HOME_TILE)
+        else:
+            tile_img = _placeholder_tile(_HOME_TILE)
+        canvas.paste(tile_img, (x, y))
+
+    # --- RIGHT: brand panel --------------------------------------------
+    panel_cx = _HOME_PANEL_X + _HOME_PANEL_W // 2
+
+    # Auto&Bid wordmark — extra-large since the home card is brand-led
+    logo_font = _font("Manrope-Bold.ttf", 88)
+    left_text, amp_text, right_text = "Auto", "&", "Bid"
+    lw = draw.textlength(left_text, font=logo_font)
+    aw = draw.textlength(amp_text, font=logo_font)
+    rw = draw.textlength(right_text, font=logo_font)
+    total_logo_w = lw + aw + rw
+    logo_x = panel_cx - int(total_logo_w) // 2
+    logo_y = 200
+    draw.text((logo_x, logo_y), left_text, font=logo_font, fill=_INK)
+    draw.text((logo_x + lw, logo_y), amp_text, font=logo_font, fill=_AMP_GREEN)
+    draw.text((logo_x + lw + aw, logo_y), right_text, font=logo_font, fill=_INK)
+
+    # Tagline lines — match the on-site hero copy.
+    tag_font = _font("Manrope-Bold.ttf", 36)
+    tag1 = "Подбрани автомобили."
+    tag2 = "Прозрачно наддаване."
+    t1w = draw.textlength(tag1, font=tag_font)
+    t2w = draw.textlength(tag2, font=tag_font)
+    tag1_y = logo_y + 130
+    tag2_y = tag1_y + 50
+    draw.text((panel_cx - int(t1w) // 2, tag1_y), tag1, font=tag_font, fill=_INK)
+    draw.text((panel_cx - int(t2w) // 2, tag2_y), tag2, font=tag_font, fill=_ACCENT)
+
+    buf = io.BytesIO()
+    canvas.convert("RGB").save(
+        buf, "JPEG", quality=88, optimize=True, progressive=True, subsampling=1,
+    )
+    return buf.getvalue()
+
+
+async def _pick_home_auctions(limit_each: int = 2) -> list[dict]:
+    """Resolve the 4 auctions the homepage card should reference.
+
+    Order: first `limit_each` featured live listings, then `limit_each`
+    most-recently-published live listings that aren't already in the
+    featured slice (avoids duplicate tiles when a featured car is also
+    the newest). The function imports `db` lazily so this module stays
+    importable from contexts that haven't initialised the Mongo client.
+    """
+    from deps import db
+    featured_cur = db.auctions.find(
+        {"status": "live", "featured": True},
+        {"_id": 0, "id": 1, "thumbnails": 1, "images": 1, "title": 1},
+    ).sort("published_at", -1).limit(limit_each)
+    featured = await featured_cur.to_list(limit_each)
+    seen = {a["id"] for a in featured}
+    needed = max(0, 4 - len(featured))  # if fewer featured exist, fill from active
+    if needed > 0:
+        active_cur = db.auctions.find(
+            {"status": "live", "id": {"$nin": list(seen)}},
+            {"_id": 0, "id": 1, "thumbnails": 1, "images": 1, "title": 1},
+        ).sort("published_at", -1).limit(needed)
+        active = await active_cur.to_list(needed)
+    else:
+        active = []
+    return (featured + active)[:4]
+
+
+def _home_cache_key(auctions: list[dict]) -> str:
+    """Cache key from the ordered list of auction IDs in the card."""
+    raw = "|".join((a.get("id") or "") for a in auctions) + ":home:v2"
+    return hashlib.sha1(raw.encode()).hexdigest()[:16]
+
+
+async def build_home_card(force: bool = False) -> bytes:
+    """Render (or read from cache) the homepage share card bytes."""
+    auctions = await _pick_home_auctions(limit_each=2)
+    key = _home_cache_key(auctions)
+    cache_path = os.path.join(_CACHE_DIR, f"home_{key}.{_OG_EXT}")
+    if not force and os.path.exists(cache_path) and (time.time() - os.path.getmtime(cache_path) < _CACHE_TTL_SEC):
+        try:
+            with open(cache_path, "rb") as f:
+                return f.read()
+        except Exception:
+            pass
+
+    # Fetch covers in parallel — saves ~3x compared to sequential gets
+    # when all four tiles need the cluster-internal localhost round-trip.
+    cover_urls = []
+    for a in auctions:
+        url = (a.get("thumbnails") or a.get("images") or [None])[0]
+        cover_urls.append(url)
+    # Pad to 4 if we got fewer auctions
+    while len(cover_urls) < 4:
+        cover_urls.append(None)
+    cover_bytes_list = await asyncio.gather(
+        *[_fetch_image(u) if u else asyncio.sleep(0, result=None) for u in cover_urls]
+    )
+
+    img = await asyncio.to_thread(_compose_home_image, cover_bytes_list)
+    try:
+        with open(cache_path, "wb") as f:
+            f.write(img)
+    except Exception as e:
+        logger.debug("og: home cache write failed: %s", e)
+    return img
+
+
+async def build_and_persist_home() -> str:
+    """Generate the homepage card and persist it under
+    `<UPLOAD_DIR>/og/home_{hash}.jpg`. Returns the public URL.
+
+    Called eagerly when featured/active line-up changes (admin toggles
+    `featured`, publishes a new auction, finalises one) and lazily by
+    the SSR share route as a fallback if `og_image_home` is missing.
+    """
+    auctions = await _pick_home_auctions(limit_each=2)
+    if not auctions:
+        return "/og-default.jpg"  # nothing to render — keep static fallback
+    key = _home_cache_key(auctions)
+    uploads_root = _uploads_root()
+    og_dir = os.path.join(uploads_root, "og")
+    try:
+        os.makedirs(og_dir, exist_ok=True)
+    except Exception as e:
+        logger.warning("og:home cannot create %s: %s", og_dir, e)
+        return "/og-default.jpg"
+
+    fname = f"home_{key}.{_OG_EXT}"
+    fpath = os.path.join(og_dir, fname)
+    public_url = f"{_uploads_public_base().rstrip('/')}/og/{fname}"
+    if os.path.exists(fpath) and (time.time() - os.path.getmtime(fpath) < _CACHE_TTL_SEC):
+        return public_url
+    try:
+        img = await build_home_card(force=False)
+        with open(fpath, "wb") as f:
+            f.write(img)
+        # Cleanup older home_*.jpg files so we don't accumulate stale rotations
+        try:
+            for entry in os.listdir(og_dir):
+                if entry.startswith("home_") and entry != fname:
+                    try:
+                        os.remove(os.path.join(og_dir, entry))
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        return public_url
+    except Exception as e:
+        logger.warning("og:home persist failed: %s", e)
+        return "/og-default.jpg"
