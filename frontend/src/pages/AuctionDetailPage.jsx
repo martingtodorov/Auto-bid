@@ -1961,12 +1961,41 @@ function CommentItem({ c, t, i18nLang, isAdmin, onDelete }) {
 function ShareButton({ auction }) {
   const { t } = useTranslation();
   const [copied, setCopied] = React.useState(false);
-  // Use the canonical SEO-friendly slug URL — `/auctions/<slug>-<short-id>`.
-  // Social crawlers hitting this path are routed by the backend
-  // `social_bot_share_middleware` to the OG-rich `/api/share/auction/{id}`
-  // handler, so they still get the title + description + OG image; real
-  // users get the React SPA. End URL stays clean and shareable.
-  const shareUrl = `${window.location.origin}${auctionUrl(auction)}`;
+  // Build a share URL that includes a content-keyed cache-buster query
+  // string. Facebook + Viber + LinkedIn use the full URL (query string
+  // INCLUDED) as their OG cache key — so when a buyer or seller hits
+  // Share after a new bid / title edit / cover swap, the URL is unique
+  // enough that none of those platforms can serve a stale preview.
+  //
+  // The hash derives from the auction's mutation timestamps (bid → title
+  // → updated → published, whichever exists), so the same URL re-shared
+  // moments later resolves to the SAME query string — preventing a
+  // separate cache entry for every share click while still busting the
+  // platform's previous cache the moment auction state changes.
+  //
+  // The React SPA ignores `?v=...`, so click-throughs land on the same
+  // detail page; only social crawlers see the differentiated URL.
+  const shareUrl = React.useMemo(() => {
+    const base = `${window.location.origin}${auctionUrl(auction)}`;
+    const seed = String(
+      auction?.og_image_updated_at ||
+      auction?.last_bid_at ||
+      auction?.updated_at ||
+      auction?.published_at ||
+      auction?.id ||
+      ""
+    );
+    // Tiny non-crypto hash — fnv-1a-style, 32 bits, base36. Six chars
+    // is enough entropy for OG cache differentiation and keeps the
+    // displayed share link compact.
+    let h = 2166136261;
+    for (let i = 0; i < seed.length; i++) {
+      h ^= seed.charCodeAt(i);
+      h = (h * 16777619) >>> 0;
+    }
+    const token = (h >>> 0).toString(36).slice(0, 6);
+    return token ? `${base}?v=${token}` : base;
+  }, [auction]);
 
   const share = async () => {
     const ogTitle = document.querySelector('meta[property="og:title"]')?.content
