@@ -16,6 +16,7 @@ import Avatar from "../components/Avatar";
 import { useSiteSettings, computeBuyerFee } from "../lib/settings";
 import { setPageMeta, resetPageMeta, buildVehicleJsonLd, buildBreadcrumbs, combineJsonLd } from "../lib/seo";
 import AuctionVideo from "../components/AuctionVideo";
+import AuctionDetailSkeleton from "../components/AuctionDetailSkeleton";
 import { brandNameForLang } from "../i18n/index";
 import { auctionUrl } from "../lib/auctionUrl";
 
@@ -573,7 +574,7 @@ export default function AuctionDetailPage() {
       <Link to="/auctions" className="btn btn-primary mt-8 inline-flex">Към всички търгове</Link>
     </main>
   );
-  if (!a) return <div className="py-24 text-center">{t("common.loading")}</div>;
+  if (!a) return <AuctionDetailSkeleton />;
 
   const lng = i18n.language;
   const specs = [

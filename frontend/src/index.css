@@ -603,6 +603,21 @@ html[data-theme="dark"] .pill-vat {
     100% { box-shadow: 0 0 0 0 hsl(var(--accent) / 0); }
 }
 
+/* Skeleton loader — gentle 1.4s shimmer applied to every `.bg-[hsl(var(--surface))]`
+ * inside an `.ab-skeleton` container. We pulse opacity (not box-shadow or
+ * background-position) so it animates on the compositor thread without
+ * triggering layout/paint on the entire page. */
+.ab-skeleton [aria-hidden="true"] {
+    animation: ab-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes ab-skeleton-shimmer {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 0.85; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .ab-skeleton [aria-hidden="true"] { animation: none; opacity: 0.7; }
+}
+
 /* Animations */
 .fade-up { animation: fadeUp .8s cubic-bezier(0.4, 0, 0.2, 1) both; }
 @keyframes fadeUp {
