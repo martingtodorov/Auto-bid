@@ -622,17 +622,18 @@ async def build_and_persist(auction: dict) -> str:
 # change. New listing rotation → new URL hash → social platform refetch.
 # ---------------------------------------------------------------------------
 
-# Layout constants for the home grid. 2×2 of square tiles with a small
-# white gutter so each car remains visually distinct (the wider 720px
-# split would smear the lower-right tile into the right panel).
-_HOME_GRID_LEFT = 40
-_HOME_GRID_TOP = 35
-_HOME_TILE = 280
-_HOME_GAP = 8
-_HOME_GRID_W = _HOME_TILE * 2 + _HOME_GAP  # 568
-_HOME_GRID_H = _HOME_TILE * 2 + _HOME_GAP  # 568
-_HOME_PANEL_X = _HOME_GRID_LEFT + _HOME_GRID_W + 40  # ≈ 648
-_HOME_PANEL_W = _W - _HOME_PANEL_X - 30
+# Layout constants for the home grid. 2×2 of square tiles that bleed all
+# the way to the canvas edges on the LEFT half — no margin, no gutter.
+# The right panel starts exactly at the grid edge, so the brand block
+# gets the full remaining width.
+_HOME_GRID_LEFT = 0
+_HOME_GRID_TOP = 0
+_HOME_TILE = 315               # 1200×630 → half-height tile is square at 315
+_HOME_GAP = 0
+_HOME_GRID_W = _HOME_TILE * 2  # 630
+_HOME_GRID_H = _HOME_TILE * 2  # 630 — full canvas height
+_HOME_PANEL_X = _HOME_GRID_W   # 630
+_HOME_PANEL_W = _W - _HOME_PANEL_X  # 570
 
 
 def _square_crop(src: Image.Image, size: int) -> Image.Image:
@@ -699,13 +700,13 @@ def _compose_home_image(cover_bytes_list: list[Optional[bytes]]) -> bytes:
     draw.text((logo_x + lw + aw, logo_y), right_text, font=logo_font, fill=_INK)
 
     # Tagline lines — match the on-site hero copy.
-    tag_font = _font("Manrope-Bold.ttf", 36)
+    tag_font = _font("Manrope-Bold.ttf", 44)
     tag1 = "Подбрани автомобили."
     tag2 = "Прозрачно наддаване."
     t1w = draw.textlength(tag1, font=tag_font)
     t2w = draw.textlength(tag2, font=tag_font)
     tag1_y = logo_y + 130
-    tag2_y = tag1_y + 50
+    tag2_y = tag1_y + 60
     draw.text((panel_cx - int(t1w) // 2, tag1_y), tag1, font=tag_font, fill=_INK)
     draw.text((panel_cx - int(t2w) // 2, tag2_y), tag2, font=tag_font, fill=_ACCENT)
 
@@ -746,7 +747,7 @@ async def _pick_home_auctions(limit_each: int = 2) -> list[dict]:
 
 def _home_cache_key(auctions: list[dict]) -> str:
     """Cache key from the ordered list of auction IDs in the card."""
-    raw = "|".join((a.get("id") or "") for a in auctions) + ":home:v2"
+    raw = "|".join((a.get("id") or "") for a in auctions) + ":home:v3"
     return hashlib.sha1(raw.encode()).hexdigest()[:16]
 
 
