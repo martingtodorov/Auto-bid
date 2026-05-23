@@ -14,152 +14,20 @@
         <meta name="author" content="autoandbid.com" />
         <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
         <meta name="googlebot" content="index, follow" />
-        <!-- canonical is intentionally OMITTED here. The static SPA HTML is
-             served from all three apex domains (autoandbid.bg / .com / .ro)
-             and across every internal route (/, /auctions, /auctions/{slug},
-             /sales, /leaderboard). Hard-coding a canonical to the homepage
-             caused Facebook / Viber / LinkedIn to cache EVERY auction-detail
-             share as a homepage preview. Crawlers that hit the SPA without
-             matching the social-bot UA list now fall back to using the
-             FETCHED URL as their canonical, which is the correct behaviour
-             for every route. Bots that DO match the UA list are routed to
-             /api/share/... by nginx, which emits a proper self-referencing
-             canonical per request host. -->
+        <!-- canonical / og:url / og:locale are intentionally OMITTED from
+             this static SPA HTML. Every non-trivial crawler (Facebook,
+             Twitter, LinkedIn, Bing, Slack, Discord, Apple News, etc.)
+             is routed by nginx through `/api/share/...` SSR endpoints
+             which emit per-host canonical + per-language `og:locale` +
+             absolute `og:image` URLs + `<link rel="alternate" hreflang>`
+             pointers to the same listing on the sibling TLDs.
+
+             We do NOT rely on client-side JS to patch these tags at
+             runtime. Social-bot scrapers don't execute JavaScript. -->
         <link rel="alternate" hreflang="bg" href="https://autoandbid.bg/" />
         <link rel="alternate" hreflang="ro" href="https://autoandbid.ro/" />
         <link rel="alternate" hreflang="en" href="https://autoandbid.com/" />
         <link rel="alternate" hreflang="x-default" href="https://autoandbid.com/" />
-
-        <!-- ──────────────────────────────────────────────────────────────────
-             Per-domain canonical / og:url / og:locale rewrite.
-
-             Without this script, the static markup above hardcodes a `.com`
-             canonical because the build pipeline emits ONE index.html that
-             is then served from all three apex domains. That makes Google
-             treat `.bg` and `.ro` as duplicates of `.com` — the opposite of
-             what a geo-targeted multi-domain setup needs.
-
-             We patch the four signals SYNCHRONOUSLY (no `defer`, no DOM
-             ready wait) so Google's render-pass scan and any crawler that
-             executes JS sees the correct self-referencing canonical for the
-             domain they actually fetched. Static-only crawlers still go
-             through nginx's UA-gated SSR fallback at `/api/share/...`
-             which emits its own per-host canonical.
-
-             Domain map:
-               autoandbid.bg → canonical=self,  og:locale=bg_BG
-               autoandbid.ro → canonical=self,  og:locale=ro_RO
-               autoandbid.com / preview / dev → keep .com as canonical,
-                 og:locale stays bg_BG (the initial UI bootstrap language).
-             ───────────────────────────────────────────────────────────── -->
-        <script>
-        (function () {
-          var host = location.host.replace(/^www\./, "");
-          var map = {
-            "autoandbid.bg": { origin: "https://autoandbid.bg", locale: "bg_BG" },
-            "autoandbid.ro": { origin: "https://autoandbid.ro", locale: "ro_RO" },
-            "autoandbid.com": { origin: "https://autoandbid.com", locale: "en_US" }
-          };
-          // For preview / dev / unknown hosts we still need to patch the
-          // OG meta so iOS share sheet + Discord webhooks + any JS-capable
-          // crawler can resolve the absolute image URL against the page
-          // they actually fetched (not the hardcoded autoandbid.bg).
-          var entry = map[host] || { origin: location.origin, locale: "bg_BG" };
-
-          var setLink = function (rel, href) {
-            var el = document.querySelector('link[rel="' + rel + '"]');
-            if (el) el.href = href;
-          };
-          var setMeta = function (sel, val) {
-            var el = document.querySelector(sel);
-            if (el) el.setAttribute("content", val);
-          };
-
-          setLink("canonical", entry.origin + location.pathname + location.search);
-          setMeta('meta[property="og:url"]', entry.origin + location.pathname + location.search);
-          setMeta('meta[property="og:locale"]', entry.locale);
-
-          // ── Route-aware OG image + title + description ──────────────────
-          // For non-bot crawlers (iOS share sheet preview, email link
-          // unfurl, Discord webhooks, etc.) we cannot rely on Nginx's
-          // UA-gated SSR — they hit the static SPA HTML directly. Patch
-          // the OG signals synchronously based on the URL so the share
-          // preview still resolves to the correct asset.
-          var path = location.pathname.replace(/\/+$/, "") || "/";
-          var homeTitle, homeDesc;
-          if (entry.locale === "bg_BG") {
-            homeTitle = "Auto&Bid — Подбрани автомобили. Прозрачно наддаване.";
-            homeDesc = "Подбрани автомобили. Прозрачно наддаване. Открийте подбрани автомобили с подробна документация, качествени снимки и ясни условия за участие в търга.";
-          } else if (entry.locale === "ro_RO") {
-            homeTitle = "Auto&Bid — Mașini selectate. Licitare transparentă.";
-            homeDesc = "Mașini selectate. Licitare transparentă. Descoperă mașini selectate cu documentație detaliată, fotografii de calitate și condiții clare de licitare.";
-          } else {
-            homeTitle = "Auto&Bid — Curated cars. Transparent bidding.";
-            homeDesc = "Curated cars. Transparent bidding. Browse curated cars with detailed documentation, quality photos and clear auction terms.";
-          }
-          if (path === "" || path === "/" || path === "/auctions" || path.indexOf("/auctions?") === 0) {
-            // Homepage AND the /auctions index share the same 2×2 brand
-            // card. Both pages are brand-led "marketplace overview"
-            // surfaces — using one card keeps the social preview
-            // recognisable across them.
-            setMeta('meta[property="og:image"]', entry.origin + "/api/og/home.jpg");
-            setMeta('meta[property="og:image:secure_url"]', entry.origin + "/api/og/home.jpg");
-            setMeta('meta[name="twitter:image"]', entry.origin + "/api/og/home.jpg");
-            setMeta('meta[property="og:title"]', homeTitle);
-            setMeta('meta[name="twitter:title"]', homeTitle);
-            setMeta('meta[property="og:description"]', homeDesc);
-            setMeta('meta[name="twitter:description"]', homeDesc);
-            document.title = homeTitle;
-          } else {
-            var m = path.match(/^\/auctions\/([^/]+)$/);
-            if (m) {
-              // `/auctions/<slug>` — point OG image at the per-auction
-              // generator (it 302-redirects to the persisted card).
-              var slug = m[1];
-              setMeta('meta[property="og:image"]', entry.origin + "/api/og/auction/" + slug + ".jpg");
-              setMeta('meta[property="og:image:secure_url"]', entry.origin + "/api/og/auction/" + slug + ".jpg");
-              setMeta('meta[name="twitter:image"]', entry.origin + "/api/og/auction/" + slug + ".jpg");
-              // Title: best-effort derive from the slug — strip the
-              // hex suffix and title-case the remaining words. React
-              // will replace this with the precise localised title as
-              // soon as it boots (so this only matters for crawlers
-              // that don't execute JS — they get a sensible fallback
-              // instead of the generic homepage title).
-              var bare = slug.replace(/-([a-f0-9]{6,12})$/i, "").replace(/-/g, " ").trim();
-              if (bare) {
-                var titled = bare.replace(/\b\w/g, function (c) { return c.toUpperCase(); }) + " — Auto&Bid";
-                document.title = titled;
-                setMeta('meta[property="og:title"]', titled);
-                setMeta('meta[name="twitter:title"]', titled);
-              }
-            }
-          }
-
-          // Re-emit the JSON-LD Organization / WebSite block with the
-          // correct domain references — keeping the @id, url and logo
-          // strings aligned with the canonical host is required for
-          // Google to merge ranking signals across the graph.
-          var existing = document.querySelector('script[type="application/ld+json"]');
-          if (existing) {
-            try {
-              var data = JSON.parse(existing.textContent);
-              var fix = function (o) {
-                if (!o || typeof o !== "object") return;
-                Object.keys(o).forEach(function (k) {
-                  var v = o[k];
-                  if (typeof v === "string" && v.indexOf("https://autoandbid.com") === 0) {
-                    o[k] = entry.origin + v.slice("https://autoandbid.com".length);
-                  } else if (typeof v === "object") {
-                    fix(v);
-                  }
-                });
-              };
-              fix(data);
-              existing.textContent = JSON.stringify(data);
-            } catch (e) { /* ignore — safe to leave stale */ }
-          }
-        })();
-        </script>
 
         <!-- Favicon — multi-size -->
         <link rel="icon" href="/favicon.ico" sizes="any" />
@@ -175,33 +43,44 @@
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="Auto&Bid" />
 
-        <!-- Open Graph — defaults below are absolute URLs pointing at the
-             primary BG domain so non-JS social crawlers (Facebook, WhatsApp,
-             LinkedIn) get a valid preview even when they hit the static SPA
-             HTML directly. The inline script in <head> above rewrites these
-             at runtime for `.com` / `.ro` visitors and for non-home routes
-             (auction detail pages set their own meta via setPageMeta). -->
+        <!-- ──────────────────────────────────────────────────────────────────
+             Open Graph fallback (absolute URLs, BG canonical domain).
+
+             These tags are ONLY seen by:
+               • iOS share-sheet preview generator (which fetches the SPA
+                 HTML before any UA-gated nginx routing kicks in).
+               • Email link unfurlers that do not match nginx's
+                 `$is_social_bot` regex.
+               • Raw curl / debug tools hitting the SPA directly.
+
+             Every real social-bot UA (FacebookExternalHit, Twitterbot,
+             LinkedInBot, Slackbot, etc.) is rewritten by nginx to the
+             per-route `/api/share/...` SSR endpoint which emits richer,
+             locale-aware meta (see `backend/routers/seo.py`).
+
+             Absolute URLs are mandatory here: Facebook explicitly
+             rejects relative paths like `/api/og/home.jpg` with the
+             "not a valid URL" error.
+             ───────────────────────────────────────────────────────── -->
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="Auto&Bid" />
         <meta property="og:title" content="Auto&Bid — Подбрани автомобили. Прозрачно наддаване." />
         <meta property="og:description" content="Подбрани автомобили. Прозрачно наддаване. Открийте подбрани автомобили с подробна документация, качествени снимки и ясни условия за участие в търга." />
-        <meta property="og:image" content="/api/og/home.jpg" />
-        <meta property="og:image:secure_url" content="/api/og/home.jpg" />
+        <meta property="og:image" content="https://autoandbid.bg/api/og/home.jpg" />
+        <meta property="og:image:secure_url" content="https://autoandbid.bg/api/og/home.jpg" />
         <meta property="og:image:type" content="image/jpeg" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
         <meta property="og:image:alt" content="Auto&Bid — Подбрани автомобили. Прозрачно наддаване." />
         <meta property="og:locale" content="bg_BG" />
-        <!-- og:url intentionally omitted from the static SPA HTML — same
-             reasoning as canonical above. The inline <script> at the top
-             of <head> sets it dynamically for JS-capable crawlers; bots
-             that hit nginx get the SSR endpoint's per-host og:url. -->
+        <meta property="og:locale:alternate" content="en_US" />
+        <meta property="og:locale:alternate" content="ro_RO" />
 
         <!-- Twitter -->
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Auto&Bid — Подбрани автомобили. Прозрачно наддаване." />
         <meta name="twitter:description" content="Подбрани автомобили. Прозрачно наддаване. Открийте подбрани автомобили с подробна документация, качествени снимки и ясни условия за участие в търга." />
-        <meta name="twitter:image" content="/api/og/home.jpg" />
+        <meta name="twitter:image" content="https://autoandbid.bg/api/og/home.jpg" />
 
         <!-- Structured Data: Organization + WebSite with SearchAction -->
         <script type="application/ld+json">

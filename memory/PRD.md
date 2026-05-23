@@ -357,6 +357,36 @@ Testing: 33/35 backend + 100% frontend = 94% ✅ (`iteration_5.json`). 2 skipped
 
 ---
 
+## 2026-05-23 — Facebook OG fix: премахнат JS hack, само server-side (DONE)
+
+**Проблем**: Facebook Sharing Debugger хвърляше "Provided og:image URL, /api/og/home.jpg was not a valid URL" — статичното `index.html` имаше relative paths за `og:image`, а JS hack-ът, който ги правеше абсолютни, никога не се изпълняваше (ботовете не пускат JS).
+
+**Решение**: Изхвърлен целият inline `<script>` от `index.html`. Статичните OG/Twitter тагове сега са с твърдо записани абсолютни URL-и (`https://autoandbid.bg/api/og/home.jpg`).
+
+**Защита в дълбочина**:
+- За всеки реален social-bot (FB, Twitter, LinkedIn, Slack, Discord, Bing) nginx вече рутира към `/api/share/...` SSR endpoint-ите.
+- SSR-ът връща:
+  - `og:image` → абсолютен URL към персистираното 1200×630 JPEG (`https://autoandbid.{bg,com,ro}/api/uploads/og/...`)
+  - `og:title` → локализиран през Gemini (BG/EN/RO) — кеширан в `auction.title_<lang>`
+  - `og:description` → локализиран SEO snippet (`auction.seo_description_<lang>`, 280 chars) — кеширан в DB при admin approve
+  - `og:locale` → `bg_BG` / `en_US` / `ro_RO`
+  - `<link rel="alternate" hreflang>` към същата обява на трите TLD
+- Locale-aware Gemini SEO translations: `_ensure_seo_translations` в `server.py` се вика при approve и идемпотентно генерира `title_<lang>` + `seo_description_<lang>` за RO + EN. BG идва директно от seller-а.
+
+**Тест curl** (без Host override, с `?lang=` параметър):
+- `/api/share/home?lang=bg` → `og:image=https://autoandbid.bg/api/uploads/og/home_8989ff95....jpg`, `og:locale=bg_BG`
+- `/api/share/home?lang=en` → `og:image=https://autoandbid.com/...`, `og:locale=en_US`, title „Online car auctions"
+- `/api/share/home?lang=ro` → `og:image=https://autoandbid.ro/...`, `og:locale=ro_RO`, title „Licitații online pentru mașini"
+- `/api/share/auction/{uuid}?lang=bg` → „Търг BMW M2 Competition — autoandbid.bg" + абсолютен персистиран image URL
+- `/api/share/auction/{uuid}?lang=en` → „Auction BMW M2 Competition — autoandbid.com"
+- `/api/share/auction/{uuid}?lang=ro` → „Licitație BMW M2 Competition — autoandbid.ro"
+
+**Файлове**:
+- `frontend/public/index.html` — премахнат целият `<script>` блок (≈110 реда), статичните OG тагове сега са с абсолютни URLs.
+- `backend/routers/seo.py` — без промени, вече беше коректен.
+
+---
+
 ## 2026-02-23 — Rich Price / Rich Snippets за SEO (DONE)
 **Цел**: По-силна индексация в Google и показване на Rich Snippets (цена, наличност) за всяка страница на търг.
 
