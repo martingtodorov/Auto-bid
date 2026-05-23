@@ -468,21 +468,32 @@ async def sitemap_images_xml(request: Request):
 async def og_home_image():
     """Homepage OG share card (1200×630 JPEG).
 
-    Renders a 2×2 grid of the current featured/active auction covers +
-    Auto&Bid brand mark. Content-addressed cached by auction-ID hash so
-    a new featured listing automatically produces a new URL (busts FB /
-    Twitter / WhatsApp preview caches without a manual sharing-debugger
-    refresh).
+    Redirects to the persisted, content-addressed file under
+    `/api/uploads/og/home_{hash}.jpg`. The persisted file is served by
+    Nginx directly as a static asset — much faster than re-rendering on
+    every crawl, and the URL changes whenever the featured/active
+    rotation changes so social platforms naturally refresh their cache
+    (same pattern as per-auction `og_image_url` on detail pages).
+
+    If persistence fails, we fall back to rendering inline so the
+    preview is never broken.
     """
     try:
+        persisted_url = await og_image.build_and_persist_home()
+        if persisted_url and persisted_url.startswith("/"):
+            # Relative path — issue a 302 so the social crawler follows
+            # it and caches the persisted URL as the canonical og:image.
+            return RedirectResponse(url=persisted_url, status_code=302)
+        # Absolute URL (rare path: storage backend in S3/CDN mode)
+        if persisted_url and persisted_url.startswith("http"):
+            return RedirectResponse(url=persisted_url, status_code=302)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("og:home persist failed, falling back to inline render: %s", e)
+
+    # Fallback: render and serve inline so the preview is never broken.
+    try:
         img = await og_image.build_home_card(force=False)
-        # Fire-and-forget the persisted copy so static serving can take
-        # over on subsequent crawls.
-        try:
-            import asyncio as _aio
-            _aio.create_task(og_image.build_and_persist_home())
-        except Exception:
-            pass
         return Response(
             content=img,
             media_type="image/jpeg",
@@ -493,7 +504,7 @@ async def og_home_image():
         )
     except Exception as e:
         import logging
-        logging.getLogger(__name__).warning("og:home render failed: %s", e)
+        logging.getLogger(__name__).warning("og:home inline render failed: %s", e)
         raise HTTPException(status_code=500, detail="OG home image render failed")
 
 
@@ -536,16 +547,21 @@ async def og_auction_image(auction_id: str, request: Request):
             )
     if not a:
         raise HTTPException(status_code=404, detail="Auction not found")
+    # Same pattern as `/api/og/home.jpg` — return a 302 to the persisted,
+    # content-addressed file so social crawlers cache the right URL. The
+    # persisted file has a hash-suffix that automatically busts the cache
+    # when the bid / title / cover changes.
+    try:
+        persisted_url = await og_image.build_and_persist(a)
+        if persisted_url and persisted_url.startswith("/"):
+            return RedirectResponse(url=persisted_url, status_code=302)
+        if persisted_url and persisted_url.startswith("http"):
+            return RedirectResponse(url=persisted_url, status_code=302)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("og:auction persist failed, falling back: %s", e)
     try:
         png = await og_image.build_or_cache(a)
-        # Fire-and-forget the persisted copy so static serving can take
-        # over on subsequent crawls. We don't await it on the hot path
-        # because the in-memory bytes are already ready to ship.
-        try:
-            import asyncio as _aio
-            _aio.create_task(og_image.build_and_persist(a))
-        except Exception:
-            pass
         return Response(
             content=png,
             media_type="image/jpeg",
@@ -834,15 +850,29 @@ async def _build_listing_ssr(
     og_locale = {"bg": "bg_BG", "en": "en_US", "ro": "ro_RO"}[resolved_lang]
     canonical_base = _canonical_base_for_lang(resolved_lang)
     target = f"{canonical_base}{page_path}"
-    # Default share image: dynamic homepage card for `/` and `/auctions`
-    # (the brand-led 2×2 grid of currently-featured + most-recent active
-    # listings); listings pages without their own ItemList fall back to
-    # the same brand card. The static `/og-default.jpg` is kept only as
-    # a last-resort placeholder so the redirect-to-SPA still has SOME
-    # preview if the dynamic renderer is offline.
+    # OG image: for the home + auctions index we use the PERSISTED home
+    # share card (same pattern as per-auction images on detail pages —
+    # `og_image_url` points to `/api/uploads/og/{id}_{hash}.jpg`, a
+    # content-addressed file served as a static asset by Nginx). The
+    # hash changes whenever the featured/active rotation changes, so
+    # social platforms detect new content and refresh their cache
+    # automatically — exactly how it works for bidding updates on
+    # auction detail pages. Listings pages without their own ItemList
+    # fall back to the static `/og-default.jpg` as a last resort.
+    image = None
     if page_key in {"home", "auctions"}:
-        image = f"{canonical_base}/api/og/home.jpg"
-    else:
+        try:
+            persisted_url = await og_image.build_and_persist_home()
+            # `persisted_url` is a relative path (e.g. /api/uploads/og/home_xxx.jpg).
+            # Convert to absolute so Facebook + LinkedIn + WhatsApp don't reject it.
+            if persisted_url.startswith("http"):
+                image = persisted_url
+            elif persisted_url.startswith("/"):
+                image = f"{canonical_base}{persisted_url}"
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("og:home persist failed during SSR: %s", e)
+    if not image:
         image = f"{canonical_base}/og-default.jpg"
     tld_map = {"bg": "autoandbid.bg", "en": "autoandbid.com", "ro": "autoandbid.ro"}
     alt_links = [(code, f"https://{domain}{page_path}") for code, domain in tld_map.items()]
