@@ -786,13 +786,24 @@ async def share_auction(
     # it picked up the OLD homepage canonical from the static SPA HTML.
     # By mirroring the actual fetched host, FB sees one consistent URL
     # and never follows itself off our SSR endpoint.
+    #
+    # CRITICAL: when the auction lookup failed (a is None), we MUST
+    # still point og:url + canonical at the AUCTION URL the crawler
+    # fetched — not the homepage root. Returning canonical="/" causes
+    # Facebook to treat every share as a homepage share and overwrite
+    # the per-auction preview with the brand card.
     proto = request.headers.get("x-forwarded-proto", "https")
     host = request.headers.get("host") or request.url.hostname or ""
     if host:
         req_origin = f"{proto}://{host}"
-        # Reconstruct an absolute URL pointing at the SPA detail page on
-        # whatever host actually served this scrape.
-        target_path = f"/auctions/{_auction_slug_url(a).lstrip('/').split('/', 1)[-1]}" if a else "/"
+        if a:
+            # Reconstruct the SEO-friendly slug URL on the request host.
+            target_path = _auction_slug_url(a)
+        else:
+            # Auction not found in DB — preserve the original requested
+            # path so FB / Twitter still treat this as the canonical
+            # URL for the auction, not the homepage.
+            target_path = f"/auctions/{auction_id}"
         target = f"{req_origin}{target_path}"
 
     html = f"""<!DOCTYPE html>
