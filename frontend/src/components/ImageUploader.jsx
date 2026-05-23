@@ -468,7 +468,7 @@ export default function ImageUploader({
             data-testid={`${testId}-slot-${i}`}
             style={{ touchAction: "pan-y" }}
           >
-            <img src={src} alt="" className="w-full h-full object-cover pointer-events-none" draggable="false" />
+            <img src={src} alt={`Upload preview ${i + 1}`} className="w-full h-full object-cover pointer-events-none" draggable="false" />
             <div className="absolute top-1 left-1 bg-black/60 text-white rounded px-1.5 py-0.5 flex items-center gap-1 text-[10px] font-mono pointer-events-none">
               <GripVertical size={10} /> {i + 1}
             </div>
@@ -507,7 +507,7 @@ export default function ImageUploader({
             {u.previewUrl && (
               <img
                 src={u.previewUrl}
-                alt=""
+                alt="Uploading"
                 className={`w-full h-full object-cover pointer-events-none transition duration-300 ${
                   u.error ? "" : "blur-sm scale-105 brightness-95"
                 }`}

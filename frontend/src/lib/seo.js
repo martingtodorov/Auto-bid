@@ -155,9 +155,15 @@ export function resetPageMeta() {
 }
 
 // Build schema.org Vehicle JSON-LD for an auction detail page.
-// Включваме само цена + валута за Rich Price snippets.  По изрично решение
-// НЕ слагаме `availability` — Google не валидира статуса на търг достатъчно
-// добре и това генерира “Sold out / Out of stock” warnings.
+// Vehicle IS-A Product in schema.org's hierarchy — so the Offer block must
+// carry the full Merchant listings payload (price, currency, availability,
+// shipping, return policy) to qualify for the rich SERP card.
+//
+// Auction-state → schema.org availability:
+//   live / reserve_not_met (active) → InStock
+//   sold                            → SoldOut
+//   ended / withdrawn               → Discontinued
+//   pending review                  → PreOrder
 export function buildVehicleJsonLd(a, url) {
   if (!a) return null;
 
@@ -170,14 +176,60 @@ export function buildVehicleJsonLd(a, url) {
     ? { "@type": "Person", name: a.seller_name }
     : { "@type": "Organization", name: "Auto&Bid", url: window.location.origin };
 
-  // --- Offer with Rich Price (no availability) -----------------------------
+  // --- Availability mapping ---------------------------------------------
+  // Required for Google "Merchant listings" rich results. Without it the
+  // SERP card silently falls back to the plain blue link.
+  let availability = "https://schema.org/InStock";
+  if (a.status === "sold") availability = "https://schema.org/SoldOut";
+  else if (["ended", "withdrawn", "cancelled"].includes(a.status)) availability = "https://schema.org/Discontinued";
+  else if (["pending", "draft"].includes(a.status)) availability = "https://schema.org/PreOrder";
+
+  // --- Shipping details (Bulgaria / EU pickup) --------------------------
+  // The platform doesn't arrange shipping itself — the buyer collects from
+  // the seller's city. We surface that as `0.00 EUR` shipping rate (free
+  // pickup) covering EU so the rich result shows "Free pickup" instead of
+  // "No shipping info". Country code falls back to BG if not stored.
+  const shippingCountry = (a.country_code || "BG").slice(0, 2).toUpperCase();
+  const shippingDetails = {
+    "@type": "OfferShippingDetails",
+    shippingRate: {
+      "@type": "MonetaryAmount",
+      value: 0,
+      currency: "EUR",
+    },
+    shippingDestination: {
+      "@type": "DefinedRegion",
+      addressCountry: shippingCountry,
+    },
+    deliveryTime: {
+      "@type": "ShippingDeliveryTime",
+      handlingTime: { "@type": "QuantitativeValue", minValue: 0, maxValue: 3, unitCode: "DAY" },
+      transitTime: { "@type": "QuantitativeValue", minValue: 1, maxValue: 14, unitCode: "DAY" },
+    },
+  };
+
+  // --- Return policy (auction sales are final) --------------------------
+  // Per Bulgarian/EU consumer law, vehicle auction purchases between
+  // private parties are NOT subject to the 14-day distance-selling return
+  // right. We declare this explicitly so Google doesn't flag the listing
+  // as missing return info.
+  const returnPolicy = {
+    "@type": "MerchantReturnPolicy",
+    applicableCountry: shippingCountry,
+    returnPolicyCategory: "https://schema.org/MerchantReturnNotPermitted",
+  };
+
+  // --- Offer with Rich Price, availability, shipping, returns -----------
   const offer = {
     "@type": "Offer",
     priceCurrency: "EUR",
     price: hasPrice ? priceValue : undefined,
     url,
     itemCondition: "https://schema.org/UsedCondition",
+    availability,
     seller,
+    shippingDetails,
+    hasMerchantReturnPolicy: returnPolicy,
   };
   // priceValidUntil:
   //  - LIVE auction → `ends_at`
@@ -201,7 +253,7 @@ export function buildVehicleJsonLd(a, url) {
       priceCurrency: "EUR",
       price: hasPrice ? priceValue : a.reserve_eur,
       minPrice: hasPrice ? priceValue : a.starting_bid_eur,
-      valueAddedTaxIncluded: a.vat_status === "vat_included",
+      valueAddedTaxIncluded: a.vat_status === "vat_inclusive",
     };
   }
   Object.keys(offer).forEach((k) => offer[k] === undefined && delete offer[k]);

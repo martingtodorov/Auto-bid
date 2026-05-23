@@ -173,7 +173,7 @@ export default function AdminArchiveTab() {
                 {selected.has(a.id) ? <CheckSquare size={16} className="text-[hsl(var(--accent))] shrink-0" /> : <Square size={16} className="text-[hsl(var(--ink-muted))] shrink-0" />}
                 <img
                   src={(a.images || [])[0]}
-                  alt=""
+                  alt={a.title || `Auction ${a.id}`}
                   className="w-16 h-12 rounded object-cover bg-[hsl(var(--surface))] shrink-0"
                 />
                 <div className="flex-1 min-w-0">

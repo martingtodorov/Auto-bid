@@ -143,6 +143,36 @@ def _json_ld_vehicle(a: dict, url: str) -> str:
         "availability": availability,
         "itemCondition": "https://schema.org/UsedCondition",
         "seller": seller,
+        # Shipping: marketplace doesn't ship — buyer collects from seller's
+        # city. Surface as `0 EUR` shipping covering the listing country so
+        # the Google Merchant rich card shows "Free pickup" instead of a
+        # missing-shipping warning.
+        "shippingDetails": {
+            "@type": "OfferShippingDetails",
+            "shippingRate": {
+                "@type": "MonetaryAmount",
+                "value": 0,
+                "currency": "EUR",
+            },
+            "shippingDestination": {
+                "@type": "DefinedRegion",
+                "addressCountry": (a.get("country_code") or "BG").upper()[:2],
+            },
+            "deliveryTime": {
+                "@type": "ShippingDeliveryTime",
+                "handlingTime": {"@type": "QuantitativeValue", "minValue": 0, "maxValue": 3, "unitCode": "DAY"},
+                "transitTime": {"@type": "QuantitativeValue", "minValue": 1, "maxValue": 14, "unitCode": "DAY"},
+            },
+        },
+        # Return policy: auction sales are final under EU consumer law
+        # (private-party + auction = no 14-day distance-selling right).
+        # Declaring this explicitly avoids the Search Console
+        # "missing return policy" rich-result warning.
+        "hasMerchantReturnPolicy": {
+            "@type": "MerchantReturnPolicy",
+            "applicableCountry": (a.get("country_code") or "BG").upper()[:2],
+            "returnPolicyCategory": "https://schema.org/MerchantReturnNotPermitted",
+        },
     }
     # priceValidUntil:
     #  - LIVE auction → `ends_at` (when bidding closes)
@@ -814,8 +844,40 @@ async def share_auctions_listing(request: Request, lang: Optional[str] = Query(N
 
 @router.get("/share/sales", response_class=PlainTextResponse)
 async def share_sales_listing(request: Request, lang: Optional[str] = Query(None, regex="^(bg|en|ro)$")):
-    """SSR snapshot of the sold-cars archive."""
-    return await _build_listing_ssr(request, "sales", "/sales", lang=lang)
+    """SSR snapshot of the sold-cars archive.
+
+    Same treatment as `/share/auctions` — emits an ItemList with the 12
+    most-recently-sold listings so crawlers building rich previews see
+    real prices/titles instead of just the page chrome.
+    """
+    cursor = db.auctions.find(
+        {"status": "sold"},
+        {
+            "_id": 0, "id": 1, "title": 1, "current_bid_eur": 1,
+            "starting_bid_eur": 1, "year": 1, "make": 1, "model": 1,
+        },
+    ).sort("finalized_at", -1).limit(12)
+    auctions = await cursor.to_list(12)
+    resolved_lang = _listing_lang_from_request(request, lang)
+    canonical_base = _canonical_base_for_lang(resolved_lang)
+    item_list = {
+        "@context": "https://schema.org",
+        "@type": "ItemList",
+        "numberOfItems": len(auctions),
+        "itemListElement": [
+            {
+                "@type": "ListItem",
+                "position": i + 1,
+                "url": f"{canonical_base}{_auction_slug_url(a)}",
+                "name": a.get("title") or f"{a.get('make','')} {a.get('model','')}".strip(),
+            }
+            for i, a in enumerate(auctions)
+        ],
+    }
+    return await _build_listing_ssr(
+        request, "sales", "/sales", lang=lang,
+        json_ld_extra=json.dumps(item_list, ensure_ascii=False) if auctions else None,
+    )
 
 
 @router.get("/share/leaderboard", response_class=PlainTextResponse)

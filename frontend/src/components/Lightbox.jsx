@@ -203,7 +203,7 @@ export default function Lightbox({ images, thumbnails, index, onClose, onChange 
       >
         <img
           src={images[index]}
-          alt=""
+          alt={`Photo ${index + 1} of ${total}`}
           className="max-w-full max-h-full object-contain"
           data-testid="lightbox-image"
           draggable={false}
@@ -259,7 +259,7 @@ export default function Lightbox({ images, thumbnails, index, onClose, onChange 
             >
               <img
                 src={(thumbnails && thumbnails[i]) || src}
-                alt=""
+                alt={`Thumbnail ${i + 1}`}
                 loading="lazy"
                 decoding="async"
                 className="w-full h-full object-cover"
