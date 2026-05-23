@@ -20,6 +20,78 @@
         <link rel="alternate" hreflang="en" href="https://autoandbid.com/" />
         <link rel="alternate" hreflang="x-default" href="https://autoandbid.com/" />
 
+        <!-- ──────────────────────────────────────────────────────────────────
+             Per-domain canonical / og:url / og:locale rewrite.
+
+             Without this script, the static markup above hardcodes a `.com`
+             canonical because the build pipeline emits ONE index.html that
+             is then served from all three apex domains. That makes Google
+             treat `.bg` and `.ro` as duplicates of `.com` — the opposite of
+             what a geo-targeted multi-domain setup needs.
+
+             We patch the four signals SYNCHRONOUSLY (no `defer`, no DOM
+             ready wait) so Google's render-pass scan and any crawler that
+             executes JS sees the correct self-referencing canonical for the
+             domain they actually fetched. Static-only crawlers still go
+             through nginx's UA-gated SSR fallback at `/api/share/...`
+             which emits its own per-host canonical.
+
+             Domain map:
+               autoandbid.bg → canonical=self,  og:locale=bg_BG
+               autoandbid.ro → canonical=self,  og:locale=ro_RO
+               autoandbid.com / preview / dev → keep .com as canonical,
+                 og:locale stays bg_BG (the initial UI bootstrap language).
+             ───────────────────────────────────────────────────────────── -->
+        <script>
+        (function () {
+          var host = location.host.replace(/^www\./, "");
+          var map = {
+            "autoandbid.bg": { origin: "https://autoandbid.bg", locale: "bg_BG" },
+            "autoandbid.ro": { origin: "https://autoandbid.ro", locale: "ro_RO" },
+            "autoandbid.com": { origin: "https://autoandbid.com", locale: "en_US" }
+          };
+          var entry = map[host];
+          if (!entry) return; // preview / dev / unknown — leave defaults
+
+          var setLink = function (rel, href) {
+            var el = document.querySelector('link[rel="' + rel + '"]');
+            if (el) el.href = href;
+          };
+          var setMeta = function (sel, val) {
+            var el = document.querySelector(sel);
+            if (el) el.setAttribute("content", val);
+          };
+
+          setLink("canonical", entry.origin + "/");
+          setMeta('meta[property="og:url"]', entry.origin + "/");
+          setMeta('meta[property="og:locale"]', entry.locale);
+
+          // Re-emit the JSON-LD Organization / WebSite block with the
+          // correct domain references — keeping the @id, url and logo
+          // strings aligned with the canonical host is required for
+          // Google to merge ranking signals across the graph.
+          var existing = document.querySelector('script[type="application/ld+json"]');
+          if (existing) {
+            try {
+              var data = JSON.parse(existing.textContent);
+              var fix = function (o) {
+                if (!o || typeof o !== "object") return;
+                Object.keys(o).forEach(function (k) {
+                  var v = o[k];
+                  if (typeof v === "string" && v.indexOf("https://autoandbid.com") === 0) {
+                    o[k] = entry.origin + v.slice("https://autoandbid.com".length);
+                  } else if (typeof v === "object") {
+                    fix(v);
+                  }
+                });
+              };
+              fix(data);
+              existing.textContent = JSON.stringify(data);
+            } catch (e) { /* ignore — safe to leave stale */ }
+          }
+        })();
+        </script>
+
         <!-- Favicon — multi-size -->
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png" />
