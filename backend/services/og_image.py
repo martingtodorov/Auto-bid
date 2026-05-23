@@ -266,35 +266,36 @@ def _compose_image(
     # social platform's font fallback chain doesn't include Cyrillic glyphs
     # (Telegram on Android, Discord on Linux are the most common offenders).
     if specs_label:
-        specs_font = _font("Manrope-SemiBold.ttf", 22)
+        specs_font = _font("Manrope-SemiBold.ttf", 30)
         specs_lines = _wrap(draw, specs_label, specs_font, title_max_w, max_lines=2)
-        cur_y += 6
+        cur_y += 10
         for line in specs_lines:
             draw.text((panel_x + inner_pad, cur_y), line, font=specs_font, fill=_INK_MUTED)
-            cur_y += 30
+            cur_y += 40
 
     # --- Bottom: BIG current bid block ---------------------------------
     bottom_y = _H - _PAD - 4
     if bid_label:
-        muted_font = _font("Manrope-SemiBold.ttf", 20)
-        bid_font = _font("Manrope-Bold.ttf", 80)
+        muted_font = _font("Manrope-SemiBold.ttf", 28)
+        bid_font = _font("Manrope-Bold.ttf", 96)
         sub_font = _font("Manrope-SemiBold.ttf", 22)
-        # "CURRENT BID" tiny label — draw word-by-word so the space is
-        # visually correct (Manrope SemiBold collapses ASCII space too tight)
+        # "CURRENT BID" small-caps label — draw word-by-word so the space
+        # is visually correct (Manrope SemiBold collapses ASCII space too
+        # tight when rendered at low pt sizes).
         draw.text(
-            (panel_x + inner_pad, bottom_y - 130),
+            (panel_x + inner_pad, bottom_y - 156),
             "CURRENT",
             font=muted_font, fill=_INK_MUTED,
         )
         cur_w = draw.textlength("CURRENT", font=muted_font)
         draw.text(
-            (panel_x + inner_pad + int(cur_w) + 8, bottom_y - 130),
+            (panel_x + inner_pad + int(cur_w) + 10, bottom_y - 156),
             "BID",
             font=muted_font, fill=_INK_MUTED,
         )
         # The big number
         draw.text(
-            (panel_x + inner_pad, bottom_y - 100),
+            (panel_x + inner_pad, bottom_y - 116),
             bid_label,
             font=bid_font, fill=_INK,
         )
@@ -410,7 +411,9 @@ def _country_code(country: str) -> str:
 
 
 def _build_specs_label(auction: dict) -> Optional[str]:
-    """Year · NN,NNN km · City, CC — ASCII Latin only."""
+    """Year · NN,NNN km — ASCII Latin only. Location intentionally omitted
+    per design direction (2026-05-23) — it added noise without changing
+    buyer intent at the share-preview stage."""
     parts: list[str] = []
     year = auction.get("year")
     if year:
@@ -423,16 +426,6 @@ def _build_specs_label(auction: dict) -> Optional[str]:
             parts.append(f"{n:,}".replace(",", "\u202f") + " km")
         except Exception:
             pass
-    city_raw = auction.get("city") or ""
-    country_raw = auction.get("country") or ""
-    city = _to_latin(city_raw).strip()
-    cc = _country_code(country_raw)
-    if city and cc:
-        parts.append(f"{city}, {cc}")
-    elif city:
-        parts.append(city)
-    elif cc:
-        parts.append(cc)
     return " · ".join(parts) if parts else None
 
 
@@ -444,7 +437,7 @@ def _cache_key(auction_id: str, current_bid: float, title: str = "", cover_url: 
     re-orders the photos. Without this, the cached PNG would silently lag the
     real auction state and social shares would show a stale title.
     """
-    raw = f"{auction_id}:{int(current_bid or 0)}:{title}:{cover_url}:v8"
+    raw = f"{auction_id}:{int(current_bid or 0)}:{title}:{cover_url}:v9"
     return hashlib.sha1(raw.encode()).hexdigest()[:16]
 
 
