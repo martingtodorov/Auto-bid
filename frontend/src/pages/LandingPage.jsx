@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ArrowRight, Shield, Gavel, FileCheck, Sparkles } from "lucide-react";
+import { ArrowRight, UserPlus, FileSearch, Gavel, Handshake } from "lucide-react";
 import DOMPurify from "dompurify";
 import { api, formatEUR, formatLocal } from "../lib/apiClient";
 import { readLandingCache, landingCacheIsFresh, fetchLandingData } from "../lib/landingCache";
@@ -228,10 +228,10 @@ export default function LandingPage() {
             </div>
             <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-0 border border-[hsl(var(--line))] bg-white">
               {[
-                { icon: Shield, t: t("landing.steps.s1_title"), d: t("landing.steps.s1_desc") },
-                { icon: FileCheck, t: t("landing.steps.s2_title"), d: t("landing.steps.s2_desc") },
+                { icon: UserPlus, t: t("landing.steps.s1_title"), d: t("landing.steps.s1_desc") },
+                { icon: FileSearch, t: t("landing.steps.s2_title"), d: t("landing.steps.s2_desc") },
                 { icon: Gavel, t: t("landing.steps.s3_title"), d: t("landing.steps.s3_desc") },
-                { icon: Sparkles, t: t("landing.steps.s4_title"), d: t("landing.steps.s4_desc") },
+                { icon: Handshake, t: t("landing.steps.s4_title"), d: t("landing.steps.s4_desc") },
               ].map((s, i) => (
                 <div key={i} className="p-8 rule-b md:border-r md:border-[hsl(var(--line))] md:[&:nth-child(2n)]:border-r-0 md:[&:nth-last-child(-n+2)]:border-b-0">
                   <s.icon size={22} className="text-[hsl(var(--accent))]" />

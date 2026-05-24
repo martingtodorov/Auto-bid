@@ -440,14 +440,14 @@
     "recent_sales": "Vânzări recente",
     "all_sales": "Toate vânzările",
     "steps": {
-      "s1_title": "01. Înregistrare",
-      "s1_desc": "Creează un cont gratuit într-un minut. Doar email verificat și card valid înainte de prima licitație.",
-      "s2_title": "02. Documentare",
-      "s2_desc": "Raport foto complet, istoric service, verificare VIN și raport tehnic independent.",
-      "s3_title": "03. Licitare",
-      "s3_desc": "Online, în timp real, cu protecție anti-snipe — ultimele 2 minute extind licitația.",
-      "s4_title": "04. Finalizare",
-      "s4_desc": "Contact direct cu vânzătorul, asistență pentru transport, înmatriculare și finalizare."
+      "s1_title": "1. Înregistrare",
+      "s1_desc": "Creezi un cont într-un minut. Înainte de prima licitație confirmi emailul și adaugi un card valid.",
+      "s2_title": "2. Verificare",
+      "s2_desc": "Primești o imagine clară a mașinii — fotografii, descriere, istoric service și verificare VIN.",
+      "s3_title": "3. Licitare",
+      "s3_desc": "Licitarea se desfășoară online, în timp real. O ofertă în ultimele 2 minute prelungește automat licitația.",
+      "s4_title": "4. Tranzacție",
+      "s4_desc": "După o licitație reușită primești contact direct cu vânzătorul și asistență pentru transport, transfer și înmatriculare."
     }
   },
   "seller": {

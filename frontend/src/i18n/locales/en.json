@@ -444,14 +444,14 @@
     "recent_sales": "Recent sales",
     "all_sales": "All sales",
     "steps": {
-      "s1_title": "01. Sign up",
-      "s1_desc": "Create a free account in a minute. A verified email and valid card are all you need before your first bid.",
-      "s2_title": "02. Research",
-      "s2_desc": "Full photo report, service history, VIN check and independent technical report.",
-      "s3_title": "03. Bid",
-      "s3_desc": "Online, real-time, with anti-snipe — the last 2 minutes extend the auction.",
-      "s4_title": "04. Close",
-      "s4_desc": "Direct contact with the seller, transport, registration and completion help."
+      "s1_title": "1. Sign up",
+      "s1_desc": "Create an account in a minute. Before your first bid you confirm your email and add a valid card.",
+      "s2_title": "2. Review",
+      "s2_desc": "Get a clear picture of the car — photos, description, service history and VIN check.",
+      "s3_title": "3. Bid",
+      "s3_desc": "Bidding takes place online in real time. A bid in the last 2 minutes automatically extends the auction.",
+      "s4_title": "4. Deal",
+      "s4_desc": "After a successful auction you receive direct contact with the seller and assistance with transport, transfer and registration."
     }
   },
   "seller": {
